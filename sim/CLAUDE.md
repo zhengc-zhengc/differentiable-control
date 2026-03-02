@@ -16,7 +16,11 @@
 - `docs/controller_spec.md` — 控制器完整规格（逐字转录）
 - `docs/tunable_params_analysis.md` — 可调参数分析（信号流 + 参数表）
 - `docs/v4_control_analysis_summary.md` — 控制模块设计总结
-- `output/src/mlp/control/` — C++ 代码骨架（翻译源）
+- `output/src/mlp/control/` — 从录屏截图推测的 C++ 代码骨架（仅供参考，非原始源码）
+
+## 性能备注
+
+控制器总共约 204 个可调参数，仿真为逐步串行积分，单步计算量极小——优先使用 CPU，GPU 的 kernel 启动开销反而会拖慢速度。
 
 ## 开发环境
 
