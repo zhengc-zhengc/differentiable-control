@@ -1,12 +1,13 @@
 # sim/tests/test_trajectory.py
-"""轨迹生成与分析器测试。"""
+"""轨迹生成与分析器测试。V2: torch 化。"""
 import math
 import pytest
+import torch
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from trajectory import (generate_straight, generate_circle, generate_sine,
-                         generate_combined, TrajectoryAnalyzer)
+from model.trajectory import (generate_straight, generate_circle, generate_sine,
+                              generate_combined, TrajectoryAnalyzer)
 
 
 class TestStraightTrajectory:
@@ -54,12 +55,27 @@ class TestAnalyzer:
         pt = analyzer.query_nearest_by_position(50.0, 0.0)
         assert pt.x == pytest.approx(50.0, abs=0.5)
 
+    def test_nearest_by_position_tensor_input(self):
+        """query_nearest_by_position 接受 tensor 输入。"""
+        pts = generate_straight(length=100, speed=10.0)
+        analyzer = TrajectoryAnalyzer(pts)
+        pt = analyzer.query_nearest_by_position(
+            torch.tensor(50.0), torch.tensor(0.0))
+        assert pt.x == pytest.approx(50.0, abs=0.5)
+
     def test_nearest_by_relative_time(self):
         pts = generate_straight(length=100, speed=10.0)
         analyzer = TrajectoryAnalyzer(pts)
         pt = analyzer.query_nearest_by_relative_time(1.0)
         assert pt.x == pytest.approx(10.0, abs=0.5)
         assert pt.v == pytest.approx(10.0)
+
+    def test_nearest_by_relative_time_tensor(self):
+        """query_nearest_by_relative_time 接受 tensor 输入。"""
+        pts = generate_straight(length=100, speed=10.0)
+        analyzer = TrajectoryAnalyzer(pts)
+        pt = analyzer.query_nearest_by_relative_time(torch.tensor(1.0))
+        assert pt.x == pytest.approx(10.0, abs=0.5)
 
     def test_time_clamp_at_end(self):
         pts = generate_straight(length=100, speed=10.0)
@@ -72,12 +88,31 @@ class TestAnalyzer:
         analyzer = TrajectoryAnalyzer(pts)
         matched = analyzer.query_nearest_by_position(50.0, 0.0)
         s, s_dot, d, d_dot = analyzer.to_frenet(50.0, 0.0, 0.0, 10.0, matched)
-        assert d == pytest.approx(0.0, abs=0.1)
-        assert s_dot == pytest.approx(10.0, abs=0.5)
+        assert d.item() == pytest.approx(0.0, abs=0.1)
+        assert s_dot.item() == pytest.approx(10.0, abs=0.5)
 
     def test_frenet_lateral_offset(self):
         pts = generate_straight(length=100, speed=10.0)
         analyzer = TrajectoryAnalyzer(pts)
         matched = analyzer.query_nearest_by_position(50.0, 2.0)
         s, s_dot, d, d_dot = analyzer.to_frenet(50.0, 2.0, 0.0, 10.0, matched)
-        assert d == pytest.approx(2.0, abs=0.2)
+        assert d.item() == pytest.approx(2.0, abs=0.2)
+
+    def test_frenet_returns_tensors(self):
+        """to_frenet 返回值为 torch.Tensor。"""
+        pts = generate_straight(length=100, speed=10.0)
+        analyzer = TrajectoryAnalyzer(pts)
+        matched = analyzer.query_nearest_by_position(50.0, 0.0)
+        s, s_dot, d, d_dot = analyzer.to_frenet(50.0, 0.0, 0.0, 10.0, matched)
+        assert isinstance(s, torch.Tensor)
+        assert isinstance(s_dot, torch.Tensor)
+        assert isinstance(d, torch.Tensor)
+        assert isinstance(d_dot, torch.Tensor)
+
+    def test_has_precomputed_tensors(self):
+        """TrajectoryAnalyzer 应预计算 _xs, _ys 张量。"""
+        pts = generate_straight(length=100, speed=10.0)
+        analyzer = TrajectoryAnalyzer(pts)
+        assert isinstance(analyzer._xs, torch.Tensor)
+        assert isinstance(analyzer._ys, torch.Tensor)
+        assert len(analyzer._xs) == len(pts)

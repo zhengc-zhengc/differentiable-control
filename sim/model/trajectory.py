@@ -1,6 +1,7 @@
-# sim/trajectory.py
-"""轨迹生成与分析器。"""
+# sim/model/trajectory.py
+"""轨迹生成与分析器。V2: TrajectoryAnalyzer torch 化，生成函数不变。"""
 import math
+import torch
 from common import TrajectoryPoint, normalize_angle
 
 
@@ -89,7 +90,7 @@ def generate_sine(amplitude: float, wavelength: float, n_waves: float,
 
 def generate_combined(speed: float, dt: float = 0.02,
                       seg3_length: float = 30.0) -> list[TrajectoryPoint]:
-    """生成组合轨迹：直线(30m) -> 左转圆弧(R=30m, 90°) -> 直线(seg3_length)。"""
+    """生成组合轨迹：直线(30m) -> 左转圆弧(R=30m, 90度) -> 直线(seg3_length)。"""
     pts = []
     s = 0.0
     t = 0.0
@@ -135,22 +136,34 @@ def generate_combined(speed: float, dt: float = 0.02,
 
 
 class TrajectoryAnalyzer:
-    """轨迹分析器：位置查询、时间查询、Frenet 变换。"""
+    """轨迹分析器：位置查询、时间查询、Frenet 变换。V2: torch 化。"""
 
     def __init__(self, points: list[TrajectoryPoint]):
         self.points = points
+        self._xs = torch.tensor([p.x for p in points])
+        self._ys = torch.tensor([p.y for p in points])
 
-    def query_nearest_by_position(self, x: float, y: float) -> TrajectoryPoint:
-        best_dist = float('inf')
-        best_pt = self.points[0]
-        for pt in self.points:
-            dist = (pt.x - x) ** 2 + (pt.y - y) ** 2
-            if dist < best_dist:
-                best_dist = dist
-                best_pt = pt
-        return best_pt
+    def query_nearest_by_position(self, x, y) -> TrajectoryPoint:
+        """最近点查询（detached argmin — 索引选择不在梯度路径上）。"""
+        if isinstance(x, torch.Tensor):
+            x_val = x.detach()
+        else:
+            x_val = torch.tensor(float(x))
+        if isinstance(y, torch.Tensor):
+            y_val = y.detach()
+        else:
+            y_val = torch.tensor(float(y))
+        with torch.no_grad():
+            dx = self._xs - x_val
+            dy = self._ys - y_val
+            dists = dx * dx + dy * dy
+            idx = torch.argmin(dists).item()
+        return self.points[idx]
 
-    def query_nearest_by_relative_time(self, t_rel: float) -> TrajectoryPoint:
+    def query_nearest_by_relative_time(self, t_rel) -> TrajectoryPoint:
+        """时间查询 — 逻辑与 V1 相同。输入可为 tensor 或 float。"""
+        if isinstance(t_rel, torch.Tensor):
+            t_rel = t_rel.item()
         if t_rel <= self.points[0].t:
             return self.points[0]
         if t_rel >= self.points[-1].t:
@@ -161,10 +174,13 @@ class TrajectoryAnalyzer:
             if t0 <= t_rel <= t1:
                 frac = (t_rel - t0) / (t1 - t0) if t1 > t0 else 0.0
                 p0, p1 = self.points[i], self.points[i + 1]
+                # normalize_angle 现在返回 tensor，取 .item() 用于 TrajectoryPoint
+                theta_interp = p0.theta + frac * normalize_angle(
+                    p1.theta - p0.theta).item()
                 return TrajectoryPoint(
                     x=p0.x + frac * (p1.x - p0.x),
                     y=p0.y + frac * (p1.y - p0.y),
-                    theta=p0.theta + frac * normalize_angle(p1.theta - p0.theta),
+                    theta=theta_interp,
                     kappa=p0.kappa + frac * (p1.kappa - p0.kappa),
                     v=p0.v + frac * (p1.v - p0.v),
                     a=p0.a + frac * (p1.a - p0.a),
@@ -173,16 +189,30 @@ class TrajectoryAnalyzer:
                 )
         return self.points[-1]
 
-    def to_frenet(self, x: float, y: float, theta_rad: float,
-                  v_mps: float, matched: TrajectoryPoint
-                  ) -> tuple[float, float, float, float]:
-        heading_err = normalize_angle(theta_rad - matched.theta)
-        s_dot = v_mps * math.cos(heading_err)
-        d = (math.cos(matched.theta) * (y - matched.y)
-             - math.sin(matched.theta) * (x - matched.x))
-        d_dot = v_mps * math.sin(heading_err)
-        dx_v = x - matched.x
-        dy_v = y - matched.y
-        proj = dx_v * math.cos(matched.theta) + dy_v * math.sin(matched.theta)
-        s_matched = matched.s + proj
+    def to_frenet(self, x, y, theta_rad, v_mps, matched: TrajectoryPoint):
+        """Frenet 变换 — torch 运算支持梯度流。
+        返回 (s_matched, s_dot, d, d_dot) 全部为 torch.Tensor。
+        """
+        if not isinstance(x, torch.Tensor):
+            x = torch.tensor(float(x))
+        if not isinstance(y, torch.Tensor):
+            y = torch.tensor(float(y))
+        if not isinstance(theta_rad, torch.Tensor):
+            theta_rad = torch.tensor(float(theta_rad))
+        if not isinstance(v_mps, torch.Tensor):
+            v_mps = torch.tensor(float(v_mps))
+
+        m_theta = torch.tensor(matched.theta)
+        m_x = torch.tensor(matched.x)
+        m_y = torch.tensor(matched.y)
+        m_s = torch.tensor(matched.s)
+
+        heading_err = normalize_angle(theta_rad - m_theta)
+        s_dot = v_mps * torch.cos(heading_err)
+        d = torch.cos(m_theta) * (y - m_y) - torch.sin(m_theta) * (x - m_x)
+        d_dot = v_mps * torch.sin(heading_err)
+        dx_v = x - m_x
+        dy_v = y - m_y
+        proj = dx_v * torch.cos(m_theta) + dy_v * torch.sin(m_theta)
+        s_matched = m_s + proj
         return s_matched, s_dot, d, d_dot

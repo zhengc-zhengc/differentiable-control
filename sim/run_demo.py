@@ -1,10 +1,11 @@
 # sim/run_demo.py
-"""V1 可视化 Demo：4 种轨迹 × 4 张图 + 总览四宫格。
+"""可视化 Demo：4 种轨迹 × 4 张图 + 总览四宫格。
 
 用法：
-    python run_demo.py                   # 交互显示
-    python run_demo.py --save            # 同时保存 PNG 到 sim/results/
-    python run_demo.py --save --no-show  # 只保存，不弹窗
+    python run_demo.py                             # 交互显示（默认参数）
+    python run_demo.py --save                      # 同时保存 PNG 到 sim/results/
+    python run_demo.py --save --no-show            # 只保存，不弹窗
+    python run_demo.py --config configs/tuned/tuned_xxx.yaml  # 加载调参后的配置
 """
 import argparse
 import math
@@ -14,8 +15,9 @@ import sys
 import matplotlib
 import matplotlib.pyplot as plt
 
-from trajectory import (generate_straight, generate_circle,
-                        generate_sine, generate_combined)
+from config import load_config
+from model.trajectory import (generate_straight, generate_circle,
+                              generate_sine, generate_combined)
 from sim_loop import run_simulation
 
 # ---------- 中文字体设置（优先微软雅黑，fallback SimHei）----------
@@ -26,29 +28,37 @@ plt.rcParams['axes.unicode_minus'] = False
 _COLORS = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728']
 
 
+def _to_float(val):
+    """将 tensor 或 float 统一转为 Python float（兼容 differentiable 模式）。"""
+    if hasattr(val, 'item'):
+        return val.item()
+    return float(val)
+
+
 def plot_scenario(name: str, history: list[dict], traj_pts) -> plt.Figure:
     """画 4 张子图：轨迹对比、横向误差、速度跟踪、转向角。"""
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
     fig.suptitle(name, fontsize=14)
 
-    ts = [h['t'] for h in history]
+    ts = [_to_float(h['t']) for h in history]
 
     # 1. 轨迹对比
     ax = axes[0, 0]
     ax.plot([p.x for p in traj_pts], [p.y for p in traj_pts],
             'b--', label='参考轨迹', linewidth=1)
-    ax.plot([h['x'] for h in history], [h['y'] for h in history],
+    ax.plot([_to_float(h['x']) for h in history],
+            [_to_float(h['y']) for h in history],
             'r-', label='实际轨迹', linewidth=1)
     ax.set_xlabel('x 位置 (m)')
     ax.set_ylabel('y 位置 (m)')
-    ax.set_aspect('equal')
+    ax.set_aspect('equal', adjustable='datalim')
     ax.legend()
     ax.set_title('轨迹对比')
     ax.grid(True)
 
     # 2. 横向误差
     ax = axes[0, 1]
-    ax.plot(ts, [h['lateral_error'] for h in history], 'g-',
+    ax.plot(ts, [_to_float(h['lateral_error']) for h in history], 'g-',
             label='横向偏差')
     ax.set_xlabel('时间 (s)')
     ax.set_ylabel('横向误差 (m)')
@@ -59,7 +69,7 @@ def plot_scenario(name: str, history: list[dict], traj_pts) -> plt.Figure:
     # 3. 速度跟踪
     ax = axes[1, 0]
     ref_v = traj_pts[0].v
-    ax.plot(ts, [h['v'] for h in history], 'r-', label='实际速度')
+    ax.plot(ts, [_to_float(h['v']) for h in history], 'r-', label='实际速度')
     ax.axhline(y=ref_v, color='b', linestyle='--',
                label=f'参考速度 {ref_v:.1f} m/s')
     ax.set_xlabel('时间 (s)')
@@ -70,7 +80,7 @@ def plot_scenario(name: str, history: list[dict], traj_pts) -> plt.Figure:
 
     # 4. 转向角
     ax = axes[1, 1]
-    ax.plot(ts, [h['steer'] for h in history], 'm-',
+    ax.plot(ts, [_to_float(h['steer']) for h in history], 'm-',
             label='方向盘转角')
     ax.set_xlabel('时间 (s)')
     ax.set_ylabel('方向盘转角 (°)')
@@ -85,7 +95,7 @@ def plot_scenario(name: str, history: list[dict], traj_pts) -> plt.Figure:
 def plot_overview(all_results: list[dict]) -> plt.Figure:
     """四宫格总览：每个子图为一种工况的轨迹跟踪。"""
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
-    fig.suptitle('V1 轨迹跟踪总览 — LatControllerTruck + LonController（简化版）',
+    fig.suptitle('轨迹跟踪总览 — LatControllerTruck + LonController',
                  fontsize=14)
 
     for idx, (ax, res) in enumerate(zip(axes.flat, all_results)):
@@ -96,11 +106,12 @@ def plot_overview(all_results: list[dict]) -> plt.Figure:
 
         ax.plot([p.x for p in traj_pts], [p.y for p in traj_pts],
                 'k--', label='参考轨迹', linewidth=1, alpha=0.7)
-        ax.plot([h['x'] for h in history], [h['y'] for h in history],
+        ax.plot([_to_float(h['x']) for h in history],
+                [_to_float(h['y']) for h in history],
                 '-', color=color, label='实际轨迹', linewidth=1.5)
         ax.set_xlabel('x 位置 (m)')
         ax.set_ylabel('y 位置 (m)')
-        ax.set_aspect('equal')
+        ax.set_aspect('equal', adjustable='datalim')
         ax.legend(fontsize=9)
         ax.set_title(name)
         ax.grid(True, alpha=0.3)
@@ -111,12 +122,17 @@ def plot_overview(all_results: list[dict]) -> plt.Figure:
 
 def main():
     parser = argparse.ArgumentParser(
-        description='V1 Demo: 4 scenarios × 4 plots + overview')
+        description='Demo: 4 scenarios × 4 plots + overview')
     parser.add_argument('--save', action='store_true',
                         help='保存 PNG 到 sim/results/')
     parser.add_argument('--no-show', action='store_true',
                         help='不弹出交互窗口（配合 --save 使用）')
+    parser.add_argument('--config', type=str, default=None,
+                        help='加载指定 YAML 配置（如调参后的结果）')
     args = parser.parse_args()
+
+    # 加载配置（None 时 run_simulation 内部加载默认配置）
+    cfg = load_config(args.config) if args.config else None
 
     # 非交互模式时切换后端
     if args.no_show:
@@ -143,7 +159,7 @@ def main():
 
     for i, (name, traj, init_v) in enumerate(scenarios):
         print(f"运行: {name} ...")
-        history = run_simulation(traj, init_speed=init_v)
+        history = run_simulation(traj, init_speed=init_v, cfg=cfg)
         all_results.append({'name': name, 'traj': traj, 'history': history})
 
         fig = plot_scenario(name, history, traj)
