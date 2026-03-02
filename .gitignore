@@ -1,0 +1,15 @@
+# Virtual environment
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Screen recordings & extracted frames (too large for git)
+recordings/
+
+# Internal prompts
+prompt.md
+
+# Claude Code auto-memory (session-specific)
+.claude/
