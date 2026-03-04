@@ -335,7 +335,7 @@ class LonController(nn.Module):
 
             # 曲率条件：smooth_step 混合
             # w_curv = sigmoid((-0.0075 - curvature_far) / temp): 越大表示急弯
-            w_curv = smooth_step(-curvature_far, 0.0075, temp=0.001)
+            w_curv = smooth_step(-curvature_far, 0.0075, temp=0.01)
             acc_up_lim_adj = acc_up_lim * (1.0 - 0.25 * w_curv)
             acc_low_lim_adj = acc_low_lim * (1.0 - 0.40 * w_curv)
 

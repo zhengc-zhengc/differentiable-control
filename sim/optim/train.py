@@ -73,7 +73,8 @@ class DiffControllerParams(nn.Module):
 
 def tracking_loss(history, ref_speed,
                   w_lat=10.0, w_head=5.0, w_speed=1.0,
-                  w_steer_rate=0.01, w_acc_rate=0.01):
+                  w_steer_rate=0.01, w_acc_rate=0.01,
+                  return_details=False):
     """计算跟踪 loss：横向误差 + 航向误差 + 速度误差 + 平滑度惩罚。
 
     Args:
@@ -81,9 +82,11 @@ def tracking_loss(history, ref_speed,
         ref_speed: 参考速度 (m/s)
         w_lat/w_head/w_speed: 各误差项权重
         w_steer_rate/w_acc_rate: 平滑度惩罚权重
+        return_details: 是否同时返回各分项指标（不含权重的原始值）
 
     Returns:
         loss (torch.Tensor): 标量 loss，支持 .backward()
+        details (dict): 仅当 return_details=True 时返回，各分项原始指标
     """
     lat_errs = torch.stack([h['lateral_error'] for h in history])
     head_errs = torch.stack([h['heading_error'] for h in history])
@@ -93,15 +96,31 @@ def tracking_loss(history, ref_speed,
 
     speed_errs = speeds - ref_speed
 
-    loss = (w_lat * (lat_errs ** 2).mean()
-            + w_head * (head_errs ** 2).mean()
-            + w_speed * (speed_errs ** 2).mean())
+    lat_mse = (lat_errs ** 2).mean()
+    head_mse = (head_errs ** 2).mean()
+    speed_mse = (speed_errs ** 2).mean()
 
+    loss = w_lat * lat_mse + w_head * head_mse + w_speed * speed_mse
+
+    steer_rate_mse = torch.tensor(0.0)
+    acc_rate_mse = torch.tensor(0.0)
     if len(steers) > 1:
         steer_rate = steers[1:] - steers[:-1]
         acc_rate = accs[1:] - accs[:-1]
-        loss = loss + w_steer_rate * (steer_rate ** 2).mean()
-        loss = loss + w_acc_rate * (acc_rate ** 2).mean()
+        steer_rate_mse = (steer_rate ** 2).mean()
+        acc_rate_mse = (acc_rate ** 2).mean()
+        loss = loss + w_steer_rate * steer_rate_mse
+        loss = loss + w_acc_rate * acc_rate_mse
+
+    if return_details:
+        details = {
+            'lat_rmse': lat_mse.sqrt().item(),
+            'head_rmse': head_mse.sqrt().item(),
+            'speed_rmse': speed_mse.sqrt().item(),
+            'lat_max': lat_errs.abs().max().item(),
+            'head_max': head_errs.abs().max().item(),
+        }
+        return loss, details
 
     return loss
 
@@ -118,7 +137,8 @@ _TRAJECTORY_BUILDERS = {
 
 
 def train(trajectories=None, n_epochs=100, lr=1e-3, lr_tables=5e-4,
-          sim_length=None, sim_speed=5.0, verbose=True):
+          sim_length=None, sim_speed=5.0, tbptt_k=64, grad_clip=10.0,
+          verbose=True):
     """运行可微调参训练。
 
     Args:
@@ -128,6 +148,8 @@ def train(trajectories=None, n_epochs=100, lr=1e-3, lr_tables=5e-4,
         lr_tables: 查找表 y 值学习率（通常低于主学习率）
         sim_length: 仿真距离限制 (m)，None 为全长
         sim_speed: 仿真速度 (m/s)
+        tbptt_k: Truncated BPTT 窗口大小（步数），每 K 步截断梯度链
+        grad_clip: 全局梯度范数裁剪阈值
         verbose: 是否打印 epoch 信息
 
     Returns:
@@ -137,6 +159,19 @@ def train(trajectories=None, n_epochs=100, lr=1e-3, lr_tables=5e-4,
         trajectories = ['circle', 'sine', 'combined']
 
     params = DiffControllerParams()
+
+    # 注册梯度钩子：在 backward 过程中立即清理 NaN/Inf 梯度
+    # 这样 Adam 的二阶矩永远不会被污染
+    _grad_clip_val = 1e4  # 逐参数梯度元素上限
+    def _sanitize_grad(grad):
+        if grad is None:
+            return None
+        g = torch.nan_to_num(grad, nan=0.0, posinf=0.0, neginf=0.0)
+        return g.clamp(-_grad_clip_val, _grad_clip_val)
+
+    hooks = []
+    for p in params.parameters():
+        hooks.append(p.register_hook(_sanitize_grad))
 
     # 分组学习率：查找表 y 值用较低 lr
     table_params = []
@@ -153,9 +188,14 @@ def train(trajectories=None, n_epochs=100, lr=1e-3, lr_tables=5e-4,
     ])
 
     losses = []
+    import time as _time
+    t_start = _time.time()
+
     for epoch in range(n_epochs):
+        t_epoch = _time.time()
         optimizer.zero_grad()
         epoch_loss = torch.tensor(0.0)
+        epoch_details = {}
 
         for traj_name in trajectories:
             builder = _TRAJECTORY_BUILDERS[traj_name]
@@ -170,33 +210,68 @@ def train(trajectories=None, n_epochs=100, lr=1e-3, lr_tables=5e-4,
             history = run_simulation(
                 traj, init_speed=sim_speed, cfg=params.cfg,
                 lat_ctrl=params.lat_ctrl, lon_ctrl=params.lon_ctrl,
-                differentiable=True)
+                differentiable=True, tbptt_k=tbptt_k)
 
-            loss = tracking_loss(history, ref_speed=sim_speed)
+            loss, details = tracking_loss(history, ref_speed=sim_speed,
+                                          return_details=True)
             epoch_loss = epoch_loss + loss
+            # 累积各轨迹的分项指标
+            for k, v in details.items():
+                epoch_details[k] = epoch_details.get(k, 0.0) + v
 
         epoch_loss = epoch_loss / len(trajectories)
+        # 取各轨迹平均
+        for k in epoch_details:
+            epoch_details[k] /= len(trajectories)
+
         epoch_loss.backward()
 
-        # NaN 梯度保护：长序列 BPTT 可能产生 NaN 梯度，替换为 0
+        # 梯度已由 hooks 清理 NaN/Inf，此处统计异常数量
+        nan_count = 0
         for p in params.parameters():
             if p.grad is not None:
-                torch.nan_to_num_(p.grad, nan=0.0, posinf=0.0, neginf=0.0)
+                nan_count += (p.grad.abs() >= _grad_clip_val).sum().item()
 
-        torch.nn.utils.clip_grad_norm_(params.parameters(), max_norm=10.0)
+        # 全局梯度裁剪（防止爆炸梯度主导更新方向）
+        grad_norm = torch.nn.utils.clip_grad_norm_(
+            params.parameters(), max_norm=grad_clip).item()
         optimizer.step()
 
         losses.append(epoch_loss.item())
-        if verbose and (epoch + 1) % 10 == 0:
-            print(f"Epoch {epoch+1}/{n_epochs}  loss={epoch_loss.item():.6f}")
+        dt = _time.time() - t_epoch
+        if verbose:
+            nan_warn = f" [!NaN grads:{int(nan_count)}]" if nan_count > 0 else ""
+            print(f"[{epoch+1:3d}/{n_epochs}] loss={epoch_loss.item():8.4f} | "
+                  f"lat_rmse={epoch_details['lat_rmse']:.4f}m "
+                  f"head_rmse={epoch_details['head_rmse']:.4f}rad "
+                  f"spd_rmse={epoch_details['speed_rmse']:.4f}m/s | "
+                  f"grad_norm={grad_norm:.2f} "
+                  f"dt={dt:.1f}s{nan_warn}",
+                  flush=True)
+
+    # 清理梯度钩子
+    for h in hooks:
+        h.remove()
+
+    total_time = _time.time() - t_start
+    if verbose:
+        print(f"\n训练完成! 总耗时: {total_time:.1f}s")
+        print(f"  初始 loss: {losses[0]:.4f} → 最终 loss: {losses[-1]:.4f} "
+              f"(Δ={losses[-1]-losses[0]:+.4f}, "
+              f"{(losses[-1]-losses[0])/losses[0]*100:+.1f}%)")
 
     # 保存调参结果
     cfg_out = params.to_config_dict()
     saved_path = save_tuned_config(cfg_out, meta={
         'final_loss': losses[-1],
+        'initial_loss': losses[0],
         'epochs': n_epochs,
         'trajectories': trajectories,
         'lr': lr,
+        'lr_tables': lr_tables,
+        'tbptt_k': tbptt_k,
+        'grad_clip': grad_clip,
+        'total_time_s': round(total_time, 1),
     })
     if verbose:
         print(f"参数已保存: {saved_path}")
@@ -217,10 +292,16 @@ if __name__ == '__main__':
                         help='仿真速度 (m/s)')
     parser.add_argument('--sim-length', type=float, default=None,
                         help='仿真距离限制 (m)')
+    parser.add_argument('--tbptt-k', type=int, default=64,
+                        help='Truncated BPTT 窗口大小（步数）')
+    parser.add_argument('--grad-clip', type=float, default=10.0,
+                        help='全局梯度范数裁剪阈值')
     args = parser.parse_args()
 
     result = train(trajectories=args.trajectories, n_epochs=args.epochs,
                    lr=args.lr, sim_speed=args.speed,
-                   sim_length=args.sim_length)
+                   sim_length=args.sim_length,
+                   tbptt_k=args.tbptt_k,
+                   grad_clip=args.grad_clip)
     print(f"\n最终 loss: {result['losses'][-1]:.6f}")
     print(f"保存路径: {result['saved_path']}")

@@ -258,7 +258,7 @@ class LatControllerTruck(nn.Module):
         curvature_far_t = torch.tensor(curvature_far_val)
 
         # Step 4: real_theta
-        vehicle_speed_clamped = smooth_clamp(speed_mps, 1.0, 100.0, temp=0.1)
+        vehicle_speed_clamped = smooth_clamp(speed_mps, 1.0, 100.0, temp=1.0)
         real_theta = heading_error + torch.atan(
             self.kLh * yawrate / vehicle_speed_clamped)
 
@@ -275,7 +275,7 @@ class LatControllerTruck(nn.Module):
         # smooth min(abs(error_angle_raw), max_err_angle_limit)
         abs_error = torch.abs(error_angle_raw)
         max_err_angle = smooth_min(abs_error, max_err_angle_limit)
-        target_theta = smooth_sign(error_angle_raw, temp=0.01) * max_err_angle
+        target_theta = smooth_sign(error_angle_raw, temp=0.5) * max_err_angle
 
         target_dt_theta = (torch.sin(real_theta) * speed_mps * prev_dist
                            / (prev_dist ** 2 + dis2lane ** 2) * -1.0)
@@ -303,7 +303,7 @@ class LatControllerTruck(nn.Module):
 
         # Step 10: 合并输出
         steer_raw = smooth_clamp(steer_fb + steer_ff,
-                                 -max_steer_angle, max_steer_angle, temp=0.1)
+                                 -max_steer_angle, max_steer_angle, temp=1.0)
         steer_out = rate_limit(self.steer_total_prev, steer_raw,
                                self.rate_limit_total, dt, differentiable=True)
         self.steer_total_prev = steer_out.detach().clone()

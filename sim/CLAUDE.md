@@ -103,7 +103,11 @@ python optim/train.py --epochs 50 --trajectories circle sine  # 训练
 - 训练完成后打印汇总：初始 loss → 最终 loss（含变化量和百分比）、总耗时
 - **训练完成后必须生成与默认参数（`configs/default.yaml`）的对比图**，输出到 `results/`，包括：轨迹跟踪对比、横向误差对比、各项指标数值对比
 
+## 梯度爆炸防治（关键！）
+
+**smooth 近似的 temperature 过小是 BPTT 梯度爆炸的根因**：`smooth_sign(x, temp=0.01)` 在 x≈0 处导数 = 100，链式乘法 32 步 → 10^64 → Inf。loss 景观本身是光滑的（有限差分验证真实梯度 ~20），但 BPTT 的数值计算会溢出。**所有 smooth 近似的 temp 必须使局部导数 ≤ 2-3x**。详见 `docs/bptt_gradient_explosion_analysis.md`。
+
 ## 备注
 
 - CPU only（单步计算量极小，GPU kernel 启动开销反而拖慢）
-- 长序列 BPTT（>128 步）存在梯度爆炸风险，训练中用 `nan_to_num_` + `clip_grad_norm_` 缓解
+- 训练中用 `clip_grad_norm_` 作为梯度安全网（不应作为主要手段，优先调 temperature）
