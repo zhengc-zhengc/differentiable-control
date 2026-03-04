@@ -13,6 +13,7 @@ sim/
 ├── config.py              # YAML 加载/保存，table_from_config → (Tensor, Tensor)
 ├── sim_loop.py            # 50Hz 闭环仿真（lat→lon→vehicle step）
 ├── run_demo.py            # 可视化 Demo（--save --no-show --config）
+├── compare_results.py     # 调参前后对比（轨迹 + 横向误差对比图）
 ├── model/
 │   ├── vehicle.py         # BicycleModel (x,y,yaw,v)，dt=0.02s
 │   └── trajectory.py      # 4 种轨迹生成 + TrajectoryAnalyzer（detached argmin）
@@ -22,9 +23,11 @@ sim/
 ├── optim/
 │   └── train.py           # 可微调参：DiffControllerParams, tracking_loss, Adam
 ├── configs/
-│   ├── default.yaml       # 默认参数
+│   ├── default.yaml       # 默认参数（C++ 原始控制器参数，作为训练基线）
 │   └── tuned/             # 调参结果 YAML（文件名含 commit hash + timestamp）
 ├── results/               # 结果图（纳入 git）
+│   └── baseline/          # 基线结果（用于调参前后对比）
+├── learn/                 # 学习笔记与调试日志（不影响运行）
 └── tests/                 # pytest 测试（132 项）
 ```
 
@@ -98,6 +101,7 @@ python optim/train.py --epochs 50 --trajectories circle sine  # 训练
 
 - **训练脚本必须实时打印每个 epoch 的进度**，包括：loss、各分项 RMSE（lat/head/speed）、梯度范数、耗时、NaN 梯度数
 - 训练完成后打印汇总：初始 loss → 最终 loss（含变化量和百分比）、总耗时
+- **训练完成后必须生成与默认参数（`configs/default.yaml`）的对比图**，输出到 `results/`，包括：轨迹跟踪对比、横向误差对比、各项指标数值对比
 
 ## 备注
 
