@@ -6,8 +6,8 @@ import torch
 import torch.nn as nn
 import math
 from common import (lookup1d, rate_limit, clamp, sign, normalize_angle,
-                    smooth_clamp, smooth_sign, smooth_lower_bound,
-                    smooth_upper_bound, smooth_min)
+                    smooth_clamp, smooth_lower_bound,
+                    _straight_through_clamp)
 from config import table_from_config
 from model.trajectory import TrajectoryAnalyzer
 
@@ -272,10 +272,9 @@ class LatControllerTruck(nn.Module):
         dis2lane = -lateral_error
         error_angle_raw = torch.atan(dis2lane / prev_dist)
         max_err_angle_limit = max_theta_deg * DEG2RAD
-        # smooth min(abs(error_angle_raw), max_err_angle_limit)
-        abs_error = torch.abs(error_angle_raw)
-        max_err_angle = smooth_min(abs_error, max_err_angle_limit)
-        target_theta = smooth_sign(error_angle_raw, temp=0.5) * max_err_angle
+        # sign(x)*min(|x|,L) ≡ clamp(x,-L,L)，直接用 STE clamp
+        target_theta = _straight_through_clamp(
+            error_angle_raw, -max_err_angle_limit, max_err_angle_limit)
 
         target_dt_theta = (torch.sin(real_theta) * speed_mps * prev_dist
                            / (prev_dist ** 2 + dis2lane ** 2) * -1.0)

@@ -105,7 +105,7 @@ python optim/train.py --epochs 50 --trajectories circle sine  # 训练
 
 ## 梯度爆炸防治（关键！）
 
-**smooth 近似的 temperature 过小是 BPTT 梯度爆炸的根因**：`smooth_sign(x, temp=0.01)` 在 x≈0 处导数 = 100，链式乘法 32 步 → 10^64 → Inf。loss 景观本身是光滑的（有限差分验证真实梯度 ~20），但 BPTT 的数值计算会溢出。**所有 smooth 近似的 temp 必须使局部导数 ≤ 2-3x**。详见 `docs/bptt_gradient_explosion_analysis.md`。
+**将硬限幅代码改为可微版本时，先化简数学表达式再选择近似方式**。例如 `sign(x)*min(|x|,L)` 本质是 `clamp(x,-L,L)`，直接用 STE clamp（导数=1）而非 smooth_sign（导数=100）。smooth 近似的 temperature 过小会导致 BPTT 链式乘法溢出（梯度爆炸≠loss 爆炸，用有限差分可验证真实梯度有界）。详见 `docs/bptt_gradient_explosion_analysis.md`。
 
 ## 备注
 
