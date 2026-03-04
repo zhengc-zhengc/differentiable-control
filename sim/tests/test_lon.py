@@ -69,14 +69,15 @@ class TestLonBasic:
         assert isinstance(ctrl, torch.nn.Module)
 
     def test_has_parameters(self):
-        """应有 nn.Parameter：PID 增益 + 切换速度 + 5 张表的 y 值。"""
+        """应有 nn.Parameter：PID 增益 + 切换速度。L1-L5 为 buffer。"""
         ctrl = LonController(CFG)
         param_names = {n for n, _ in ctrl.named_parameters()}
         for name in ['station_kp', 'station_ki', 'low_speed_kp', 'low_speed_ki',
                      'high_speed_kp', 'high_speed_ki', 'switch_speed']:
             assert name in param_names
+        # L1-L5 应为 buffer（物理限制/安全约束）
         for i in range(1, 6):
-            assert f'L{i}_y' in param_names
+            assert f'L{i}_y' not in param_names
 
     def test_has_buffers(self):
         """应有 buffer：5 张表的 x 值 + acc_out_prev。"""
@@ -165,12 +166,11 @@ class TestLonDifferentiable:
         acc.backward()
         assert ctrl.switch_speed.grad is not None
 
-    def test_gradient_through_L_tables(self):
-        """L 表梯度在限幅激活时应流过。"""
+    def test_no_gradient_through_L_tables(self):
+        """L1-L5 为 buffer，不应有梯度。"""
         ctrl = LonController(CFG, differentiable=True)
         pts = generate_straight(length=200, speed=10.0)
         analyzer = TrajectoryAnalyzer(pts)
-        # 运行多步让 acc 累积，触碰限幅
         for i in range(10):
             acc = ctrl.compute(
                 x=torch.tensor(10.0), y=torch.tensor(0.0),
@@ -179,12 +179,8 @@ class TestLonDifferentiable:
                 analyzer=analyzer, t_now=1.0,
                 ctrl_enable=True, ctrl_first_active=(i == 0))
         acc.backward()
-        # L1 (up limit) 或 L3 (up rate) 应有梯度
-        l1_grad = ctrl.L1_y.grad
-        l3_grad = ctrl.L3_y.grad
-        has_l_grad = ((l1_grad is not None and l1_grad.abs().sum() > 0) or
-                      (l3_grad is not None and l3_grad.abs().sum() > 0))
-        assert has_l_grad, "L1 or L3 table should have gradient when acc hits limit"
+        for i in range(1, 6):
+            assert getattr(ctrl, f'L{i}_y').grad is None
 
     def test_false_matches_v1(self):
         """differentiable=False 输出应与 V1 完全一致。"""

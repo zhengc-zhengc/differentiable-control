@@ -17,8 +17,8 @@ sim/
 │   ├── vehicle.py         # BicycleModel (x,y,yaw,v)，dt=0.02s
 │   └── trajectory.py      # 4 种轨迹生成 + TrajectoryAnalyzer（detached argmin）
 ├── controller/
-│   ├── lat_truck.py       # LatControllerTruck (nn.Module, 8 表 + kLh)
-│   └── lon.py             # LonController (nn.Module, 7 PID + 5 表)
+│   ├── lat_truck.py       # LatControllerTruck (nn.Module, 可微:T2-T6, 固定:kLh/T1/T7/T8)
+│   └── lon.py             # LonController (nn.Module, 可微:7 PID, 固定:L1-L5)
 ├── optim/
 │   └── train.py           # 可微调参：DiffControllerParams, tracking_loss, Adam
 ├── configs/
@@ -55,11 +55,49 @@ python optim/train.py --epochs 50 --trajectories circle sine  # 训练
 - **纵向控制器**：spec §4.5 Steps 1-6 + IIR 滤波全部实现；Steps 7-9（GearControl / CalFinalTorque / 输出分配）有意跳过，直接输出加速度 (m/s²) 而非扭矩/刹车/档位
 - **纵向时间坐标**：spec 用 `absolute_time`，实现用 `relative_time`（仿真中等价）；速度误差用 1.0s 预瞄点（更具前瞻性）
 
+## 控制器参数分类
+
+> 变更可微参数范围后须同步更新此表。详见 `docs/tunable_params_analysis.md`。
+
+### 可微参数（nn.Parameter，参与梯度优化）
+
+| 控制器 | 参数 | 说明 |
+|--------|------|------|
+| 横向 LatControllerTruck | T2_y (prev_time_dist) | 预瞄距离时间系数 |
+| | T3_y (reach_time_theta) | 收敛时间因子 |
+| | T4_y (T_dt) | 角速度误差预瞄时间 |
+| | T5_y (near_point_time) | 近预瞄点时间 |
+| | T6_y (far_point_time) | 远预瞄点时间 |
+| 纵向 LonController | station_kp, station_ki | 站位 PID 增益 |
+| | low_speed_kp, low_speed_ki | 低速速度 PID 增益 |
+| | high_speed_kp, high_speed_ki | 高速速度 PID 增益 |
+| | switch_speed | 低/高速 PID 切换点 |
+
+### 固定参数（buffer，不参与优化）
+
+| 控制器 | 参数 | 固定理由 |
+|--------|------|----------|
+| 横向 | kLh | 车辆物理属性（铰接修正） |
+| 横向 | T1_y (max_theta_deg) | 安全约束（航向误差上限） |
+| 横向 | T7_y (max_steer_angle) | 物理极限（转向机构） |
+| 横向 | T8_y (slip_param) | 车辆物理属性（轮胎侧滑） |
+| 纵向 | L1_y (acc_up_lim) | 物理极限（动力系统能力） |
+| 纵向 | L2_y (acc_low_lim) | 物理极限（制动系统能力） |
+| 纵向 | L3_y (acc_up_rate) | 安全/舒适约束 |
+| 纵向 | L4_y (acc_down_rate) | 安全/舒适约束 |
+| 纵向 | L5_y (acc_rate_gain) | 安全约束辅助 |
+| 横向 | rate_limit_fb/ff/total | 硬编码安全约束 |
+
 ## 参考文档
 
 - `docs/controller_spec.md` — 控制器完整规格
 - `docs/tunable_params_analysis.md` — 可调参数分析
 - `docs/plans/2026-03-02-differentiable-tuning-v2-design.md` — V2 设计
+
+## 训练规范
+
+- **训练脚本必须实时打印每个 epoch 的进度**，包括：loss、各分项 RMSE（lat/head/speed）、梯度范数、耗时、NaN 梯度数
+- 训练完成后打印汇总：初始 loss → 最终 loss（含变化量和百分比）、总耗时
 
 ## 备注
 

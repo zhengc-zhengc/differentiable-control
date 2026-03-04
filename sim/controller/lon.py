@@ -18,7 +18,9 @@ DEG2RAD = math.pi / 180.0
 
 class LonController(nn.Module):
     """纵向控制器（简化版：输出加速度，跳过 Gear/Torque）。
-    differentiable=True 时全程保持 tensor 运算，梯度可流过所有 nn.Parameter。
+    可微参数（nn.Parameter）：7 个 PID 标量（station/speed kp/ki + switch_speed）。
+    固定参数（buffer）：L1-L5 查找表 y 值（加速度限幅/速率限制，物理约束）。
+    differentiable=True 时全程保持 tensor 运算，梯度可流过 nn.Parameter。
     differentiable=False 时使用 .item() + Python if/else，与 V1 行为一致。
     """
 
@@ -44,13 +46,13 @@ class LonController(nn.Module):
         self.speed_input_limit = lon['speed_input_limit']
         self.acc_standstill_down_rate = lon['acc_standstill_down_rate']
 
-        # 5 张查找表：x 为 buffer, y 为 nn.Parameter
+        # 5 张查找表：x 为 buffer, y 为 buffer（物理限制/安全约束，不参与优化）
         for name, key in [('L1', 'L1_acc_up_lim'), ('L2', 'L2_acc_low_lim'),
                           ('L3', 'L3_acc_up_rate'), ('L4', 'L4_acc_down_rate'),
                           ('L5', 'L5_rate_gain')]:
             xs, ys = table_from_config(lon[key])
             self.register_buffer(f'{name}_x', xs)
-            setattr(self, f'{name}_y', nn.Parameter(ys))
+            self.register_buffer(f'{name}_y', ys)
 
         # PID 配置
         pid_sat = lon['speed_pid_sat']

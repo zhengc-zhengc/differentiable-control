@@ -65,12 +65,14 @@ class TestLatTruckBasic:
         assert isinstance(ctrl, torch.nn.Module)
 
     def test_has_parameters(self):
-        """应有 nn.Parameter：8 张表的 y 值 + kLh。"""
+        """应有 nn.Parameter：T2-T6 的 y 值（控制设计参数）。"""
         ctrl = LatControllerTruck(CFG)
         param_names = {n for n, _ in ctrl.named_parameters()}
-        assert 'kLh' in param_names
-        for i in range(1, 9):
+        for i in [2, 3, 4, 5, 6]:
             assert f'T{i}_y' in param_names
+        # kLh, T1, T7, T8 应为 buffer（物理参数/安全约束）
+        for name in ['kLh', 'T1_y', 'T7_y', 'T8_y']:
+            assert name not in param_names
 
     def test_has_buffers(self):
         """应有 buffer：8 张表的 x 值 + 内部状态。"""
@@ -131,34 +133,22 @@ class TestLatTruckDifferentiable:
         assert ctrl.T2_y.grad is not None
         assert ctrl.T2_y.grad.abs().sum() > 0
 
-    def test_gradient_through_T1_T3_T8(self):
-        """T1, T3, T8 梯度应流过。"""
+    def test_no_gradient_through_fixed_params(self):
+        """T1, T7, T8, kLh 为 buffer，不应有梯度。"""
         ctrl = LatControllerTruck(CFG, differentiable=True)
         pts = generate_straight(length=200, speed=10.0)
         analyzer = TrajectoryAnalyzer(pts)
         steer, _, _, _ = ctrl.compute(
             x=torch.tensor(50.0), y=torch.tensor(2.0),
             yaw_deg=torch.tensor(0.0), speed_kph=torch.tensor(36.0),
-            yawrate=torch.tensor(0.0), steer_feedback=torch.tensor(0.0),
-            analyzer=analyzer, ctrl_enable=True)
-        steer.backward()
-        assert ctrl.T1_y.grad is not None and ctrl.T1_y.grad.abs().sum() > 0
-        assert ctrl.T3_y.grad is not None and ctrl.T3_y.grad.abs().sum() > 0
-        assert ctrl.T8_y.grad is not None and ctrl.T8_y.grad.abs().sum() > 0
-
-    def test_gradient_through_kLh(self):
-        """kLh 梯度在有横摆角速度时应流过。"""
-        ctrl = LatControllerTruck(CFG, differentiable=True)
-        pts = generate_straight(length=200, speed=10.0)
-        analyzer = TrajectoryAnalyzer(pts)
-        steer, _, _, _ = ctrl.compute(
-            x=torch.tensor(50.0), y=torch.tensor(0.5),
-            yaw_deg=torch.tensor(2.0), speed_kph=torch.tensor(36.0),
             yawrate=torch.tensor(0.1), steer_feedback=torch.tensor(0.0),
             analyzer=analyzer, ctrl_enable=True)
         steer.backward()
-        assert ctrl.kLh.grad is not None
-        assert abs(ctrl.kLh.grad.item()) > 0
+        # buffer 不参与梯度计算
+        assert ctrl.T1_y.grad is None
+        assert ctrl.T7_y.grad is None
+        assert ctrl.T8_y.grad is None
+        assert ctrl.kLh.grad is None
 
     def test_gradient_through_T4(self):
         """T4 (T_dt) 梯度在有航向误差时应流过。"""

@@ -17,7 +17,9 @@ RAD2DEG = 180.0 / math.pi
 
 class LatControllerTruck(nn.Module):
     """重卡横向控制器。所有参数从 config dict 加载。
-    differentiable=True 时全程保持 tensor 运算，梯度可流过所有 nn.Parameter。
+    可微参数（nn.Parameter）：T2-T6 查找表 y 值（控制设计参数）。
+    固定参数（buffer）：kLh、T1/T7/T8 查找表 y 值（物理参数/安全约束）。
+    differentiable=True 时全程保持 tensor 运算，梯度可流过 nn.Parameter。
     differentiable=False 时使用 .item() + Python if/else，与 V1 行为一致。
     """
 
@@ -30,8 +32,8 @@ class LatControllerTruck(nn.Module):
         self.steer_ratio = veh['steer_ratio']
         self.differentiable = differentiable
 
-        # nn.Parameter: 可调标量
-        self.kLh = nn.Parameter(torch.tensor(float(lat['kLh'])))
+        # 固定物理参数（不参与梯度优化）
+        self.register_buffer('kLh', torch.tensor(float(lat['kLh'])))
 
         # 硬编码速率常量（不参与梯度）
         self.rate_limit_fb = lat['rate_limit_fb']
@@ -41,7 +43,10 @@ class LatControllerTruck(nn.Module):
         self.min_reach_dis = lat['min_reach_dis']
         self.min_speed_prot = lat['min_speed_prot']
 
-        # 8 张查找表：x 为 buffer（固定断点），y 为 nn.Parameter（可调）
+        # 8 张查找表：x 为 buffer（固定断点）
+        # T2-T6 的 y 值为 nn.Parameter（控制设计参数，参与梯度优化）
+        # T1/T7/T8 的 y 值为 buffer（物理参数/安全约束，不参与优化）
+        _fixed_tables = {'T1', 'T7', 'T8'}
         for name in ['T1', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'T8']:
             key_map = {
                 'T1': 'T1_max_theta_deg', 'T2': 'T2_prev_time_dist',
@@ -51,7 +56,10 @@ class LatControllerTruck(nn.Module):
             }
             xs, ys = table_from_config(lat[key_map[name]])
             self.register_buffer(f'{name}_x', xs)
-            setattr(self, f'{name}_y', nn.Parameter(ys))
+            if name in _fixed_tables:
+                self.register_buffer(f'{name}_y', ys)
+            else:
+                setattr(self, f'{name}_y', nn.Parameter(ys))
 
         # 内部状态（不参与梯度）
         self.register_buffer('steer_fb_prev', torch.tensor(0.0))

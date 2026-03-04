@@ -11,10 +11,11 @@ from optim.train import DiffControllerParams, tracking_loss, train
 
 class TestDiffControllerParams:
     def test_has_parameters(self):
-        """封装模块应包含足够多的可优化参数。"""
+        """封装模块应包含可优化参数：横向 T2-T6 y 值 + 纵向 7 个 PID 标量。"""
         params = DiffControllerParams()
         n_params = sum(p.numel() for p in params.parameters())
-        assert n_params > 50, f"参数数量不足: {n_params}"
+        # 5 张表 y 值 + 7 个标量，总数约 30-50
+        assert n_params > 30, f"参数数量不足: {n_params}"
 
     def test_to_config_dict(self):
         """to_config_dict 应返回完整的配置字典。"""
