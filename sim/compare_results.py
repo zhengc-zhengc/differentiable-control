@@ -146,14 +146,22 @@ def main(tuned_config_path):
         ts_t = [h['t'] for h in h_t]
 
         ax.plot(ts_b, [h['steer'] for h in h_b],
-                'b-', label='调参前', alpha=0.8)
+                'b-', label='调参前 总转角', alpha=0.8, linewidth=1.2)
         ax.plot(ts_t, [h['steer'] for h in h_t],
-                'r-', label='调参后', alpha=0.8)
+                'r-', label='调参后 总转角', alpha=0.8, linewidth=1.2)
+        ax.plot(ts_b, [h['steer_fb'] for h in h_b],
+                'b--', label='调参前 反馈', alpha=0.5, linewidth=0.8)
+        ax.plot(ts_b, [h['steer_ff'] for h in h_b],
+                'b:', label='调参前 前馈', alpha=0.5, linewidth=0.8)
+        ax.plot(ts_t, [h['steer_fb'] for h in h_t],
+                'r--', label='调参后 反馈', alpha=0.5, linewidth=0.8)
+        ax.plot(ts_t, [h['steer_ff'] for h in h_t],
+                'r:', label='调参后 前馈', alpha=0.5, linewidth=0.8)
 
         ax.set_xlabel('时间 (s)')
         ax.set_ylabel('方向盘转角 (°)')
         ax.set_title(name_b)
-        ax.legend(fontsize=9)
+        ax.legend(fontsize=8, ncol=2)
         ax.grid(True, alpha=0.3)
 
     plt.tight_layout()

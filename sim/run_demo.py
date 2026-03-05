@@ -91,11 +91,15 @@ def plot_scenario(name: str, history: list[dict], traj_pts) -> plt.Figure:
     # 5. 转向角（横向控制器输出）
     ax = axes[2, 0]
     ax.plot(ts, [_to_float(h['steer']) for h in history], 'm-',
-            label='方向盘转角')
+            label='总转角', linewidth=1.2)
+    ax.plot(ts, [_to_float(h['steer_fb']) for h in history], 'b--',
+            label='反馈', alpha=0.6, linewidth=0.8)
+    ax.plot(ts, [_to_float(h['steer_ff']) for h in history], 'g:',
+            label='前馈', alpha=0.6, linewidth=0.8)
     ax.set_xlabel('时间 (s)')
     ax.set_ylabel('方向盘转角 (°)')
     ax.set_title('横向控制器输出 — 转向角')
-    ax.legend()
+    ax.legend(fontsize=9)
     ax.grid(True)
 
     # 6. 加速度（纵向控制器输出）

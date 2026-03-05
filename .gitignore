@@ -16,3 +16,6 @@ prompt.md
 
 # Git worktrees
 .worktrees/
+
+# 训练产物（每次训练自动生成，不纳入 git）
+sim/results/training/

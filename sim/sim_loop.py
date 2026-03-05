@@ -98,14 +98,15 @@ def run_simulation(trajectory: list[TrajectoryPoint],
             yawrate = car.v * torch.tan(delta_prev) / wheelbase
 
             # 横向控制器
-            steer_out, kappa_cur, kappa_near, curvature_far = lat_ctrl.compute(
-                x=car.x, y=car.y,
-                yaw_deg=car.yaw_deg,
-                speed_kph=car.speed_kph,
-                yawrate=yawrate,
-                steer_feedback=prev_steer,
-                analyzer=analyzer,
-                ctrl_enable=True, dt=dt)
+            steer_out, kappa_cur, kappa_near, curvature_far, steer_fb, steer_ff = \
+                lat_ctrl.compute(
+                    x=car.x, y=car.y,
+                    yaw_deg=car.yaw_deg,
+                    speed_kph=car.speed_kph,
+                    yawrate=yawrate,
+                    steer_feedback=prev_steer,
+                    analyzer=analyzer,
+                    ctrl_enable=True, dt=dt)
 
             # 纵向控制器
             acc_cmd = lon_ctrl.compute(
@@ -121,7 +122,8 @@ def run_simulation(trajectory: list[TrajectoryPoint],
             history.append({
                 't': t,
                 'x': car.x, 'y': car.y, 'yaw': car.yaw, 'v': car.v,
-                'steer': steer_out, 'acc': acc_cmd,
+                'steer': steer_out, 'steer_fb': steer_fb, 'steer_ff': steer_ff,
+                'acc': acc_cmd,
                 'lateral_error': lateral_error, 'heading_error': heading_error,
                 'ref_x': ref_pt.x, 'ref_y': ref_pt.y,
             })
@@ -152,14 +154,15 @@ def run_simulation(trajectory: list[TrajectoryPoint],
             yawrate = car_v * math.tan(delta_prev) / wheelbase
 
             # 横向控制器
-            steer_out, kappa_cur, kappa_near, curvature_far = lat_ctrl.compute(
-                x=car_x, y=car_y,
-                yaw_deg=math.degrees(car_yaw),
-                speed_kph=car_speed_kph,
-                yawrate=yawrate,
-                steer_feedback=prev_steer,
-                analyzer=analyzer,
-                ctrl_enable=True, dt=dt)
+            steer_out, kappa_cur, kappa_near, curvature_far, steer_fb, steer_ff = \
+                lat_ctrl.compute(
+                    x=car_x, y=car_y,
+                    yaw_deg=math.degrees(car_yaw),
+                    speed_kph=car_speed_kph,
+                    yawrate=yawrate,
+                    steer_feedback=prev_steer,
+                    analyzer=analyzer,
+                    ctrl_enable=True, dt=dt)
 
             # 纵向控制器
             acc_cmd = lon_ctrl.compute(
@@ -174,7 +177,8 @@ def run_simulation(trajectory: list[TrajectoryPoint],
 
             history.append({
                 't': t, 'x': car_x, 'y': car_y, 'yaw': car_yaw,
-                'v': car_v, 'steer': steer_out, 'acc': acc_cmd,
+                'v': car_v, 'steer': steer_out, 'steer_fb': steer_fb,
+                'steer_ff': steer_ff, 'acc': acc_cmd,
                 'lateral_error': lateral_error, 'heading_error': heading_error,
                 'ref_x': ref_pt.x, 'ref_y': ref_pt.y,
             })

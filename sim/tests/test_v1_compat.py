@@ -34,7 +34,7 @@ class TestV1CompatLat:
         cfg, ctrl = setup
         traj = generate_straight(length=100, speed=10.0)
         analyzer = TrajectoryAnalyzer(traj)
-        steer, k_cur, k_near, k_far = ctrl.compute(
+        steer, k_cur, k_near, k_far, _, _ = ctrl.compute(
             x=0.0, y=0.0, yaw_deg=0.0, speed_kph=36.0,
             yawrate=0.0, steer_feedback=0.0,
             analyzer=analyzer, ctrl_enable=True, dt=0.02)
@@ -46,7 +46,7 @@ class TestV1CompatLat:
         cfg, ctrl = setup
         traj = generate_straight(length=100, speed=10.0)
         analyzer = TrajectoryAnalyzer(traj)
-        steer, _, _, _ = ctrl.compute(
+        steer, _, _, _, _, _ = ctrl.compute(
             x=5.0, y=2.0, yaw_deg=0.0, speed_kph=36.0,
             yawrate=0.0, steer_feedback=0.0,
             analyzer=analyzer, ctrl_enable=True, dt=0.02)
@@ -58,7 +58,7 @@ class TestV1CompatLat:
         cfg, ctrl = setup
         traj = generate_straight(length=100, speed=10.0)
         analyzer = TrajectoryAnalyzer(traj)
-        steer, k_cur, k_near, k_far = ctrl.compute(
+        steer, k_cur, k_near, k_far, _, _ = ctrl.compute(
             x=0.0, y=0.0, yaw_deg=0.0, speed_kph=36.0,
             yawrate=0.0, steer_feedback=15.5,
             analyzer=analyzer, ctrl_enable=False, dt=0.02)
@@ -73,7 +73,7 @@ class TestV1CompatLat:
         traj = generate_circle(radius=50.0, speed=5.0,
                                arc_angle=math.pi / 2)
         analyzer = TrajectoryAnalyzer(traj)
-        steer, k_cur, k_near, k_far = ctrl.compute(
+        steer, k_cur, k_near, k_far, _, _ = ctrl.compute(
             x=0.0, y=0.0, yaw_deg=0.0, speed_kph=18.0,
             yawrate=0.0, steer_feedback=0.0,
             analyzer=analyzer, ctrl_enable=True, dt=0.02)
@@ -88,7 +88,7 @@ class TestV1CompatLat:
         steers = []
         for i in range(10):
             steer_fb = steers[-1] if steers else 0.0
-            steer, _, _, _ = ctrl.compute(
+            steer, _, _, _, _, _ = ctrl.compute(
                 x=5.0, y=3.0, yaw_deg=0.0, speed_kph=36.0,
                 yawrate=0.0, steer_feedback=steer_fb,
                 analyzer=analyzer, ctrl_enable=True, dt=0.02)

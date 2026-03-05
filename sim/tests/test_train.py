@@ -126,6 +126,20 @@ class TestTrackingLoss:
                              w_steer_rate=1.0, w_acc_rate=0)
         assert loss.item() > 0.0
 
+    def test_return_details_has_loss_components(self):
+        """return_details 应包含各 loss 分项，且分项之和等于总 loss。"""
+        history = [{'lateral_error': torch.tensor(0.1),
+                    'heading_error': torch.tensor(0.05),
+                    'v': torch.tensor(4.5),
+                    'steer': torch.tensor(float(i)),
+                    'acc': torch.tensor(0.1)} for i in range(20)]
+        loss, details = tracking_loss(history, ref_speed=5.0, return_details=True)
+        for key in ['loss_lat', 'loss_head', 'loss_speed', 'loss_steer_rate', 'loss_acc_rate']:
+            assert key in details, f"缺少 {key}"
+        component_sum = sum(details[k] for k in ['loss_lat', 'loss_head', 'loss_speed',
+                                                  'loss_steer_rate', 'loss_acc_rate'])
+        assert abs(component_sum - loss.item()) < 1e-4
+
     def test_loss_is_differentiable(self):
         """loss 应支持 backward。"""
         lat_err = torch.tensor(1.0, requires_grad=True)
@@ -153,6 +167,11 @@ class TestTrain:
         assert len(result['losses']) == 2
         assert result['saved_path'] is not None
         assert result['params'] is not None
+        assert 'training_history' in result
+        assert len(result['training_history']) == 2
+        assert 'per_trajectory' in result['training_history'][0]
+        assert 'initial_params' in result
+        assert 'final_params' in result
 
     def test_loss_finite(self):
         """训练 loss 应为有限数。"""

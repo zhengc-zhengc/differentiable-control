@@ -75,7 +75,9 @@ class LatControllerTruck(nn.Module):
     def compute(self, x, y, yaw_deg, speed_kph, yawrate,
                 steer_feedback, analyzer: TrajectoryAnalyzer,
                 ctrl_enable: bool, dt: float = 0.02):
-        """计算转向角。返回 (steering_target, kappa_current, kappa_near, kappa_far)。
+        """计算转向角。返回 (steering_target, kappa_current, kappa_near, kappa_far,
+        steer_fb, steer_ff)。
+        steering_target/steer_fb/steer_ff 单位：方向盘转角 (deg)。
         differentiable=True: 返回全 tensor。
         differentiable=False: 返回 float（V1 兼容）。
         """
@@ -127,7 +129,7 @@ class LatControllerTruck(nn.Module):
             self.steer_fb_prev = torch.tensor(0.0)
             self.steer_ff_prev = torch.tensor(0.0)
             self.steer_total_prev = torch.tensor(float(steer_feedback_val))
-            return steer_feedback_val, 0.0, 0.0, 0.0
+            return steer_feedback_val, 0.0, 0.0, 0.0, 0.0, 0.0
 
         # Step 1: 查表 — lookup1d 接受 (x_tensor, y_tensor, x_scalar)
         speed_t = torch.tensor(speed_kph_val)
@@ -197,7 +199,8 @@ class LatControllerTruck(nn.Module):
                                self.rate_limit_total, dt)
         self.steer_total_prev = steer_out.detach().clone()
 
-        return steer_out.item(), currt.kappa, near.kappa, curvature_far
+        return (steer_out.item(), currt.kappa, near.kappa, curvature_far,
+                steer_fb.item(), steer_ff.item())
 
     def _compute_differentiable(self, x, y, yaw_deg, speed_kph, yawrate,
                                 steer_feedback, analyzer, ctrl_enable, dt):
@@ -226,7 +229,7 @@ class LatControllerTruck(nn.Module):
             self.steer_ff_prev = torch.tensor(0.0)
             self.steer_total_prev = steer_feedback.detach().clone()
             zero = torch.tensor(0.0)
-            return steer_feedback, zero, zero, zero
+            return steer_feedback, zero, zero, zero, zero, zero
 
         # Step 1: 查表（结果为 tensor，保持梯度）
         max_theta_deg = lookup1d(self.T1_x, self.T1_y, speed_kph_safe)
@@ -307,4 +310,4 @@ class LatControllerTruck(nn.Module):
         self.steer_total_prev = steer_out.detach().clone()
 
         return (steer_out, torch.tensor(currt.kappa),
-                near_kappa, curvature_far_t)
+                near_kappa, curvature_far_t, steer_fb, steer_ff)

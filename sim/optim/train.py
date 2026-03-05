@@ -119,6 +119,11 @@ def tracking_loss(history, ref_speed,
             'speed_rmse': speed_mse.sqrt().item(),
             'lat_max': lat_errs.abs().max().item(),
             'head_max': head_errs.abs().max().item(),
+            'loss_lat': (w_lat * lat_mse).item(),
+            'loss_head': (w_head * head_mse).item(),
+            'loss_speed': (w_speed * speed_mse).item(),
+            'loss_steer_rate': (w_steer_rate * steer_rate_mse).item(),
+            'loss_acc_rate': (w_acc_rate * acc_rate_mse).item(),
         }
         return loss, details
 
@@ -138,7 +143,7 @@ _TRAJECTORY_BUILDERS = {
 
 def train(trajectories=None, n_epochs=100, lr=1e-3, lr_tables=5e-4,
           sim_length=None, sim_speed=5.0, tbptt_k=64, grad_clip=10.0,
-          verbose=True):
+          param_snapshot_interval=10, verbose=True):
     """运行可微调参训练。
 
     Args:
@@ -150,10 +155,12 @@ def train(trajectories=None, n_epochs=100, lr=1e-3, lr_tables=5e-4,
         sim_speed: 仿真速度 (m/s)
         tbptt_k: Truncated BPTT 窗口大小（步数），每 K 步截断梯度链
         grad_clip: 全局梯度范数裁剪阈值
+        param_snapshot_interval: 参数快照打印间隔（epoch 数），0 表示不打印
         verbose: 是否打印 epoch 信息
 
     Returns:
-        dict: {'losses', 'saved_path', 'params'}
+        dict: {'losses', 'training_history', 'initial_params', 'final_params',
+               'saved_path', 'params'}
     """
     if trajectories is None:
         trajectories = ['circle', 'sine', 'combined']
@@ -188,6 +195,8 @@ def train(trajectories=None, n_epochs=100, lr=1e-3, lr_tables=5e-4,
     ])
 
     losses = []
+    training_history = []
+    initial_params = {name: p.detach().clone() for name, p in params.named_parameters()}
     import time as _time
     t_start = _time.time()
 
@@ -195,7 +204,7 @@ def train(trajectories=None, n_epochs=100, lr=1e-3, lr_tables=5e-4,
         t_epoch = _time.time()
         optimizer.zero_grad()
         epoch_loss = torch.tensor(0.0)
-        epoch_details = {}
+        traj_details = {}
 
         for traj_name in trajectories:
             builder = _TRAJECTORY_BUILDERS[traj_name]
@@ -215,14 +224,15 @@ def train(trajectories=None, n_epochs=100, lr=1e-3, lr_tables=5e-4,
             loss, details = tracking_loss(history, ref_speed=sim_speed,
                                           return_details=True)
             epoch_loss = epoch_loss + loss
-            # 累积各轨迹的分项指标
-            for k, v in details.items():
-                epoch_details[k] = epoch_details.get(k, 0.0) + v
+            traj_details[traj_name] = details
 
         epoch_loss = epoch_loss / len(trajectories)
-        # 取各轨迹平均
-        for k in epoch_details:
-            epoch_details[k] /= len(trajectories)
+        # 从 traj_details 计算各轨迹平均（兼容现有打印）
+        epoch_details = {}
+        if traj_details:
+            all_keys = list(next(iter(traj_details.values())).keys())
+            for k in all_keys:
+                epoch_details[k] = sum(td[k] for td in traj_details.values()) / len(traj_details)
 
         epoch_loss.backward()
 
@@ -239,6 +249,18 @@ def train(trajectories=None, n_epochs=100, lr=1e-3, lr_tables=5e-4,
 
         losses.append(epoch_loss.item())
         dt = _time.time() - t_epoch
+
+        epoch_record = {
+            'epoch': epoch + 1,
+            'loss': epoch_loss.item(),
+            'grad_norm': grad_norm,
+            'nan_count': int(nan_count),
+            'dt': dt,
+            'per_trajectory': traj_details,
+            'avg': dict(epoch_details),
+        }
+        training_history.append(epoch_record)
+
         if verbose:
             nan_warn = f" [!NaN grads:{int(nan_count)}]" if nan_count > 0 else ""
             print(f"[{epoch+1:3d}/{n_epochs}] loss={epoch_loss.item():8.4f} | "
@@ -248,6 +270,30 @@ def train(trajectories=None, n_epochs=100, lr=1e-3, lr_tables=5e-4,
                   f"grad_norm={grad_norm:.2f} "
                   f"dt={dt:.1f}s{nan_warn}",
                   flush=True)
+
+        if verbose and len(trajectories) > 1:
+            for tn in trajectories:
+                if tn in traj_details:
+                    td = traj_details[tn]
+                    print(f"    {tn:12s}: lat={td['lat_rmse']:.4f} head={td['head_rmse']:.4f} "
+                          f"spd={td['speed_rmse']:.4f} | "
+                          f"L_lat={td['loss_lat']:.3f} L_head={td['loss_head']:.3f} "
+                          f"L_spd={td['loss_speed']:.3f}")
+
+        if verbose and param_snapshot_interval > 0 and (epoch + 1) % param_snapshot_interval == 0:
+            print(f"\n  --- 参数快照 (epoch {epoch+1}) ---")
+            for name, p in params.named_parameters():
+                init_val = initial_params[name]
+                delta = p.detach() - init_val
+                if p.numel() == 1:
+                    pct = delta.item() / max(abs(init_val.item()), 1e-8) * 100
+                    print(f"  {name:30s}: {init_val.item():.4f} -> {p.item():.4f} "
+                          f"({delta.item():+.6f}, {pct:+.1f}%)")
+                else:
+                    print(f"  {name:30s}: max_delta={delta.abs().max().item():.6f} "
+                          f"mean={p.detach().mean().item():.4f} "
+                          f"[{p.detach().min().item():.3f}, {p.detach().max().item():.3f}]")
+            print()
 
     # 清理梯度钩子
     for h in hooks:
@@ -276,7 +322,16 @@ def train(trajectories=None, n_epochs=100, lr=1e-3, lr_tables=5e-4,
     if verbose:
         print(f"参数已保存: {saved_path}")
 
-    return {'losses': losses, 'saved_path': saved_path, 'params': params}
+    return {
+        'losses': losses,
+        'training_history': training_history,
+        'initial_params': {name: p.cpu().tolist() if p.numel() > 1 else p.item()
+                           for name, p in initial_params.items()},
+        'final_params': {name: p.detach().cpu().tolist() if p.numel() > 1 else p.detach().item()
+                         for name, p in params.named_parameters()},
+        'saved_path': saved_path,
+        'params': params,
+    }
 
 
 if __name__ == '__main__':
@@ -296,12 +351,28 @@ if __name__ == '__main__':
                         help='Truncated BPTT 窗口大小（步数）')
     parser.add_argument('--grad-clip', type=float, default=10.0,
                         help='全局梯度范数裁剪阈值')
+    parser.add_argument('--snapshot-interval', type=int, default=10,
+                        help='参数快照打印间隔（epoch 数）')
     args = parser.parse_args()
 
     result = train(trajectories=args.trajectories, n_epochs=args.epochs,
                    lr=args.lr, sim_speed=args.speed,
                    sim_length=args.sim_length,
                    tbptt_k=args.tbptt_k,
-                   grad_clip=args.grad_clip)
+                   grad_clip=args.grad_clip,
+                   param_snapshot_interval=args.snapshot_interval)
     print(f"\n最终 loss: {result['losses'][-1]:.6f}")
     print(f"保存路径: {result['saved_path']}")
+
+    # 训练后自动化：loss 曲线、对比图、实验日志
+    from optim.post_training import run_post_training
+    hyperparams = {
+        'epochs': args.epochs,
+        'lr': args.lr,
+        'trajectories': args.trajectories,
+        'speed': args.speed,
+        'sim_length': args.sim_length,
+        'tbptt_k': args.tbptt_k,
+        'grad_clip': args.grad_clip,
+    }
+    run_post_training(result, hyperparams)

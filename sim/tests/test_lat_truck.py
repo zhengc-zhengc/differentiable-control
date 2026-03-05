@@ -19,7 +19,7 @@ class TestLatTruckBasic:
         pts = generate_straight(length=200, speed=10.0)
         analyzer = TrajectoryAnalyzer(pts)
         ctrl = LatControllerTruck(CFG)
-        steer, _, _, _ = ctrl.compute(
+        steer, _, _, _, _, _ = ctrl.compute(
             x=50.0, y=0.0, yaw_deg=0.0, speed_kph=36.0,
             yawrate=0.0, steer_feedback=0.0,
             analyzer=analyzer, ctrl_enable=True)
@@ -30,7 +30,7 @@ class TestLatTruckBasic:
         pts = generate_straight(length=200, speed=10.0)
         analyzer = TrajectoryAnalyzer(pts)
         ctrl = LatControllerTruck(CFG)
-        steer, _, _, _ = ctrl.compute(
+        steer, _, _, _, _, _ = ctrl.compute(
             x=50.0, y=2.0, yaw_deg=0.0, speed_kph=36.0,
             yawrate=0.0, steer_feedback=0.0,
             analyzer=analyzer, ctrl_enable=True)
@@ -42,7 +42,7 @@ class TestLatTruckBasic:
         pts = generate_circle(radius=R, speed=5.0)
         analyzer = TrajectoryAnalyzer(pts)
         ctrl = LatControllerTruck(CFG)
-        steer, _, _, kfar = ctrl.compute(
+        steer, _, _, kfar, _, _ = ctrl.compute(
             x=0.0, y=0.0, yaw_deg=0.0, speed_kph=18.0,
             yawrate=5.0/R, steer_feedback=0.0,
             analyzer=analyzer, ctrl_enable=True)
@@ -53,7 +53,7 @@ class TestLatTruckBasic:
         pts = generate_straight(length=100, speed=10.0)
         analyzer = TrajectoryAnalyzer(pts)
         ctrl = LatControllerTruck(CFG)
-        steer, _, _, _ = ctrl.compute(
+        steer, _, _, _, _, _ = ctrl.compute(
             x=0.0, y=5.0, yaw_deg=10.0, speed_kph=36.0,
             yawrate=0.0, steer_feedback=42.0,
             analyzer=analyzer, ctrl_enable=False)
@@ -109,7 +109,7 @@ class TestLatTruckDifferentiable:
         pts = generate_straight(length=200, speed=10.0)
         analyzer = TrajectoryAnalyzer(pts)
         ctrl = LatControllerTruck(CFG, differentiable=True)
-        steer, kc, kn, kf = ctrl.compute(
+        steer, kc, kn, kf, _, _ = ctrl.compute(
             x=torch.tensor(50.0), y=torch.tensor(2.0),
             yaw_deg=torch.tensor(0.0), speed_kph=torch.tensor(36.0),
             yawrate=torch.tensor(0.0), steer_feedback=torch.tensor(0.0),
@@ -124,7 +124,7 @@ class TestLatTruckDifferentiable:
         ctrl = LatControllerTruck(CFG, differentiable=True)
         pts = generate_straight(length=200, speed=10.0)
         analyzer = TrajectoryAnalyzer(pts)
-        steer, _, _, _ = ctrl.compute(
+        steer, _, _, _, _, _ = ctrl.compute(
             x=torch.tensor(50.0), y=torch.tensor(2.0),
             yaw_deg=torch.tensor(0.0), speed_kph=torch.tensor(36.0),
             yawrate=torch.tensor(0.0), steer_feedback=torch.tensor(0.0),
@@ -138,7 +138,7 @@ class TestLatTruckDifferentiable:
         ctrl = LatControllerTruck(CFG, differentiable=True)
         pts = generate_straight(length=200, speed=10.0)
         analyzer = TrajectoryAnalyzer(pts)
-        steer, _, _, _ = ctrl.compute(
+        steer, _, _, _, _, _ = ctrl.compute(
             x=torch.tensor(50.0), y=torch.tensor(2.0),
             yaw_deg=torch.tensor(0.0), speed_kph=torch.tensor(36.0),
             yawrate=torch.tensor(0.1), steer_feedback=torch.tensor(0.0),
@@ -155,7 +155,7 @@ class TestLatTruckDifferentiable:
         ctrl = LatControllerTruck(CFG, differentiable=True)
         pts = generate_straight(length=200, speed=10.0)
         analyzer = TrajectoryAnalyzer(pts)
-        steer, _, _, _ = ctrl.compute(
+        steer, _, _, _, _, _ = ctrl.compute(
             x=torch.tensor(50.0), y=torch.tensor(0.5),
             yaw_deg=torch.tensor(5.0), speed_kph=torch.tensor(36.0),
             yawrate=torch.tensor(0.1), steer_feedback=torch.tensor(0.0),
@@ -169,7 +169,7 @@ class TestLatTruckDifferentiable:
         pts = generate_straight(length=200, speed=10.0)
         analyzer = TrajectoryAnalyzer(pts)
         ctrl = LatControllerTruck(CFG, differentiable=False)
-        steer, kc, kn, kf = ctrl.compute(
+        steer, kc, kn, kf, _, _ = ctrl.compute(
             x=torch.tensor(50.0), y=torch.tensor(2.0),
             yaw_deg=torch.tensor(0.0), speed_kph=torch.tensor(36.0),
             yawrate=torch.tensor(0.0), steer_feedback=torch.tensor(0.0),
@@ -183,7 +183,7 @@ class TestLatTruckDifferentiable:
         pts = generate_straight(length=200, speed=10.0)
         analyzer = TrajectoryAnalyzer(pts)
         ctrl = LatControllerTruck(CFG, differentiable=False)
-        steer, kc, kn, kf = ctrl.compute(
+        steer, kc, kn, kf, _, _ = ctrl.compute(
             x=50.0, y=0.0, yaw_deg=0.0, speed_kph=36.0,
             yawrate=0.0, steer_feedback=0.0,
             analyzer=analyzer, ctrl_enable=True)
@@ -194,7 +194,7 @@ class TestLatTruckDifferentiable:
         pts = generate_straight(length=200, speed=10.0)
         analyzer = TrajectoryAnalyzer(pts)
         ctrl = LatControllerTruck(CFG, differentiable=True)
-        steer, _, _, _ = ctrl.compute(
+        steer, _, _, _, _, _ = ctrl.compute(
             x=torch.tensor(50.0), y=torch.tensor(2.0),
             yaw_deg=torch.tensor(0.0), speed_kph=torch.tensor(36.0),
             yawrate=torch.tensor(0.0), steer_feedback=torch.tensor(0.0),
@@ -207,7 +207,7 @@ class TestLatTruckDifferentiable:
         pts = generate_straight(length=100, speed=10.0)
         analyzer = TrajectoryAnalyzer(pts)
         ctrl = LatControllerTruck(CFG, differentiable=True)
-        steer, _, _, _ = ctrl.compute(
+        steer, _, _, _, _, _ = ctrl.compute(
             x=torch.tensor(0.0), y=torch.tensor(5.0),
             yaw_deg=torch.tensor(10.0), speed_kph=torch.tensor(36.0),
             yawrate=torch.tensor(0.0),

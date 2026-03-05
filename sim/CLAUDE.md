@@ -14,6 +14,7 @@ sim/
 ├── sim_loop.py            # 50Hz 闭环仿真（lat→lon→vehicle step）
 ├── run_demo.py            # 可视化 Demo（--save --no-show --config）
 ├── compare_results.py     # 调参前后对比（轨迹 + 横向误差对比图）
+├── health_check.py        # 一键体检（测试 + 基线性能 + 梯度健康）
 ├── model/
 │   ├── vehicle.py         # BicycleModel (x,y,yaw,v)，dt=0.02s
 │   └── trajectory.py      # 4 种轨迹生成 + TrajectoryAnalyzer（detached argmin）
@@ -21,14 +22,17 @@ sim/
 │   ├── lat_truck.py       # LatControllerTruck (nn.Module, 可微:T2-T6, 固定:kLh/T1/T7/T8)
 │   └── lon.py             # LonController (nn.Module, 可微:7 PID, 固定:L1-L5)
 ├── optim/
-│   └── train.py           # 可微调参：DiffControllerParams, tracking_loss, Adam
+│   ├── train.py           # 可微调参（参数快照、分轨迹 loss、完整训练历史）
+│   └── post_training.py   # 训练后自动化（loss 曲线、对比图、实验日志）
 ├── configs/
 │   ├── default.yaml       # 默认参数（C++ 原始控制器参数，作为训练基线）
 │   └── tuned/             # 调参结果 YAML（文件名含 commit hash + timestamp）
 ├── results/               # 结果图（纳入 git）
-│   └── baseline/          # 基线结果（用于调参前后对比）
+│   ├── baseline/          # 基线结果（用于调参前后对比）
+│   └── training/          # 训练产物（每次训练一个时间戳子目录）
+│       └── {timestamp}/   # loss_curve.png, loss_breakdown.png, comparison_*.png, experiment_log.yaml
 ├── learn/                 # 学习笔记与调试日志（不影响运行）
-└── tests/                 # pytest 测试（132 项）
+└── tests/                 # pytest 测试
 ```
 
 ## 数据流
@@ -46,9 +50,10 @@ sim/
 ```bash
 cd sim/
 python -m pytest tests/ -q                                  # 跑测试
+python health_check.py                                      # 一键体检（测试+基线+梯度）
 python run_demo.py --save --no-show                         # 生成结果图
 python run_demo.py --config configs/tuned/xxx.yaml          # 加载调参结果
-python optim/train.py --epochs 50 --trajectories circle sine  # 训练
+python optim/train.py --epochs 50 --trajectories circle sine  # 训练（完成后自动生成对比图+日志）
 ```
 
 ## 与 controller_spec.md 的差异
@@ -100,8 +105,10 @@ python optim/train.py --epochs 50 --trajectories circle sine  # 训练
 ## 训练规范
 
 - **训练脚本必须实时打印每个 epoch 的进度**，包括：loss、各分项 RMSE（lat/head/speed）、梯度范数、耗时、NaN 梯度数
+- 多轨迹时打印分轨迹 loss 明细（lat/head/speed RMSE + loss 分项）
+- 每 N epoch（默认 10）打印参数快照：当前值、初始值、变化量、变化百分比
 - 训练完成后打印汇总：初始 loss → 最终 loss（含变化量和百分比）、总耗时
-- **训练完成后必须生成与默认参数（`configs/default.yaml`）的对比图**，输出到 `results/`，包括：轨迹跟踪对比、横向误差对比、各项指标数值对比
+- **训练完成后自动运行 `post_training`**：生成 loss 曲线、分轨迹 loss 分项图、baseline vs tuned 对比图（轨迹/横向误差/转向角/加速度）、实验日志 YAML，全部保存到 `results/training/{timestamp}/`
 
 ## 梯度爆炸防治（关键！）
 
