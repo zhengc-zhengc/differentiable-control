@@ -34,6 +34,13 @@ class BicycleModel:
         else:
             self.v = torch.clamp(self.v, min=0.0)
 
+    def detach_state(self):
+        """截断梯度链：将当前状态从计算图中 detach（用于 truncated BPTT）。"""
+        self.x = self.x.detach().requires_grad_(False)
+        self.y = self.y.detach().requires_grad_(False)
+        self.yaw = self.yaw.detach().requires_grad_(False)
+        self.v = self.v.detach().requires_grad_(False)
+
     @property
     def speed_kph(self):
         return self.v * 3.6

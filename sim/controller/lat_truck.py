@@ -240,12 +240,12 @@ class LatControllerTruck(nn.Module):
 
         # Step 2: 轨迹查询（argmin 不在梯度路径上，返回 TrajectoryPoint）
         currt = analyzer.query_nearest_by_position(x, y)
-        near_pt_time_val = near_pt_time.item()
-        far_pt_time_val = far_pt_time.item()
-        near = analyzer.query_nearest_by_relative_time(
-            currt.t + near_pt_time_val)
-        far = analyzer.query_nearest_by_relative_time(
-            currt.t + far_pt_time_val)
+        # 可微时间查询：T5/T6 的梯度通过 lookup1d 链路回传
+        t_base = torch.tensor(currt.t)
+        near_kappa, _, _, _ = analyzer.query_by_time_differentiable(
+            t_base + near_pt_time)
+        far_kappa, _, _, _ = analyzer.query_by_time_differentiable(
+            t_base + far_pt_time)
 
         # Step 3: 误差计算（tensor 运算）
         dx = x - currt.x
@@ -254,8 +254,7 @@ class LatControllerTruck(nn.Module):
         sin_theta = math.sin(currt.theta)
         lateral_error = cos_theta * dy - sin_theta * dx
         heading_error = normalize_angle(yaw_rad - currt.theta)
-        curvature_far_val = far.kappa
-        curvature_far_t = torch.tensor(curvature_far_val)
+        curvature_far_t = far_kappa
 
         # Step 4: real_theta
         vehicle_speed_clamped = smooth_clamp(speed_mps, 1.0, 100.0, temp=1.0)
@@ -308,4 +307,4 @@ class LatControllerTruck(nn.Module):
         self.steer_total_prev = steer_out.detach().clone()
 
         return (steer_out, torch.tensor(currt.kappa),
-                torch.tensor(near.kappa), curvature_far_t)
+                near_kappa, curvature_far_t)

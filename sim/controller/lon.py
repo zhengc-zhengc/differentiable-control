@@ -260,18 +260,19 @@ class LonController(nn.Module):
         t_now_val = t_now.item()
         matched = analyzer.query_nearest_by_position(x, y)
         s_match, s_dot, d_frenet, d_dot = analyzer.to_frenet(
-            x.item(), y.item(), yaw_rad.item(), speed_mps.item(), matched)
-        s_match_val = s_match.item() if isinstance(s_match, torch.Tensor) else s_match
+            x, y, yaw_rad, speed_mps, matched)
 
-        ref_pt = analyzer.query_nearest_by_relative_time(t_now_val)
-        prev_pt = analyzer.query_nearest_by_relative_time(
-            t_now_val + self.preview_window * dt)
-        spd_pt = analyzer.query_nearest_by_relative_time(
-            t_now_val + self.preview_window_speed * dt)
+        # 可微时间查询
+        t_now_t = torch.tensor(t_now_val)
+        _, _, _, ref_s = analyzer.query_by_time_differentiable(t_now_t)
+        _, _, prev_a, _ = analyzer.query_by_time_differentiable(
+            t_now_t + self.preview_window * dt)
+        _, spd_v, _, _ = analyzer.query_by_time_differentiable(
+            t_now_t + self.preview_window_speed * dt)
 
-        station_error = torch.tensor(ref_pt.s - s_match_val)
-        preview_speed_error = torch.tensor(spd_pt.v) - speed_mps
-        preview_accel_ref = prev_pt.a
+        station_error = ref_s - s_match
+        preview_speed_error = spd_v - speed_mps
+        preview_accel_ref = prev_a
 
         # Step 2: 站位误差保护
         # 使用 straight-through clamp（硬限幅但梯度穿透）

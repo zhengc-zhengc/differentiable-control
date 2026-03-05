@@ -2,7 +2,7 @@
 """轨迹生成与分析器。V2: TrajectoryAnalyzer torch 化，生成函数不变。"""
 import math
 import torch
-from common import TrajectoryPoint, normalize_angle
+from common import TrajectoryPoint, normalize_angle, lookup1d
 
 
 def generate_straight(length: float, speed: float, dt: float = 0.02,
@@ -142,6 +142,12 @@ class TrajectoryAnalyzer:
         self.points = points
         self._xs = torch.tensor([p.x for p in points])
         self._ys = torch.tensor([p.y for p in points])
+        # 按时间索引的 tensor 数组（用于可微时间查询）
+        self._t_arr = torch.tensor([p.t for p in points])
+        self._kappa_arr = torch.tensor([p.kappa for p in points])
+        self._v_arr = torch.tensor([p.v for p in points])
+        self._a_arr = torch.tensor([p.a for p in points])
+        self._s_arr = torch.tensor([p.s for p in points])
 
     def query_nearest_by_position(self, x, y) -> TrajectoryPoint:
         """最近点查询（detached argmin — 索引选择不在梯度路径上）。"""
@@ -188,6 +194,17 @@ class TrajectoryAnalyzer:
                     t=t_rel,
                 )
         return self.points[-1]
+
+    def query_by_time_differentiable(self, t: torch.Tensor):
+        """可微时间查询 — 用 lookup1d 插值，返回 tensor，对 t 可微。
+        用于 differentiable=True 路径，使 T5/T6 等时间参数可训练。
+        返回 (kappa, v, a, s)，均为标量 tensor。
+        """
+        kappa = lookup1d(self._t_arr, self._kappa_arr, t)
+        v = lookup1d(self._t_arr, self._v_arr, t)
+        a = lookup1d(self._t_arr, self._a_arr, t)
+        s = lookup1d(self._t_arr, self._s_arr, t)
+        return kappa, v, a, s
 
     def to_frenet(self, x, y, theta_rad, v_mps, matched: TrajectoryPoint):
         """Frenet 变换 — torch 运算支持梯度流。

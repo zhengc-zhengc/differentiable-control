@@ -23,6 +23,7 @@ def run_simulation(trajectory: list[TrajectoryPoint],
                    lat_ctrl: LatControllerTruck | None = None,
                    lon_ctrl: LonController | None = None,
                    differentiable: bool = False,
+                   tbptt_k: int = 0,
                    ) -> list[dict]:
     """运行闭环仿真。返回历史记录。
 
@@ -34,6 +35,8 @@ def run_simulation(trajectory: list[TrajectoryPoint],
         lat_ctrl: 外部横向控制器（None 时内部创建）
         lon_ctrl: 外部纵向控制器（None 时内部创建）
         differentiable: True 时全程 tensor 运算，支持梯度回传
+        tbptt_k: Truncated BPTT 窗口大小（步数）。>0 时每 K 步 detach 车辆状态，
+                 截断梯度链以防止梯度爆炸。0 表示不截断（完整 BPTT）。
 
     Returns:
         历史记录列表。differentiable=True 时值为 tensor，False 时为 float。
@@ -77,6 +80,11 @@ def run_simulation(trajectory: list[TrajectoryPoint],
         t = step * dt
 
         if differentiable:
+            # Truncated BPTT: 每 K 步 detach 车辆状态，截断梯度链
+            if tbptt_k > 0 and step > 0 and step % tbptt_k == 0:
+                car.detach_state()
+                prev_steer = prev_steer.detach()
+
             # ── TENSOR 路径：全程保持 tensor，梯度可回传 ──
             ref_pt = analyzer.query_nearest_by_position(car.x, car.y)
             ref_theta = torch.tensor(ref_pt.theta)
