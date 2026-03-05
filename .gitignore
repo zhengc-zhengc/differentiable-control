@@ -13,3 +13,6 @@ prompt.md
 
 # Claude Code auto-memory (session-specific)
 .claude/
+
+# Git worktrees
+.worktrees/
