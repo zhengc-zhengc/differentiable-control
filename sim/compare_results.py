@@ -134,6 +134,61 @@ def main(tuned_config_path):
     fig2.savefig(path2, dpi=150)
     print(f"横向误差对比图已保存: {path2}")
 
+    # --- 控制器输出对比图：转向角 ---
+    fig3, axes3 = plt.subplots(2, 2, figsize=(16, 12))
+    fig3.suptitle('调参前后转向角输出对比（横向控制器）', fontsize=16)
+
+    for idx, ax in enumerate(axes3.flat):
+        _, name_b, _, h_b, _ = all_base[idx]
+        _, _, _, h_t, _ = all_tuned[idx]
+
+        ts_b = [h['t'] for h in h_b]
+        ts_t = [h['t'] for h in h_t]
+
+        ax.plot(ts_b, [h['steer'] for h in h_b],
+                'b-', label='调参前', alpha=0.8)
+        ax.plot(ts_t, [h['steer'] for h in h_t],
+                'r-', label='调参后', alpha=0.8)
+
+        ax.set_xlabel('时间 (s)')
+        ax.set_ylabel('方向盘转角 (°)')
+        ax.set_title(name_b)
+        ax.legend(fontsize=9)
+        ax.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    path3 = os.path.join(results_dir, 'comparison_steer.png')
+    fig3.savefig(path3, dpi=150)
+    print(f"转向角对比图已保存: {path3}")
+
+    # --- 控制器输出对比图：加速度 ---
+    fig4, axes4 = plt.subplots(2, 2, figsize=(16, 12))
+    fig4.suptitle('调参前后加速度输出对比（纵向控制器）', fontsize=16)
+
+    for idx, ax in enumerate(axes4.flat):
+        _, name_b, _, h_b, _ = all_base[idx]
+        _, _, _, h_t, _ = all_tuned[idx]
+
+        ts_b = [h['t'] for h in h_b]
+        ts_t = [h['t'] for h in h_t]
+
+        ax.plot(ts_b, [h['acc'] for h in h_b],
+                'b-', label='调参前', alpha=0.8)
+        ax.plot(ts_t, [h['acc'] for h in h_t],
+                'r-', label='调参后', alpha=0.8)
+        ax.axhline(y=0, color='k', linestyle='-', linewidth=0.5, alpha=0.3)
+
+        ax.set_xlabel('时间 (s)')
+        ax.set_ylabel('加速度 (m/s²)')
+        ax.set_title(name_b)
+        ax.legend(fontsize=9)
+        ax.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    path4 = os.path.join(results_dir, 'comparison_acc.png')
+    fig4.savefig(path4, dpi=150)
+    print(f"加速度对比图已保存: {path4}")
+
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:

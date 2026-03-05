@@ -36,8 +36,8 @@ def _to_float(val):
 
 
 def plot_scenario(name: str, history: list[dict], traj_pts) -> plt.Figure:
-    """画 4 张子图：轨迹对比、横向误差、速度跟踪、转向角。"""
-    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    """画 6 张子图：轨迹对比、横向误差、速度跟踪、航向误差、转向角（横向输出）、加速度（纵向输出）。"""
+    fig, axes = plt.subplots(3, 2, figsize=(14, 14))
     fig.suptitle(name, fontsize=14)
 
     ts = [_to_float(h['t']) for h in history]
@@ -78,13 +78,34 @@ def plot_scenario(name: str, history: list[dict], traj_pts) -> plt.Figure:
     ax.legend()
     ax.grid(True)
 
-    # 4. 转向角
+    # 4. 航向误差
     ax = axes[1, 1]
+    ax.plot(ts, [math.degrees(_to_float(h['heading_error'])) for h in history],
+            'c-', label='航向偏差')
+    ax.set_xlabel('时间 (s)')
+    ax.set_ylabel('航向误差 (°)')
+    ax.set_title('航向误差')
+    ax.legend()
+    ax.grid(True)
+
+    # 5. 转向角（横向控制器输出）
+    ax = axes[2, 0]
     ax.plot(ts, [_to_float(h['steer']) for h in history], 'm-',
             label='方向盘转角')
     ax.set_xlabel('时间 (s)')
     ax.set_ylabel('方向盘转角 (°)')
-    ax.set_title('转向角输出')
+    ax.set_title('横向控制器输出 — 转向角')
+    ax.legend()
+    ax.grid(True)
+
+    # 6. 加速度（纵向控制器输出）
+    ax = axes[2, 1]
+    ax.plot(ts, [_to_float(h['acc']) for h in history], 'tab:orange',
+            label='加速度指令')
+    ax.axhline(y=0, color='k', linestyle='-', linewidth=0.5, alpha=0.3)
+    ax.set_xlabel('时间 (s)')
+    ax.set_ylabel('加速度 (m/s²)')
+    ax.set_title('纵向控制器输出 — 加速度')
     ax.legend()
     ax.grid(True)
 
