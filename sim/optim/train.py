@@ -147,7 +147,7 @@ _TRAJECTORY_BUILDERS = {
 
 def train(trajectories=None, n_epochs=100, lr=1e-3, lr_tables=5e-4,
           sim_length=None, sim_speed=5.0, tbptt_k=64, grad_clip=10.0,
-          param_snapshot_interval=10, verbose=True):
+          param_snapshot_interval=10, verbose=True, plant=None):
     """运行可微调参训练。
 
     Args:
@@ -160,6 +160,7 @@ def train(trajectories=None, n_epochs=100, lr=1e-3, lr_tables=5e-4,
         tbptt_k: Truncated BPTT 窗口大小（步数），每 K 步截断梯度链
         grad_clip: 全局梯度范数裁剪阈值
         param_snapshot_interval: 参数快照打印间隔（epoch 数），0 表示不打印
+        plant: 被控对象类型 ('kinematic'/'dynamic')，None 使用配置默认值
         verbose: 是否打印 epoch 信息
 
     Returns:
@@ -169,7 +170,10 @@ def train(trajectories=None, n_epochs=100, lr=1e-3, lr_tables=5e-4,
     if trajectories is None:
         trajectories = ['circle', 'sine', 'combined', 'lane_change']
 
-    params = DiffControllerParams()
+    cfg = load_config()
+    if plant:
+        cfg['vehicle']['model_type'] = plant
+    params = DiffControllerParams(cfg=cfg)
 
     # 注册梯度钩子：在 backward 过程中立即清理 NaN/Inf 梯度
     # 这样 Adam 的二阶矩永远不会被污染
@@ -357,6 +361,9 @@ if __name__ == '__main__':
                         help='全局梯度范数裁剪阈值')
     parser.add_argument('--snapshot-interval', type=int, default=10,
                         help='参数快照打印间隔（epoch 数）')
+    parser.add_argument('--plant', type=str, default=None,
+                        choices=['kinematic', 'dynamic'],
+                        help='被控对象类型（覆盖 YAML 配置）')
     args = parser.parse_args()
 
     result = train(trajectories=args.trajectories, n_epochs=args.epochs,
@@ -364,7 +371,8 @@ if __name__ == '__main__':
                    sim_length=args.sim_length,
                    tbptt_k=args.tbptt_k,
                    grad_clip=args.grad_clip,
-                   param_snapshot_interval=args.snapshot_interval)
+                   param_snapshot_interval=args.snapshot_interval,
+                   plant=args.plant)
     print(f"\n最终 loss: {result['losses'][-1]:.6f}")
     print(f"保存路径: {result['saved_path']}")
 

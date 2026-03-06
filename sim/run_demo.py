@@ -164,10 +164,15 @@ def main():
                         help='不弹出交互窗口（配合 --save 使用）')
     parser.add_argument('--config', type=str, default=None,
                         help='加载指定 YAML 配置（如调参后的结果）')
+    parser.add_argument('--plant', type=str, default=None,
+                        choices=['kinematic', 'dynamic'],
+                        help='被控对象类型（覆盖 YAML 配置）')
     args = parser.parse_args()
 
-    # 加载配置（None 时 run_simulation 内部加载默认配置）
-    cfg = load_config(args.config) if args.config else None
+    # 始终加载配置，--plant 覆盖 model_type
+    cfg = load_config(args.config) if args.config else load_config()
+    if args.plant:
+        cfg['vehicle']['model_type'] = args.plant
 
     # 非交互模式时切换后端
     if args.no_show:
