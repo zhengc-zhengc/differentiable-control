@@ -1,5 +1,5 @@
 # sim/run_demo.py
-"""可视化 Demo：4 种轨迹 × 4 张图 + 总览四宫格。
+"""可视化 Demo：5 种轨迹 × 4 张图 + 总览。
 
 用法：
     python run_demo.py                             # 交互显示（默认参数）
@@ -17,7 +17,8 @@ import matplotlib.pyplot as plt
 
 from config import load_config
 from model.trajectory import (generate_straight, generate_circle,
-                              generate_sine, generate_combined)
+                              generate_sine, generate_combined,
+                              generate_lane_change)
 from sim_loop import run_simulation
 
 # ---------- 中文字体设置（优先微软雅黑，fallback SimHei）----------
@@ -25,7 +26,7 @@ plt.rcParams['font.sans-serif'] = ['Microsoft YaHei', 'SimHei', 'DejaVu Sans']
 plt.rcParams['axes.unicode_minus'] = False
 
 # ---------- 场景配色 ----------
-_COLORS = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728']
+_COLORS = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd']
 
 
 def _to_float(val):
@@ -118,16 +119,21 @@ def plot_scenario(name: str, history: list[dict], traj_pts) -> plt.Figure:
 
 
 def plot_overview(all_results: list[dict]) -> plt.Figure:
-    """四宫格总览：每个子图为一种工况的轨迹跟踪。"""
-    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    """总览：每个子图为一种工况的轨迹跟踪。"""
+    n = len(all_results)
+    ncols = 3
+    nrows = (n + ncols - 1) // ncols
+    fig, axes = plt.subplots(nrows, ncols, figsize=(18, 5 * nrows))
     fig.suptitle('轨迹跟踪总览 — LatControllerTruck + LonController',
                  fontsize=14)
 
-    for idx, (ax, res) in enumerate(zip(axes.flat, all_results)):
+    flat_axes = axes.flat if hasattr(axes, 'flat') else [axes]
+    for idx, res in enumerate(all_results):
+        ax = flat_axes[idx]
         traj_pts = res['traj']
         history = res['history']
         name = res['name']
-        color = _COLORS[idx]
+        color = _COLORS[idx % len(_COLORS)]
 
         ax.plot([p.x for p in traj_pts], [p.y for p in traj_pts],
                 'k--', label='参考轨迹', linewidth=1, alpha=0.7)
@@ -141,13 +147,17 @@ def plot_overview(all_results: list[dict]) -> plt.Figure:
         ax.set_title(name)
         ax.grid(True, alpha=0.3)
 
+    # 隐藏多余子图
+    for idx in range(n, nrows * ncols):
+        flat_axes[idx].set_visible(False)
+
     plt.tight_layout()
     return fig
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Demo: 4 scenarios × 4 plots + overview')
+        description='Demo: 5 scenarios × detail plots + overview')
     parser.add_argument('--save', action='store_true',
                         help='保存 PNG 到 sim/results/')
     parser.add_argument('--no-show', action='store_true',
@@ -172,6 +182,8 @@ def main():
          generate_sine(amplitude=3.0, wavelength=50.0, n_waves=2, speed=5.0), 5.0),
         ('组合轨迹 (直线→弯→直线, 5 m/s)',
          generate_combined(speed=5.0), 5.0),
+        ('换道 (d=3.5m, L=50m, 5 m/s)',
+         generate_lane_change(lane_width=3.5, change_length=50.0, speed=5.0), 5.0),
     ]
 
     # 保存目录
@@ -180,7 +192,7 @@ def main():
         os.makedirs(results_dir, exist_ok=True)
 
     all_results = []
-    safe_names = ['straight', 'circle', 'sine', 'combined']
+    safe_names = ['straight', 'circle', 'sine', 'combined', 'lane_change']
 
     for i, (name, traj, init_v) in enumerate(scenarios):
         print(f"运行: {name} ...")

@@ -17,7 +17,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from config import load_config, _get_commit_hash, _tensor_to_python
 from model.trajectory import (generate_straight, generate_circle,
-                              generate_sine, generate_combined)
+                              generate_sine, generate_combined,
+                              generate_lane_change)
 from sim_loop import run_simulation
 
 plt.rcParams['font.sans-serif'] = ['Microsoft YaHei', 'SimHei', 'DejaVu Sans']
@@ -138,6 +139,8 @@ _EVAL_SCENARIOS = [
      lambda: generate_sine(amplitude=3.0, wavelength=50.0, n_waves=2, speed=5.0), 5.0),
     ('combined', '组合 (5 m/s)',
      lambda: generate_combined(speed=5.0), 5.0),
+    ('lane_change', '换道 (d=3.5m, 5 m/s)',
+     lambda: generate_lane_change(lane_width=3.5, change_length=50.0, speed=5.0), 5.0),
 ]
 
 
@@ -209,17 +212,22 @@ def run_comparison(tuned_config_path, output_dir, verbose=True):
 
 
 def _plot_comparison_grid(all_base, all_tuned, output_dir, plot_type, filename):
-    """通用 2x2 对比图生成器。"""
+    """通用对比图生成器，自适应场景数量。"""
     titles_map = {
         'trajectory': '调参前后轨迹跟踪对比',
         'lateral_error': '调参前后横向误差对比',
         'steer': '调参前后转向角输出对比',
         'acc': '调参前后加速度输出对比',
     }
-    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+    n = len(all_base)
+    ncols = min(n, 3)
+    nrows = (n + ncols - 1) // ncols
+    fig, axes = plt.subplots(nrows, ncols, figsize=(6 * ncols, 5 * nrows))
     fig.suptitle(titles_map[plot_type], fontsize=16)
+    flat_axes = axes.flat if hasattr(axes, 'flat') else [axes]
 
-    for idx, ax in enumerate(axes.flat):
+    for idx in range(n):
+        ax = flat_axes[idx]
         key_b, name_b, traj_b, h_b, m_b = all_base[idx]
         _, _, _, h_t, m_t = all_tuned[idx]
 
@@ -271,6 +279,10 @@ def _plot_comparison_grid(all_base, all_tuned, output_dir, plot_type, filename):
         ax.set_title(name_b)
         ax.legend(fontsize=9)
         ax.grid(True, alpha=0.3)
+
+    # 隐藏多余子图
+    for idx in range(n, nrows * ncols):
+        flat_axes[idx].set_visible(False)
 
     plt.tight_layout()
     path = os.path.join(output_dir, filename)
@@ -396,9 +408,10 @@ def plot_training_summary(train_result, comparison_metrics, hyperparams, output_
     ax_comp.set_title('V1 路径验证（baseline vs tuned）', fontsize=12, pad=10)
 
     scenario_names = {'straight': '直线', 'circle': '圆弧',
-                      'sine': '正弦', 'combined': '组合'}
+                      'sine': '正弦', 'combined': '组合',
+                      'lane_change': '换道'}
     comp_data = []
-    for key in ['straight', 'circle', 'sine', 'combined']:
+    for key in ['straight', 'circle', 'sine', 'combined', 'lane_change']:
         if key not in comparison_metrics:
             continue
         cm = comparison_metrics[key]
@@ -433,7 +446,7 @@ def plot_training_summary(train_result, comparison_metrics, hyperparams, output_
     # ── 下半部分：lat_rmse 变化百分比柱状图 ──
     ax_bar = fig.add_axes([0.1, 0.08, 0.8, 0.38])
 
-    bar_keys = [k for k in ['straight', 'circle', 'sine', 'combined']
+    bar_keys = [k for k in ['straight', 'circle', 'sine', 'combined', 'lane_change']
                 if k in comparison_metrics]
     bar_labels = [scenario_names.get(k, k) for k in bar_keys]
     lat_deltas = [comparison_metrics[k]['delta_lat_pct'] for k in bar_keys]

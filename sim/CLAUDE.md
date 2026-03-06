@@ -17,7 +17,7 @@ sim/
 ├── health_check.py        # 一键体检（测试 + 基线性能 + 梯度健康）
 ├── model/
 │   ├── vehicle.py         # BicycleModel (x,y,yaw,v)，dt=0.02s
-│   └── trajectory.py      # 4 种轨迹生成 + TrajectoryAnalyzer（detached argmin）
+│   └── trajectory.py      # 5 种轨迹生成 + TrajectoryAnalyzer（detached argmin）
 ├── controller/
 │   ├── lat_truck.py       # LatControllerTruck (nn.Module, 可微:T2-T6, 固定:kLh/T1/T7/T8)
 │   └── lon.py             # LonController (nn.Module, 可微:7 PID, 固定:L1-L5)

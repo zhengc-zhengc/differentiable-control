@@ -135,6 +135,88 @@ def generate_combined(speed: float, dt: float = 0.02,
     return pts
 
 
+def generate_lane_change(lane_width: float, change_length: float,
+                         speed: float, lead_in: float = 30.0,
+                         lead_out: float = 30.0,
+                         dt: float = 0.02) -> list[TrajectoryPoint]:
+    """生成换道轨迹：直线 → 余弦换道 → 直线。
+
+    横向位移采用余弦曲线 y = (d/2)*(1 - cos(pi*x/L))，C2 连续。
+    lane_width: 换道横向位移 (m)，正=向左
+    change_length: 换道段纵向长度 (m)
+    lead_in / lead_out: 换道前后直线长度 (m)
+    """
+    # ---- 精细采样换道段 ----
+    n_fine = max(int(change_length / 0.01), 1000)
+    xs_lc, ys_lc = [], []
+    for i in range(n_fine + 1):
+        xi = change_length * i / n_fine
+        yi = (lane_width / 2) * (1 - math.cos(math.pi * xi / change_length))
+        xs_lc.append(xi)
+        ys_lc.append(yi)
+
+    # ---- 弧长累计 ----
+    arc_s_lc = [0.0]
+    for i in range(1, len(xs_lc)):
+        ds = math.hypot(xs_lc[i] - xs_lc[i-1], ys_lc[i] - ys_lc[i-1])
+        arc_s_lc.append(arc_s_lc[-1] + ds)
+    lc_arc = arc_s_lc[-1]
+
+    # ---- 各段步数 ----
+    n_lead_in = int(lead_in / (speed * dt))
+    n_lc = int(lc_arc / (speed * dt))
+    n_lead_out = int(lead_out / (speed * dt))
+
+    pts: list[TrajectoryPoint] = []
+    s = 0.0
+    t = 0.0
+
+    # 1) lead-in 直线
+    for i in range(n_lead_in):
+        x = speed * i * dt
+        pts.append(TrajectoryPoint(x=x, y=0.0, theta=0.0, kappa=0.0,
+                                   v=speed, a=0.0, s=s, t=t))
+        s += speed * dt
+        t += dt
+
+    x_offset = pts[-1].x + speed * dt if pts else 0.0
+
+    # 2) 换道段（弧长等速重采样）
+    fine_idx = 0
+    k_coeff = math.pi / change_length
+    for step in range(1, n_lc + 1):
+        target_s = step * speed * dt
+        while fine_idx < len(arc_s_lc) - 2 and arc_s_lc[fine_idx + 1] < target_s:
+            fine_idx += 1
+        if fine_idx >= len(arc_s_lc) - 1:
+            fine_idx = len(arc_s_lc) - 2
+        ds_seg = arc_s_lc[fine_idx + 1] - arc_s_lc[fine_idx]
+        frac = (target_s - arc_s_lc[fine_idx]) / ds_seg if ds_seg > 1e-9 else 0.0
+        lx = xs_lc[fine_idx] + frac * (xs_lc[fine_idx + 1] - xs_lc[fine_idx])
+        ly = ys_lc[fine_idx] + frac * (ys_lc[fine_idx + 1] - ys_lc[fine_idx])
+
+        dydx = (lane_width / 2) * k_coeff * math.sin(k_coeff * lx)
+        d2ydx2 = (lane_width / 2) * k_coeff ** 2 * math.cos(k_coeff * lx)
+        theta = math.atan2(dydx, 1.0)
+        kappa = d2ydx2 / (1 + dydx ** 2) ** 1.5
+
+        pts.append(TrajectoryPoint(x=x_offset + lx, y=ly, theta=theta,
+                                   kappa=kappa, v=speed, a=0.0, s=s, t=t))
+        s += speed * dt
+        t += dt
+
+    # 3) lead-out 直线（在新车道内）
+    last = pts[-1]
+    for i in range(1, n_lead_out + 1):
+        x = last.x + speed * i * dt
+        pts.append(TrajectoryPoint(x=x, y=lane_width, theta=0.0, kappa=0.0,
+                                   v=speed, a=0.0, s=s, t=t))
+        s += speed * dt
+        t += dt
+
+    return pts
+
+
 class TrajectoryAnalyzer:
     """轨迹分析器：位置查询、时间查询、Frenet 变换。V2: torch 化。"""
 

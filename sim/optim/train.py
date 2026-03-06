@@ -20,7 +20,8 @@ from config import load_config, save_tuned_config
 from controller.lat_truck import LatControllerTruck
 from controller.lon import LonController
 from model.trajectory import (generate_straight, generate_circle,
-                              generate_sine, generate_combined)
+                              generate_sine, generate_combined,
+                              generate_lane_change)
 from sim_loop import run_simulation
 
 
@@ -138,6 +139,9 @@ _TRAJECTORY_BUILDERS = {
     'sine': lambda speed: generate_sine(amplitude=3.0, wavelength=50.0,
                                         n_waves=2, speed=speed),
     'combined': lambda speed: generate_combined(speed=speed),
+    'lane_change': lambda speed: generate_lane_change(lane_width=3.5,
+                                                      change_length=50.0,
+                                                      speed=speed),
 }
 
 
@@ -163,7 +167,7 @@ def train(trajectories=None, n_epochs=100, lr=1e-3, lr_tables=5e-4,
                'saved_path', 'params'}
     """
     if trajectories is None:
-        trajectories = ['circle', 'sine', 'combined']
+        trajectories = ['circle', 'sine', 'combined', 'lane_change']
 
     params = DiffControllerParams()
 
