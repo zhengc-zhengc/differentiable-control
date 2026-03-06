@@ -5,7 +5,7 @@
 __pycache__/
 *.pyc
 
-# Screen recordings & extracted frames (too large for git)
+# Large binary files
 recordings/
 
 # Internal prompts
@@ -19,3 +19,11 @@ prompt.md
 
 # 训练产物（每次训练自动生成，不纳入 git）
 sim/results/training/
+
+# 仅本地保留
+analysis/
+output/
+tools/
+
+# Claude Code 项目指令（仅本地使用）
+CLAUDE.md
