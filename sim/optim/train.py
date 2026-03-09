@@ -386,5 +386,6 @@ if __name__ == '__main__':
         'sim_length': args.sim_length,
         'tbptt_k': args.tbptt_k,
         'grad_clip': args.grad_clip,
+        'plant': args.plant,
     }
-    run_post_training(result, hyperparams)
+    run_post_training(result, hyperparams, plant=args.plant)

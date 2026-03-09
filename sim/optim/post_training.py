@@ -144,19 +144,23 @@ _EVAL_SCENARIOS = [
 ]
 
 
-def run_comparison(tuned_config_path, output_dir, verbose=True):
+def run_comparison(tuned_config_path, output_dir, verbose=True, plant=None):
     """用 V1 路径（float）跑 baseline vs tuned 对比，生成 4 种对比图 + 返回指标。
 
     Args:
         tuned_config_path: 调参后的配置文件路径
         output_dir: 输出目录路径
         verbose: 是否打印指标表格
+        plant: 被控对象类型 ('kinematic'/'dynamic')，None 使用配置默认值
 
     Returns:
         comparison_metrics: {scenario_key: {baseline, tuned, delta_lat_pct, delta_head_pct}}
     """
     cfg_base = load_config()
     cfg_tuned = load_config(tuned_config_path)
+    if plant:
+        cfg_base['vehicle']['model_type'] = plant
+        cfg_tuned['vehicle']['model_type'] = plant
 
     all_base = []
     all_tuned = []
@@ -609,13 +613,14 @@ def plot_parameter_changes(train_result, output_dir):
     return path
 
 
-def run_post_training(train_result, hyperparams, verbose=True):
+def run_post_training(train_result, hyperparams, verbose=True, plant=None):
     """训练后一站式自动化入口。
 
     Args:
         train_result: train() 的返回值
         hyperparams: 训练超参数 dict
         verbose: 是否打印进度
+        plant: 被控对象类型 ('kinematic'/'dynamic')，None 使用配置默认值
 
     Returns:
         output_dir: 产物保存目录路径
@@ -644,7 +649,7 @@ def run_post_training(train_result, hyperparams, verbose=True):
     if verbose:
         print(f"\n  --- V1 路径验证（baseline vs tuned）---")
     comparison_metrics = run_comparison(train_result['saved_path'], output_dir,
-                                        verbose=verbose)
+                                        verbose=verbose, plant=plant)
 
     # 4. 训练摘要仪表板
     p = plot_training_summary(train_result, comparison_metrics, hyperparams, output_dir)
