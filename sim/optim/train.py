@@ -255,6 +255,16 @@ def train(trajectories=None, n_epochs=100, lr=1e-3, lr_tables=5e-4,
             params.parameters(), max_norm=grad_clip).item()
         optimizer.step()
 
+        # 参数投影：PID 增益非负约束 + switch_speed 有界
+        with torch.no_grad():
+            for name, p in params.named_parameters():
+                if name in ('lon_ctrl.station_kp', 'lon_ctrl.station_ki',
+                            'lon_ctrl.low_speed_kp', 'lon_ctrl.low_speed_ki',
+                            'lon_ctrl.high_speed_kp', 'lon_ctrl.high_speed_ki'):
+                    p.clamp_(min=0.0)
+                elif name == 'lon_ctrl.switch_speed':
+                    p.clamp_(min=0.5, max=10.0)
+
         losses.append(epoch_loss.item())
         dt = _time.time() - t_epoch
 
