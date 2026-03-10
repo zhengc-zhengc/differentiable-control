@@ -17,7 +17,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from config import load_config
 from model.trajectory import (generate_straight, generate_circle,
-                              generate_sine, generate_combined)
+                              generate_combined,
+                              generate_double_lane_change)
 from sim_loop import run_simulation
 from optim.train import DiffControllerParams, tracking_loss, _TRAJECTORY_BUILDERS
 
@@ -54,8 +55,8 @@ def check_baseline_performance():
          generate_straight(length=200, speed=10.0), 10.0),
         ('圆弧 (R=30m, 5 m/s)',
          generate_circle(radius=30.0, speed=5.0, arc_angle=math.pi), 5.0),
-        ('正弦 (A=3m, 5 m/s)',
-         generate_sine(amplitude=3.0, wavelength=50.0, n_waves=2, speed=5.0), 5.0),
+        ('双换道 (5 m/s)',
+         generate_double_lane_change(lane_width=3.5, change_length=50.0, speed=5.0), 5.0),
         ('组合 (5 m/s)',
          generate_combined(speed=5.0), 5.0),
     ]
@@ -84,7 +85,7 @@ def check_gradient_health(trajectories=None, sim_speed=5.0, tbptt_k=64):
         loss: float，1 epoch 的 loss 值
     """
     if trajectories is None:
-        trajectories = ['circle', 'sine', 'combined']
+        trajectories = ['circle', 'combined', 'double_lane_change']
 
     params = DiffControllerParams()
 

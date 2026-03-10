@@ -16,10 +16,9 @@ import yaml
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from config import load_config, _get_commit_hash, _tensor_to_python
-from model.trajectory import (generate_straight, generate_circle,
-                              generate_sine, generate_combined,
+from model.trajectory import (generate_circle, generate_combined,
                               generate_lane_change,
-                              generate_double_lane_change, generate_s_curve)
+                              generate_double_lane_change)
 from sim_loop import run_simulation
 
 plt.rcParams['font.sans-serif'] = ['Microsoft YaHei', 'SimHei', 'DejaVu Sans']
@@ -132,28 +131,60 @@ def _calc_metrics(history):
 
 
 _EVAL_SCENARIOS = [
-    # ---- 低速 (5 m/s = 18 kph，覆盖断点 10-20) ----
-    ('straight', '直线 (10 m/s)',
-     lambda: generate_straight(length=200, speed=10.0), 10.0),
-    ('circle', '圆弧 (R=30m, 5 m/s)',
+    # ---- 0-10 km/h（5 km/h = 1.4 m/s）----
+    ('circle_5kph', '圆弧 (5kph)',
+     lambda: generate_circle(radius=15.0, speed=5.0 / 3.6, arc_angle=math.pi), 5.0 / 3.6),
+    ('lane_change_5kph', '换道 (5kph)',
+     lambda: generate_lane_change(lane_width=3.5, change_length=30.0, speed=5.0 / 3.6), 5.0 / 3.6),
+    ('double_lc_5kph', '双换道 (5kph)',
+     lambda: generate_double_lane_change(lane_width=3.5, change_length=30.0, speed=5.0 / 3.6), 5.0 / 3.6),
+    ('combined_5kph', '组合 (5kph)',
+     lambda: generate_combined(speed=5.0 / 3.6), 5.0 / 3.6),
+    # ---- 10-20 km/h（默认 5 m/s = 18 kph）----
+    ('circle', '圆弧 (18kph)',
      lambda: generate_circle(radius=30.0, speed=5.0, arc_angle=math.pi), 5.0),
-    ('sine', '正弦 (A=3m, 5 m/s)',
-     lambda: generate_sine(amplitude=3.0, wavelength=50.0, n_waves=2, speed=5.0), 5.0),
-    ('combined', '组合 (5 m/s)',
-     lambda: generate_combined(speed=5.0), 5.0),
-    ('lane_change', '换道 (5 m/s)',
+    ('lane_change', '换道 (18kph)',
      lambda: generate_lane_change(lane_width=3.5, change_length=50.0, speed=5.0), 5.0),
-    # ---- 中速 (35 kph = 9.7 m/s，覆盖断点 30-40) ----
-    ('lane_change_35kph', '换道 (35 km/h)',
-     lambda: generate_lane_change(lane_width=3.5, change_length=55.0,
-                                  speed=35.0 / 3.6), 35.0 / 3.6),
-    ('circle_35kph', '圆弧 (R=50m, 35 km/h)',
-     lambda: generate_circle(radius=50.0, speed=35.0 / 3.6,
-                             arc_angle=math.pi / 2), 35.0 / 3.6),
-    # ---- 高速 (55 kph = 15.3 m/s，覆盖断点 50-60) ----
-    ('lane_change_55kph', '换道 (55 km/h)',
-     lambda: generate_lane_change(lane_width=3.5, change_length=90.0,
-                                  speed=55.0 / 3.6), 55.0 / 3.6),
+    ('double_lane_change', '双换道 (18kph)',
+     lambda: generate_double_lane_change(lane_width=3.5, change_length=50.0, speed=5.0), 5.0),
+    ('combined', '组合 (18kph)',
+     lambda: generate_combined(speed=5.0), 5.0),
+    # ---- 20-30 km/h（25 km/h = 6.9 m/s）----
+    ('circle_25kph', '圆弧 (25kph)',
+     lambda: generate_circle(radius=35.0, speed=25.0 / 3.6, arc_angle=math.pi / 2), 25.0 / 3.6),
+    ('lane_change_25kph', '换道 (25kph)',
+     lambda: generate_lane_change(lane_width=3.5, change_length=40.0, speed=25.0 / 3.6), 25.0 / 3.6),
+    ('double_lc_25kph', '双换道 (25kph)',
+     lambda: generate_double_lane_change(lane_width=3.5, change_length=40.0, speed=25.0 / 3.6), 25.0 / 3.6),
+    ('combined_25kph', '组合 (25kph)',
+     lambda: generate_combined(speed=25.0 / 3.6), 25.0 / 3.6),
+    # ---- 30-40 km/h（35 km/h = 9.7 m/s）----
+    ('circle_35kph', '圆弧 (35kph)',
+     lambda: generate_circle(radius=50.0, speed=35.0 / 3.6, arc_angle=math.pi / 2), 35.0 / 3.6),
+    ('lane_change_35kph', '换道 (35kph)',
+     lambda: generate_lane_change(lane_width=3.5, change_length=55.0, speed=35.0 / 3.6), 35.0 / 3.6),
+    ('double_lc_35kph', '双换道 (35kph)',
+     lambda: generate_double_lane_change(lane_width=3.5, change_length=55.0, speed=35.0 / 3.6), 35.0 / 3.6),
+    ('combined_35kph', '组合 (35kph)',
+     lambda: generate_combined(speed=35.0 / 3.6), 35.0 / 3.6),
+    # ---- 40-50 km/h（45 km/h = 12.5 m/s）----
+    ('circle_45kph', '圆弧 (45kph)',
+     lambda: generate_circle(radius=60.0, speed=45.0 / 3.6, arc_angle=math.pi / 2), 45.0 / 3.6),
+    ('lane_change_45kph', '换道 (45kph)',
+     lambda: generate_lane_change(lane_width=3.5, change_length=75.0, speed=45.0 / 3.6), 45.0 / 3.6),
+    ('double_lc_45kph', '双换道 (45kph)',
+     lambda: generate_double_lane_change(lane_width=3.5, change_length=75.0, speed=45.0 / 3.6), 45.0 / 3.6),
+    ('combined_45kph', '组合 (45kph)',
+     lambda: generate_combined(speed=45.0 / 3.6), 45.0 / 3.6),
+    # ---- 50-60 km/h（55 km/h = 15.3 m/s）----
+    ('circle_55kph', '圆弧 (55kph)',
+     lambda: generate_circle(radius=70.0, speed=55.0 / 3.6, arc_angle=math.pi / 2), 55.0 / 3.6),
+    ('lane_change_55kph', '换道 (55kph)',
+     lambda: generate_lane_change(lane_width=3.5, change_length=90.0, speed=55.0 / 3.6), 55.0 / 3.6),
+    ('double_lc_55kph', '双换道 (55kph)',
+     lambda: generate_double_lane_change(lane_width=3.5, change_length=90.0, speed=55.0 / 3.6), 55.0 / 3.6),
+    ('combined_55kph', '组合 (55kph)',
+     lambda: generate_combined(speed=55.0 / 3.6), 55.0 / 3.6),
 ]
 
 
@@ -381,7 +412,9 @@ def save_experiment_log(train_result, comparison_metrics, output_dir,
 
 def plot_training_summary(train_result, comparison_metrics, hyperparams, output_dir):
     """训练摘要仪表板：上半表格（超参+指标对比），下半柱状图（lat_rmse 变化%）。"""
-    fig = plt.figure(figsize=(14, 12))
+    n_scenarios = len(comparison_metrics)
+    fig_h = max(14, 12 + (n_scenarios - 8) * 0.3)  # 场景多时增大高度
+    fig = plt.figure(figsize=(16, fig_h))
     fig.suptitle('训练摘要', fontsize=16, fontweight='bold')
 
     # ── 上半部分：两个表格并排 ──
@@ -419,17 +452,13 @@ def plot_training_summary(train_result, comparison_metrics, hyperparams, output_
     table1[len(info_data), 0].set_facecolor(color)
     table1[len(info_data), 1].set_facecolor(color)
 
-    # 右表：4 场景 baseline vs tuned 对比
+    # 右表：各场景 baseline vs tuned 对比
     ax_comp = fig.add_axes([0.52, 0.55, 0.45, 0.38])
     ax_comp.axis('off')
     ax_comp.set_title('V1 路径验证（baseline vs tuned）', fontsize=12, pad=10)
 
-    scenario_names = {'straight': '直线', 'circle': '圆弧',
-                      'sine': '正弦', 'combined': '组合',
-                      'lane_change': '换道',
-                      'lane_change_35kph': '换道35kph',
-                      'circle_35kph': '圆弧35kph',
-                      'lane_change_55kph': '换道55kph'}
+    # 从 _EVAL_SCENARIOS 的显示名提取简短名
+    scenario_names = {key: label for key, label, _, _ in _EVAL_SCENARIOS}
     comp_data = []
     for key in comparison_metrics:
         cm = comparison_metrics[key]
@@ -449,8 +478,10 @@ def plot_training_summary(train_result, comparison_metrics, hyperparams, output_
         table2 = ax_comp.table(cellText=comp_data, colLabels=col_labels,
                                loc='center', cellLoc='center')
         table2.auto_set_font_size(False)
-        table2.set_fontsize(9)
-        table2.scale(1.0, 1.4)
+        font_sz = 7 if n_scenarios > 12 else 9
+        row_h = 1.2 if n_scenarios > 12 else 1.4
+        table2.set_fontsize(font_sz)
+        table2.scale(1.0, row_h)
         for j in range(len(col_labels)):
             table2[0, j].set_facecolor('#4472C4')
             table2[0, j].set_text_props(color='white', fontweight='bold')
@@ -483,11 +514,13 @@ def plot_training_summary(train_result, comparison_metrics, hyperparams, output_
     for bar in list(bars1) + list(bars2):
         h = bar.get_height()
         ax_bar.text(bar.get_x() + bar.get_width()/2, h,
-                    f'{h:+.2f}%', ha='center',
-                    va='bottom' if h >= 0 else 'top', fontsize=9)
+                    f'{h:+.1f}%', ha='center',
+                    va='bottom' if h >= 0 else 'top',
+                    fontsize=7 if n_scenarios > 12 else 9)
 
     ax_bar.set_xticks(x)
-    ax_bar.set_xticklabels(bar_labels, fontsize=11)
+    tick_fs = 8 if n_scenarios > 12 else 11
+    ax_bar.set_xticklabels(bar_labels, fontsize=tick_fs, rotation=45, ha='right')
     ax_bar.set_ylabel('变化百分比 (%)')
     ax_bar.set_title('各场景跟踪精度变化（负值=改善）', fontsize=12)
     ax_bar.axhline(y=0, color='k', linewidth=0.8)
@@ -655,7 +688,7 @@ def run_post_training(train_result, hyperparams, verbose=True, plant=None):
         print(f"  Loss 曲线: {p}")
 
     # 2. 分轨迹 loss 分项
-    trajectories = hyperparams.get('trajectories', ['circle', 'sine', 'combined'])
+    trajectories = hyperparams.get('trajectories', ['circle', 'combined', 'lane_change'])
     p = plot_loss_breakdown(train_result['training_history'], trajectories, output_dir)
     if verbose:
         print(f"  Loss 分项: {p}")

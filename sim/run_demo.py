@@ -17,8 +17,7 @@ import matplotlib.pyplot as plt
 
 from config import load_config
 from model.trajectory import (generate_straight, generate_circle,
-                              generate_sine, generate_combined,
-                              generate_lane_change,
+                              generate_combined, generate_lane_change,
                               generate_double_lane_change, generate_s_curve)
 from sim_loop import run_simulation
 
@@ -185,15 +184,16 @@ def main():
          generate_straight(length=200, speed=10.0), 10.0),
         ('圆弧跟踪 (R=30m, 5 m/s)',
          generate_circle(radius=30.0, speed=5.0, arc_angle=math.pi), 5.0),
-        ('正弦曲线 (A=3m, λ=50m, 5 m/s)',
-         generate_sine(amplitude=3.0, wavelength=50.0, n_waves=2, speed=5.0), 5.0),
+        ('双换道 (d=3.5m, 5 m/s)',
+         generate_double_lane_change(lane_width=3.5, change_length=50.0,
+                                      speed=5.0), 5.0),
         ('组合轨迹 (直线→弯→直线, 5 m/s)',
          generate_combined(speed=5.0), 5.0),
         ('换道 (d=3.5m, L=50m, 5 m/s)',
          generate_lane_change(lane_width=3.5, change_length=50.0, speed=5.0), 5.0),
-        ('双换道 (d=3.5m, 5 m/s)',
-         generate_double_lane_change(lane_width=3.5, change_length=50.0,
-                                     speed=5.0), 5.0),
+        ('高速双换道 (50 km/h)',
+         generate_double_lane_change(lane_width=3.5, change_length=80.0,
+                                     speed=50.0 / 3.6), 50.0 / 3.6),
         ('S弯 (R=50m, 5 m/s)',
          generate_s_curve(radius=50.0, arc_angle=math.pi / 4, speed=5.0), 5.0),
         ('高速换道 (50 km/h)',
@@ -209,8 +209,9 @@ def main():
         os.makedirs(results_dir, exist_ok=True)
 
     all_results = []
-    safe_names = ['straight', 'circle', 'sine', 'combined', 'lane_change',
-                  'double_lane_change', 's_curve', 'lane_change_50kph']
+    safe_names = ['straight', 'circle', 'double_lane_change', 'combined',
+                  'lane_change', 'double_lane_change_50kph', 's_curve',
+                  'lane_change_50kph']
 
     for i, (name, traj, init_v) in enumerate(scenarios):
         print(f"运行: {name} ...")

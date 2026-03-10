@@ -20,8 +20,7 @@ from config import load_config, save_tuned_config
 from controller.lat_truck import LatControllerTruck
 from controller.lon import LonController
 from model.trajectory import (generate_straight, generate_circle,
-                              generate_sine, generate_combined,
-                              generate_lane_change,
+                              generate_combined, generate_lane_change,
                               generate_double_lane_change,
                               generate_s_curve)
 from sim_loop import run_simulation
@@ -138,20 +137,22 @@ def tracking_loss(history, ref_speed,
 # 带 _<N>kph 后缀的条目内置速度（忽略传入 speed），用于覆盖查找表的不同速度断点。
 # 查找表 T1-T8 断点为 [0,10,20,30,40,50,60] km/h，训练时需多种速度覆盖全部断点。
 #
-# 速度覆盖设计（每段至少 2 种几何）：
-#   0-10 km/h  : circle_5kph(1.4m/s), combined_5kph
-#   10-20 km/h : circle/sine/combined/lane_change (默认 5m/s=18kph)
-#   20-30 km/h : lane_change_25kph, s_curve_25kph
-#   30-40 km/h : lane_change_35kph, circle_35kph
-#   40-50 km/h : lane_change_45kph, sine_45kph
-#   50-60 km/h : lane_change_55kph, double_lc_55kph
+# 速度覆盖设计：
+#   训练：每段 lane_change + combined（12 条）
+#   验证：每段 circle + lane_change + double_lane_change + combined（24 条）
+#
+# 速度段 → 断点 [0,10,20,30,40,50,60] km/h：
+#   0-10 km/h  : *_5kph    (5 km/h = 1.4 m/s)
+#   10-20 km/h : 基础名    (默认 5 m/s = 18 kph)
+#   20-30 km/h : *_25kph   (25 km/h = 6.9 m/s)
+#   30-40 km/h : *_35kph   (35 km/h = 9.7 m/s)
+#   40-50 km/h : *_45kph   (45 km/h = 12.5 m/s)
+#   50-60 km/h : *_55kph   (55 km/h = 15.3 m/s)
 _TRAJECTORY_BUILDERS = {
     # ---- 基础几何（使用全局 speed，默认 5m/s=18kph → 覆盖 10-20）----
     'straight': lambda speed: generate_straight(length=200, speed=speed),
     'circle': lambda speed: generate_circle(radius=30.0, speed=speed,
                                             arc_angle=3.14159 / 2),
-    'sine': lambda speed: generate_sine(amplitude=3.0, wavelength=50.0,
-                                        n_waves=2, speed=speed),
     'combined': lambda speed: generate_combined(speed=speed),
     'lane_change': lambda speed: generate_lane_change(lane_width=3.5,
                                                       change_length=50.0,
@@ -164,31 +165,47 @@ _TRAJECTORY_BUILDERS = {
     # ---- 0-10 km/h（低速：5 km/h = 1.4 m/s）----
     'circle_5kph': lambda _: generate_circle(
         radius=15.0, speed=5.0 / 3.6, arc_angle=3.14159),
+    'lane_change_5kph': lambda _: generate_lane_change(
+        lane_width=3.5, change_length=30.0, speed=5.0 / 3.6),
+    'double_lc_5kph': lambda _: generate_double_lane_change(
+        lane_width=3.5, change_length=30.0, speed=5.0 / 3.6),
     'combined_5kph': lambda _: generate_combined(speed=5.0 / 3.6),
 
     # ---- 20-30 km/h（25 km/h = 6.9 m/s）----
+    'circle_25kph': lambda _: generate_circle(
+        radius=35.0, speed=25.0 / 3.6, arc_angle=3.14159 / 2),
     'lane_change_25kph': lambda _: generate_lane_change(
         lane_width=3.5, change_length=40.0, speed=25.0 / 3.6),
-    's_curve_25kph': lambda _: generate_s_curve(
-        radius=40.0, arc_angle=3.14159 / 4, speed=25.0 / 3.6),
+    'double_lc_25kph': lambda _: generate_double_lane_change(
+        lane_width=3.5, change_length=40.0, speed=25.0 / 3.6),
+    'combined_25kph': lambda _: generate_combined(speed=25.0 / 3.6),
 
     # ---- 30-40 km/h（35 km/h = 9.7 m/s）----
-    'lane_change_35kph': lambda _: generate_lane_change(
-        lane_width=3.5, change_length=55.0, speed=35.0 / 3.6),
     'circle_35kph': lambda _: generate_circle(
         radius=50.0, speed=35.0 / 3.6, arc_angle=3.14159 / 2),
+    'lane_change_35kph': lambda _: generate_lane_change(
+        lane_width=3.5, change_length=55.0, speed=35.0 / 3.6),
+    'double_lc_35kph': lambda _: generate_double_lane_change(
+        lane_width=3.5, change_length=55.0, speed=35.0 / 3.6),
+    'combined_35kph': lambda _: generate_combined(speed=35.0 / 3.6),
 
     # ---- 40-50 km/h（45 km/h = 12.5 m/s）----
+    'circle_45kph': lambda _: generate_circle(
+        radius=60.0, speed=45.0 / 3.6, arc_angle=3.14159 / 2),
     'lane_change_45kph': lambda _: generate_lane_change(
         lane_width=3.5, change_length=75.0, speed=45.0 / 3.6),
-    'sine_45kph': lambda _: generate_sine(
-        amplitude=3.0, wavelength=70.0, n_waves=2, speed=45.0 / 3.6),
+    'double_lc_45kph': lambda _: generate_double_lane_change(
+        lane_width=3.5, change_length=75.0, speed=45.0 / 3.6),
+    'combined_45kph': lambda _: generate_combined(speed=45.0 / 3.6),
 
     # ---- 50-60 km/h（55 km/h = 15.3 m/s）----
+    'circle_55kph': lambda _: generate_circle(
+        radius=70.0, speed=55.0 / 3.6, arc_angle=3.14159 / 2),
     'lane_change_55kph': lambda _: generate_lane_change(
         lane_width=3.5, change_length=90.0, speed=55.0 / 3.6),
     'double_lc_55kph': lambda _: generate_double_lane_change(
         lane_width=3.5, change_length=90.0, speed=55.0 / 3.6),
+    'combined_55kph': lambda _: generate_combined(speed=55.0 / 3.6),
 }
 
 
@@ -198,7 +215,7 @@ def train(trajectories=None, n_epochs=100, lr=1e-2, lr_tables=1e-2,
     """运行可微调参训练。
 
     Args:
-        trajectories: 轨迹名列表，如 ['circle', 'sine', 'combined']
+        trajectories: 轨迹名列表，如 ['circle', 'combined', 'lane_change']
         n_epochs: 训练轮数
         lr: 主学习率（PID 增益等标量参数）
         lr_tables: 查找表 y 值学习率（通常低于主学习率）
@@ -215,20 +232,20 @@ def train(trajectories=None, n_epochs=100, lr=1e-2, lr_tables=1e-2,
                'saved_path', 'params'}
     """
     if trajectories is None:
-        # 每个速度段至少 2 种几何，覆盖 T1-T8 全部断点 [0,10,...,60] km/h
+        # 每速度段：lane_change + combined，覆盖 T1-T8 全部断点 [0,10,...,60] km/h
         trajectories = [
             # 0-10 kph
-            'circle_5kph', 'combined_5kph',
+            'lane_change_5kph', 'combined_5kph',
             # 10-20 kph (默认 5 m/s = 18 kph)
-            'circle', 'sine', 'combined', 'lane_change',
+            'lane_change', 'combined',
             # 20-30 kph
-            'lane_change_25kph', 's_curve_25kph',
+            'lane_change_25kph', 'combined_25kph',
             # 30-40 kph
-            'lane_change_35kph', 'circle_35kph',
+            'lane_change_35kph', 'combined_35kph',
             # 40-50 kph
-            'lane_change_45kph', 'sine_45kph',
+            'lane_change_45kph', 'combined_45kph',
             # 50-60 kph
-            'lane_change_55kph', 'double_lc_55kph',
+            'lane_change_55kph', 'combined_55kph',
         ]
 
     cfg = load_config()
