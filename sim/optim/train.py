@@ -405,6 +405,7 @@ def train(trajectories=None, n_epochs=100, lr=1e-2, lr_tables=1e-2,
 
     return {
         'losses': losses,
+        'trajectories': trajectories,
         'training_history': training_history,
         'initial_params': {name: p.cpu().tolist() if p.numel() > 1 else p.item()
                            for name, p in initial_params.items()},
@@ -458,7 +459,7 @@ if __name__ == '__main__':
         'epochs': args.epochs,
         'lr': args.lr,
         'lr_tables': args.lr_tables,
-        'trajectories': args.trajectories,
+        'trajectories': result['trajectories'],
         'speed': args.speed,
         'sim_length': args.sim_length,
         'tbptt_k': args.tbptt_k,
