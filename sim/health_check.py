@@ -92,11 +92,12 @@ def check_gradient_health(trajectories=None, sim_speed=5.0, tbptt_k=64):
     for traj_name in trajectories:
         builder = _TRAJECTORY_BUILDERS[traj_name]
         traj = builder(sim_speed)
+        traj_speed = traj[0].v
         history = run_simulation(
-            traj, init_speed=sim_speed, cfg=params.cfg,
+            traj, init_speed=traj_speed, cfg=params.cfg,
             lat_ctrl=params.lat_ctrl, lon_ctrl=params.lon_ctrl,
             differentiable=True, tbptt_k=tbptt_k)
-        loss = tracking_loss(history, ref_speed=sim_speed)
+        loss = tracking_loss(history, ref_speed=traj_speed)
         epoch_loss = epoch_loss + loss
 
     epoch_loss = epoch_loss / len(trajectories)

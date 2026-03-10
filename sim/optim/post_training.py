@@ -18,7 +18,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from config import load_config, _get_commit_hash, _tensor_to_python
 from model.trajectory import (generate_straight, generate_circle,
                               generate_sine, generate_combined,
-                              generate_lane_change)
+                              generate_lane_change,
+                              generate_double_lane_change, generate_s_curve)
 from sim_loop import run_simulation
 
 plt.rcParams['font.sans-serif'] = ['Microsoft YaHei', 'SimHei', 'DejaVu Sans']
@@ -131,6 +132,7 @@ def _calc_metrics(history):
 
 
 _EVAL_SCENARIOS = [
+    # ---- 低速 (5 m/s = 18 kph，覆盖断点 10-20) ----
     ('straight', '直线 (10 m/s)',
      lambda: generate_straight(length=200, speed=10.0), 10.0),
     ('circle', '圆弧 (R=30m, 5 m/s)',
@@ -139,8 +141,19 @@ _EVAL_SCENARIOS = [
      lambda: generate_sine(amplitude=3.0, wavelength=50.0, n_waves=2, speed=5.0), 5.0),
     ('combined', '组合 (5 m/s)',
      lambda: generate_combined(speed=5.0), 5.0),
-    ('lane_change', '换道 (d=3.5m, 5 m/s)',
+    ('lane_change', '换道 (5 m/s)',
      lambda: generate_lane_change(lane_width=3.5, change_length=50.0, speed=5.0), 5.0),
+    # ---- 中速 (35 kph = 9.7 m/s，覆盖断点 30-40) ----
+    ('lane_change_35kph', '换道 (35 km/h)',
+     lambda: generate_lane_change(lane_width=3.5, change_length=55.0,
+                                  speed=35.0 / 3.6), 35.0 / 3.6),
+    ('circle_35kph', '圆弧 (R=50m, 35 km/h)',
+     lambda: generate_circle(radius=50.0, speed=35.0 / 3.6,
+                             arc_angle=math.pi / 2), 35.0 / 3.6),
+    # ---- 高速 (55 kph = 15.3 m/s，覆盖断点 50-60) ----
+    ('lane_change_55kph', '换道 (55 km/h)',
+     lambda: generate_lane_change(lane_width=3.5, change_length=90.0,
+                                  speed=55.0 / 3.6), 55.0 / 3.6),
 ]
 
 
@@ -413,11 +426,12 @@ def plot_training_summary(train_result, comparison_metrics, hyperparams, output_
 
     scenario_names = {'straight': '直线', 'circle': '圆弧',
                       'sine': '正弦', 'combined': '组合',
-                      'lane_change': '换道'}
+                      'lane_change': '换道',
+                      'lane_change_35kph': '换道35kph',
+                      'circle_35kph': '圆弧35kph',
+                      'lane_change_55kph': '换道55kph'}
     comp_data = []
-    for key in ['straight', 'circle', 'sine', 'combined', 'lane_change']:
-        if key not in comparison_metrics:
-            continue
+    for key in comparison_metrics:
         cm = comparison_metrics[key]
         comp_data.append([
             scenario_names.get(key, key),
@@ -450,8 +464,7 @@ def plot_training_summary(train_result, comparison_metrics, hyperparams, output_
     # ── 下半部分：lat_rmse 变化百分比柱状图 ──
     ax_bar = fig.add_axes([0.1, 0.08, 0.8, 0.38])
 
-    bar_keys = [k for k in ['straight', 'circle', 'sine', 'combined', 'lane_change']
-                if k in comparison_metrics]
+    bar_keys = list(comparison_metrics.keys())
     bar_labels = [scenario_names.get(k, k) for k in bar_keys]
     lat_deltas = [comparison_metrics[k]['delta_lat_pct'] for k in bar_keys]
     head_deltas = [comparison_metrics[k]['delta_head_pct'] for k in bar_keys]
