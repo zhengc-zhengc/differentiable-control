@@ -223,8 +223,8 @@ def run_comparison(tuned_config_path, output_dir, verbose=True, plant=None):
         m_base = _calc_metrics(h_base)
         m_tuned = _calc_metrics(h_tuned)
 
-        all_base.append((key, name, traj, h_base, m_base))
-        all_tuned.append((key, name, traj, h_tuned, m_tuned))
+        all_base.append((key, name, traj, h_base, m_base, init_v))
+        all_tuned.append((key, name, traj, h_tuned, m_tuned, init_v))
 
         d_lat = ((m_tuned['lat_rmse'] - m_base['lat_rmse']) / m_base['lat_rmse'] * 100
                  if m_base['lat_rmse'] > 1e-8 else 0.0)
@@ -246,11 +246,13 @@ def run_comparison(tuned_config_path, output_dir, verbose=True, plant=None):
             print(f"{'':25} {'delta':>8} {d_lat:>+11.1f}% {d_head:>+13.1f}%")
             print()
 
-    # 4 种对比图
+    # 5 种对比图
     _plot_comparison_grid(all_base, all_tuned, output_dir,
                           plot_type='trajectory', filename='comparison_trajectory.png')
     _plot_comparison_grid(all_base, all_tuned, output_dir,
                           plot_type='lateral_error', filename='comparison_lateral_error.png')
+    _plot_comparison_grid(all_base, all_tuned, output_dir,
+                          plot_type='speed_error', filename='comparison_speed_error.png')
     _plot_comparison_grid(all_base, all_tuned, output_dir,
                           plot_type='steer', filename='comparison_steer.png')
     _plot_comparison_grid(all_base, all_tuned, output_dir,
@@ -264,6 +266,7 @@ def _plot_comparison_grid(all_base, all_tuned, output_dir, plot_type, filename):
     titles_map = {
         'trajectory': '调参前后轨迹跟踪对比',
         'lateral_error': '调参前后横向误差对比',
+        'speed_error': '调参前后纵向（速度）误差对比',
         'steer': '调参前后转向角输出对比',
         'acc': '调参前后加速度输出对比',
     }
@@ -276,8 +279,8 @@ def _plot_comparison_grid(all_base, all_tuned, output_dir, plot_type, filename):
 
     for idx in range(n):
         ax = flat_axes[idx]
-        key_b, name_b, traj_b, h_b, m_b = all_base[idx]
-        _, _, _, h_t, m_t = all_tuned[idx]
+        key_b, name_b, traj_b, h_b, m_b, ref_v = all_base[idx]
+        _, _, _, h_t, m_t, _ = all_tuned[idx]
 
         if plot_type == 'trajectory':
             ax.plot([p.x for p in traj_b], [p.y for p in traj_b],
@@ -298,6 +301,18 @@ def _plot_comparison_grid(all_base, all_tuned, output_dir, plot_type, filename):
                     'r-', label=f'调参后 (RMSE={m_t["lat_rmse"]:.3f}m)', alpha=0.8)
             ax.set_xlabel('时间 (s)')
             ax.set_ylabel('横向误差 (m)')
+        elif plot_type == 'speed_error':
+            spd_err_b = [h['v'] - ref_v for h in h_b]
+            spd_err_t = [h['v'] - ref_v for h in h_t]
+            spd_rmse_b = (sum(e**2 for e in spd_err_b) / len(spd_err_b)) ** 0.5
+            spd_rmse_t = (sum(e**2 for e in spd_err_t) / len(spd_err_t)) ** 0.5
+            ax.plot([h['t'] for h in h_b], spd_err_b,
+                    'b-', label=f'调参前 (RMSE={spd_rmse_b:.3f}m/s)', alpha=0.8)
+            ax.plot([h['t'] for h in h_t], spd_err_t,
+                    'r-', label=f'调参后 (RMSE={spd_rmse_t:.3f}m/s)', alpha=0.8)
+            ax.axhline(y=0, color='k', linestyle='-', linewidth=0.5, alpha=0.3)
+            ax.set_xlabel('时间 (s)')
+            ax.set_ylabel('速度误差 (m/s)')
         elif plot_type == 'steer':
             t_b = [h['t'] for h in h_b]
             t_t = [h['t'] for h in h_t]
