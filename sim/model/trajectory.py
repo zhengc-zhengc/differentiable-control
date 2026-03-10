@@ -217,6 +217,187 @@ def generate_lane_change(lane_width: float, change_length: float,
     return pts
 
 
+def _append_straight(pts: list, length: float, speed: float, dt: float,
+                     x0: float, y0: float, theta: float,
+                     s0: float, t0: float) -> tuple[float, float]:
+    """内部辅助：从 (x0, y0, theta) 开始追加直线段，返回 (s_end, t_end)。"""
+    n = int(length / (speed * dt))
+    s, t = s0, t0
+    for i in range(1, n + 1):
+        x = x0 + speed * i * dt * math.cos(theta)
+        y = y0 + speed * i * dt * math.sin(theta)
+        pts.append(TrajectoryPoint(x=x, y=y, theta=theta, kappa=0.0,
+                                   v=speed, a=0.0, s=s + speed * dt, t=t + dt))
+        s += speed * dt
+        t += dt
+    return s, t
+
+
+def _append_arc(pts: list, radius: float, arc_angle: float, direction: str,
+                speed: float, dt: float,
+                x0: float, y0: float, theta0: float,
+                s0: float, t0: float) -> tuple[float, float, float]:
+    """内部辅助：从 (x0, y0, theta0) 开始追加弧线段。
+
+    direction: 'left' (CCW, kappa>0) or 'right' (CW, kappa<0)
+    返回 (s_end, t_end, theta_end)。
+    """
+    sign = 1.0 if direction == 'left' else -1.0
+    kappa = sign / radius
+    arc_length = radius * arc_angle
+    n = int(arc_length / (speed * dt))
+
+    normal_angle = theta0 + sign * math.pi / 2
+    cx = x0 + radius * math.cos(normal_angle)
+    cy = y0 + radius * math.sin(normal_angle)
+    start_angle = math.atan2(y0 - cy, x0 - cx)
+
+    s, t = s0, t0
+    for i in range(1, n + 1):
+        d_angle = sign * speed * i * dt / radius
+        angle = start_angle + d_angle
+        x = cx + radius * math.cos(angle)
+        y = cy + radius * math.sin(angle)
+        theta = theta0 + d_angle
+        s += speed * dt
+        t += dt
+        pts.append(TrajectoryPoint(x=x, y=y, theta=theta, kappa=kappa,
+                                   v=speed, a=0.0, s=s, t=t))
+
+    theta_end = theta0 + sign * arc_angle
+    return s, t, theta_end
+
+
+def generate_double_lane_change(lane_width: float, change_length: float,
+                                speed: float, hold_length: float = 20.0,
+                                lead_in: float = 30.0, lead_out: float = 30.0,
+                                dt: float = 0.02) -> list[TrajectoryPoint]:
+    """生成双换道轨迹：直线 → 左换道 → 短直线 → 右换道(返回) → 直线。
+
+    复用余弦换道公式 y = (d/2)*(1-cos(pi*x/L))。终点 y ≈ 0。
+    """
+    def _cosine_lc_resample(d, L, x_offset, y_offset, speed, dt, pts, s, t):
+        """生成单次余弦换道段并追加到 pts，返回 (s, t)。"""
+        n_fine = max(int(L / 0.01), 1000)
+        xs_lc, ys_lc = [], []
+        for i in range(n_fine + 1):
+            xi = L * i / n_fine
+            yi = (d / 2) * (1 - math.cos(math.pi * xi / L))
+            xs_lc.append(xi)
+            ys_lc.append(yi)
+        arc_s_lc = [0.0]
+        for i in range(1, len(xs_lc)):
+            ds = math.hypot(xs_lc[i] - xs_lc[i-1], ys_lc[i] - ys_lc[i-1])
+            arc_s_lc.append(arc_s_lc[-1] + ds)
+        lc_arc = arc_s_lc[-1]
+        n_lc = int(lc_arc / (speed * dt))
+        fine_idx = 0
+        k_coeff = math.pi / L
+        for step in range(1, n_lc + 1):
+            target_s = step * speed * dt
+            while fine_idx < len(arc_s_lc) - 2 and arc_s_lc[fine_idx + 1] < target_s:
+                fine_idx += 1
+            if fine_idx >= len(arc_s_lc) - 1:
+                fine_idx = len(arc_s_lc) - 2
+            ds_seg = arc_s_lc[fine_idx + 1] - arc_s_lc[fine_idx]
+            frac = (target_s - arc_s_lc[fine_idx]) / ds_seg if ds_seg > 1e-9 else 0.0
+            lx = xs_lc[fine_idx] + frac * (xs_lc[fine_idx + 1] - xs_lc[fine_idx])
+            ly = ys_lc[fine_idx] + frac * (ys_lc[fine_idx + 1] - ys_lc[fine_idx])
+            dydx = (d / 2) * k_coeff * math.sin(k_coeff * lx)
+            d2ydx2 = (d / 2) * k_coeff ** 2 * math.cos(k_coeff * lx)
+            theta = math.atan2(dydx, 1.0)
+            kappa = d2ydx2 / (1 + dydx ** 2) ** 1.5
+            s += speed * dt
+            t += dt
+            pts.append(TrajectoryPoint(x=x_offset + lx, y=y_offset + ly,
+                                       theta=theta, kappa=kappa,
+                                       v=speed, a=0.0, s=s, t=t))
+        return s, t
+
+    pts: list[TrajectoryPoint] = []
+    s, t = 0.0, 0.0
+
+    # 1) lead-in 直线
+    n_in = int(lead_in / (speed * dt))
+    for i in range(n_in):
+        x = speed * i * dt
+        pts.append(TrajectoryPoint(x=x, y=0.0, theta=0.0, kappa=0.0,
+                                   v=speed, a=0.0, s=s, t=t))
+        s += speed * dt
+        t += dt
+
+    # 2) 第一次换道（左，y: 0 → lane_width）
+    last = pts[-1]
+    x_off = last.x + speed * dt
+    s, t = _cosine_lc_resample(lane_width, change_length,
+                               x_off, 0.0, speed, dt, pts, s, t)
+
+    # 3) 保持直线（在新车道）
+    last = pts[-1]
+    n_hold = int(hold_length / (speed * dt))
+    for i in range(1, n_hold + 1):
+        x = last.x + speed * i * dt
+        pts.append(TrajectoryPoint(x=x, y=lane_width, theta=0.0, kappa=0.0,
+                                   v=speed, a=0.0, s=s + speed * dt, t=t + dt))
+        s += speed * dt
+        t += dt
+
+    # 4) 第二次换道（右，y: lane_width → 0，d = -lane_width）
+    last = pts[-1]
+    x_off2 = last.x + speed * dt
+    s, t = _cosine_lc_resample(-lane_width, change_length,
+                               x_off2, lane_width, speed, dt, pts, s, t)
+
+    # 5) lead-out 直线
+    last = pts[-1]
+    for i in range(1, int(lead_out / (speed * dt)) + 1):
+        x = last.x + speed * i * dt
+        pts.append(TrajectoryPoint(x=x, y=0.0, theta=0.0, kappa=0.0,
+                                   v=speed, a=0.0, s=s + speed * dt, t=t + dt))
+        s += speed * dt
+        t += dt
+
+    return pts
+
+
+def generate_s_curve(radius: float, arc_angle: float, speed: float,
+                     lead_in: float = 20.0, lead_out: float = 20.0,
+                     dt: float = 0.02) -> list[TrajectoryPoint]:
+    """生成 S 弯轨迹：直线 → 左转弧 → 右转弧 → 直线。
+
+    对称 S 弯：出口航向 ≈ 入口航向 (0)。
+    前半段 kappa > 0（左转），后半段 kappa < 0（右转）。
+    """
+    pts: list[TrajectoryPoint] = []
+    s, t = 0.0, 0.0
+
+    # lead-in 直线
+    n_in = int(lead_in / (speed * dt))
+    for i in range(n_in):
+        x = speed * i * dt
+        pts.append(TrajectoryPoint(x=x, y=0.0, theta=0.0, kappa=0.0,
+                                   v=speed, a=0.0, s=s, t=t))
+        s += speed * dt
+        t += dt
+
+    # 左转弧
+    last = pts[-1]
+    s, t, theta_mid = _append_arc(pts, radius, arc_angle, 'left', speed, dt,
+                                   last.x, last.y, last.theta, s, t)
+
+    # 右转弧（对称：同样的 arc_angle，出口航向回到 0）
+    last = pts[-1]
+    s, t, theta_end = _append_arc(pts, radius, arc_angle, 'right', speed, dt,
+                                   last.x, last.y, last.theta, s, t)
+
+    # lead-out 直线
+    last = pts[-1]
+    s, t = _append_straight(pts, lead_out, speed, dt,
+                            last.x, last.y, theta_end, s, t)
+
+    return pts
+
+
 class TrajectoryAnalyzer:
     """轨迹分析器：位置查询、时间查询、Frenet 变换。V2: torch 化。"""
 

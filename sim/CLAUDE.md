@@ -25,7 +25,7 @@ sim/
 │   ├── dynamic_vehicle.py # DynamicVehicle — 6-DOF 动力学模型适配器，接口与 BicycleModel 一致
 │   ├── hybrid_dynamic_vehicle.py # HybridDynamicVehicle — 机理模型+MLP 残差修正（plant 仓库集成）
 │   ├── vehicle_factory.py # create_vehicle() — 根据 cfg 创建 kinematic/dynamic/hybrid_dynamic 模型
-│   └── trajectory.py      # 5 种轨迹生成 + TrajectoryAnalyzer（detached argmin）
+│   └── trajectory.py      # 7 种轨迹生成 + TrajectoryAnalyzer（detached argmin）
 ├── controller/
 │   ├── lat_truck.py       # LatControllerTruck (nn.Module, 可微:T2-T6, 固定:kLh/T1/T7/T8)
 │   └── lon.py             # LonController (nn.Module, 可微:7 PID, 固定:L1-L5)
@@ -35,10 +35,13 @@ sim/
 ├── configs/
 │   ├── default.yaml       # 默认参数（C++ 原始控制器参数，作为训练基线）
 │   └── tuned/             # 调参结果 YAML（文件名含 commit hash + timestamp）
-├── results/               # 结果图（纳入 git）
-│   ├── baseline/          # 基线结果（用于调参前后对比）
-│   └── training/          # 训练产物（每次训练一个时间戳子目录）
-│       └── {timestamp}/   # loss_curve.png, loss_breakdown.png, comparison_*.png, experiment_log.yaml
+├── results/               # 结果图
+│   ├── baseline/          # 基线结果（纳入 git，按被控对象分目录）
+│   │   ├── kinematic/     # 运动学模型基线
+│   │   ├── dynamic/       # 动力学模型基线
+│   │   └── hybrid_dynamic/ # 混合模型基线
+│   └── training/          # 训练产物（.gitignore 排除，按被控对象+时间戳分目录）
+│       └── {plant}/{timestamp}/  # loss_curve.png, loss_breakdown.png, comparison_*.png, experiment_log.yaml
 ├── learn/                 # 学习笔记与调试日志（不影响运行）
 └── tests/                 # pytest 测试
 ```
@@ -63,7 +66,7 @@ python run_demo.py --save --no-show                         # 生成结果图（
 python run_demo.py --plant dynamic --save --no-show         # 生成结果图（动力学模型）
 python run_demo.py --plant hybrid_dynamic --save --no-show  # 生成结果图（混合模型，需 plant checkpoint）
 python run_demo.py --config configs/tuned/xxx.yaml          # 加载调参结果
-python optim/train.py --epochs 50 --trajectories circle sine  # 训练（运动学模型）
+python optim/train.py --epochs 50 --trajectories circle sine lane_change_40kph  # 训练（指定轨迹）
 python optim/train.py --plant dynamic --epochs 50           # 训练（动力学模型）
 python optim/train.py --plant hybrid_dynamic --epochs 50    # 训练（混合模型）
 ```

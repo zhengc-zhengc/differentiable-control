@@ -21,7 +21,9 @@ from controller.lat_truck import LatControllerTruck
 from controller.lon import LonController
 from model.trajectory import (generate_straight, generate_circle,
                               generate_sine, generate_combined,
-                              generate_lane_change)
+                              generate_lane_change,
+                              generate_double_lane_change,
+                              generate_s_curve)
 from sim_loop import run_simulation
 
 
@@ -132,7 +134,11 @@ def tracking_loss(history, ref_speed,
 
 
 # ---------- 轨迹生成器映射 ----------
+# builder(speed) → list[TrajectoryPoint]
+# 带 _<N>kph 后缀的条目内置速度（忽略传入 speed），用于覆盖查找表的不同速度断点。
+# 查找表 T1-T8 断点为 [0,10,20,30,40,50,60] km/h，训练时需多种速度覆盖所有断点。
 _TRAJECTORY_BUILDERS = {
+    # ---- 基础几何（使用全局 speed）----
     'straight': lambda speed: generate_straight(length=200, speed=speed),
     'circle': lambda speed: generate_circle(radius=30.0, speed=speed,
                                             arc_angle=3.14159 / 2),
@@ -142,6 +148,32 @@ _TRAJECTORY_BUILDERS = {
     'lane_change': lambda speed: generate_lane_change(lane_width=3.5,
                                                       change_length=50.0,
                                                       speed=speed),
+    'double_lane_change': lambda speed: generate_double_lane_change(
+        lane_width=3.5, change_length=50.0, speed=speed),
+    's_curve': lambda speed: generate_s_curve(
+        radius=50.0, arc_angle=3.14159 / 4, speed=speed),
+
+    # ---- 多速度换道（内置速度，覆盖查找表不同断点）----
+    # 25 km/h → 覆盖断点 20-30
+    'lane_change_25kph': lambda _: generate_lane_change(
+        lane_width=3.5, change_length=40.0, speed=25.0 / 3.6),
+    # 40 km/h → 覆盖断点 30-40
+    'lane_change_40kph': lambda _: generate_lane_change(
+        lane_width=3.5, change_length=60.0, speed=40.0 / 3.6),
+    # 50 km/h → 覆盖断点 40-50
+    'lane_change_50kph': lambda _: generate_lane_change(
+        lane_width=3.5, change_length=80.0, speed=50.0 / 3.6),
+    # 60 km/h → 覆盖断点 50-60
+    'lane_change_60kph': lambda _: generate_lane_change(
+        lane_width=3.5, change_length=100.0, speed=60.0 / 3.6),
+
+    # ---- 多速度圆弧/正弦（高速需加大半径保证合理侧向加速度）----
+    # 40 km/h 圆弧：R=80m → a_lat ≈ 1.5 m/s²
+    'circle_40kph': lambda _: generate_circle(
+        radius=80.0, speed=40.0 / 3.6, arc_angle=3.14159 / 2),
+    # 60 km/h 正弦：加长波长避免过大曲率
+    'sine_60kph': lambda _: generate_sine(
+        amplitude=3.0, wavelength=80.0, n_waves=2, speed=60.0 / 3.6),
 }
 
 
@@ -168,7 +200,9 @@ def train(trajectories=None, n_epochs=100, lr=1e-2, lr_tables=1e-2,
                'saved_path', 'params'}
     """
     if trajectories is None:
-        trajectories = ['circle', 'sine', 'combined', 'lane_change']
+        trajectories = ['circle', 'sine', 'combined', 'lane_change',
+                        'lane_change_25kph', 'lane_change_40kph',
+                        'lane_change_50kph', 'lane_change_60kph']
 
     cfg = load_config()
     if plant:
@@ -217,19 +251,21 @@ def train(trajectories=None, n_epochs=100, lr=1e-2, lr_tables=1e-2,
         for traj_name in trajectories:
             builder = _TRAJECTORY_BUILDERS[traj_name]
             traj = builder(sim_speed)
+            # 从轨迹本身提取速度（多速度条目内置不同速度）
+            traj_speed = traj[0].v
 
             if sim_length is not None:
-                max_t = sim_length / sim_speed
+                max_t = sim_length / traj_speed
                 traj = [p for p in traj if p.t <= max_t]
                 if len(traj) < 10:
                     continue
 
             history = run_simulation(
-                traj, init_speed=sim_speed, cfg=params.cfg,
+                traj, init_speed=traj_speed, cfg=params.cfg,
                 lat_ctrl=params.lat_ctrl, lon_ctrl=params.lon_ctrl,
                 differentiable=True, tbptt_k=tbptt_k)
 
-            loss, details = tracking_loss(history, ref_speed=sim_speed,
+            loss, details = tracking_loss(history, ref_speed=traj_speed,
                                           return_details=True)
             epoch_loss = epoch_loss + loss
             traj_details[traj_name] = details
@@ -361,8 +397,11 @@ if __name__ == '__main__':
     parser.add_argument('--lr-tables', type=float, default=1e-2,
                         help='查找表 y 值学习率')
     parser.add_argument('--trajectories', nargs='+',
-                        default=['circle', 'sine', 'combined', 'lane_change'],
-                        help='训练轨迹')
+                        default=['circle', 'sine', 'combined', 'lane_change',
+                                 'lane_change_25kph', 'lane_change_40kph',
+                                 'lane_change_50kph', 'lane_change_60kph'],
+                        help='训练轨迹（可用: ' +
+                             ', '.join(sorted(_TRAJECTORY_BUILDERS.keys())) + '）')
     parser.add_argument('--speed', type=float, default=5.0,
                         help='仿真速度 (m/s)')
     parser.add_argument('--sim-length', type=float, default=None,

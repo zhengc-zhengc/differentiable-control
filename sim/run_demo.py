@@ -1,5 +1,5 @@
 # sim/run_demo.py
-"""可视化 Demo：5 种轨迹 × 4 张图 + 总览。
+"""可视化 Demo：8 种轨迹 × 6 张子图 + 总览。
 
 用法：
     python run_demo.py                             # 交互显示（默认参数）
@@ -18,7 +18,8 @@ import matplotlib.pyplot as plt
 from config import load_config
 from model.trajectory import (generate_straight, generate_circle,
                               generate_sine, generate_combined,
-                              generate_lane_change)
+                              generate_lane_change,
+                              generate_double_lane_change, generate_s_curve)
 from sim_loop import run_simulation
 
 # ---------- 中文字体设置（优先微软雅黑，fallback SimHei）----------
@@ -26,7 +27,8 @@ plt.rcParams['font.sans-serif'] = ['Microsoft YaHei', 'SimHei', 'DejaVu Sans']
 plt.rcParams['axes.unicode_minus'] = False
 
 # ---------- 场景配色 ----------
-_COLORS = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd']
+_COLORS = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
+           '#8c564b', '#e377c2', '#7f7f7f']
 
 
 def _to_float(val):
@@ -157,7 +159,7 @@ def plot_overview(all_results: list[dict]) -> plt.Figure:
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Demo: 5 scenarios × detail plots + overview')
+        description='Demo: 8 scenarios × detail plots + overview')
     parser.add_argument('--save', action='store_true',
                         help='保存 PNG 到 sim/results/')
     parser.add_argument('--no-show', action='store_true',
@@ -189,15 +191,26 @@ def main():
          generate_combined(speed=5.0), 5.0),
         ('换道 (d=3.5m, L=50m, 5 m/s)',
          generate_lane_change(lane_width=3.5, change_length=50.0, speed=5.0), 5.0),
+        ('双换道 (d=3.5m, 5 m/s)',
+         generate_double_lane_change(lane_width=3.5, change_length=50.0,
+                                     speed=5.0), 5.0),
+        ('S弯 (R=50m, 5 m/s)',
+         generate_s_curve(radius=50.0, arc_angle=math.pi / 4, speed=5.0), 5.0),
+        ('高速换道 (50 km/h)',
+         generate_lane_change(lane_width=3.5, change_length=80.0,
+                              speed=50.0 / 3.6), 50.0 / 3.6),
     ]
 
-    # 保存目录
-    results_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'results')
+    # 保存目录：results/baseline/{plant_type}/
+    plant_type = cfg['vehicle'].get('model_type', 'kinematic')
+    results_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               'results', 'baseline', plant_type)
     if args.save:
         os.makedirs(results_dir, exist_ok=True)
 
     all_results = []
-    safe_names = ['straight', 'circle', 'sine', 'combined', 'lane_change']
+    safe_names = ['straight', 'circle', 'sine', 'combined', 'lane_change',
+                  'double_lane_change', 's_curve', 'lane_change_50kph']
 
     for i, (name, traj, init_v) in enumerate(scenarios):
         print(f"运行: {name} ...")

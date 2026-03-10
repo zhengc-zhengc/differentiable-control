@@ -7,7 +7,9 @@ import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from model.trajectory import (generate_straight, generate_circle, generate_sine,
-                              generate_combined, TrajectoryAnalyzer)
+                              generate_combined, generate_lane_change,
+                              generate_double_lane_change, generate_s_curve,
+                              TrajectoryAnalyzer)
 
 
 class TestStraightTrajectory:
@@ -46,6 +48,78 @@ class TestSineTrajectory:
         assert len(pts) > 0
         assert pts[0].x == pytest.approx(0, abs=0.1)
         assert pts[0].y == pytest.approx(0, abs=0.1)
+
+
+class TestLaneChange:
+    def test_returns_points(self):
+        pts = generate_lane_change(lane_width=3.5, change_length=50.0, speed=5.0)
+        assert len(pts) > 0
+        assert pts[0].v == pytest.approx(5.0)
+
+    def test_end_position(self):
+        """换道终点 y 应接近 lane_width。"""
+        pts = generate_lane_change(lane_width=3.5, change_length=50.0, speed=5.0)
+        assert pts[-1].y == pytest.approx(3.5, abs=0.1)
+
+    def test_high_speed(self):
+        """高速换道（60 km/h）应正常生成。"""
+        pts = generate_lane_change(lane_width=3.5, change_length=100.0,
+                                   speed=60.0 / 3.6)
+        assert len(pts) > 0
+        assert pts[0].v == pytest.approx(60.0 / 3.6, abs=0.01)
+
+
+class TestDoubleLaneChange:
+    def test_returns_points(self):
+        pts = generate_double_lane_change(lane_width=3.5, change_length=50.0,
+                                          speed=5.0)
+        assert len(pts) > 0
+        assert pts[0].v == pytest.approx(5.0)
+
+    def test_returns_to_original_lane(self):
+        """双换道终点 y 应接近 0（返回原车道）。"""
+        pts = generate_double_lane_change(lane_width=3.5, change_length=50.0,
+                                          speed=5.0)
+        assert pts[-1].y == pytest.approx(0.0, abs=0.1)
+
+    def test_curvature_sign_changes(self):
+        """双换道应包含正负曲率。"""
+        pts = generate_double_lane_change(lane_width=3.5, change_length=50.0,
+                                          speed=5.0)
+        kappas = [p.kappa for p in pts]
+        assert max(kappas) > 0.001, "应有正曲率"
+        assert min(kappas) < -0.001, "应有负曲率"
+
+
+class TestSCurve:
+    def test_returns_points(self):
+        pts = generate_s_curve(radius=50.0, arc_angle=math.pi / 4, speed=5.0)
+        assert len(pts) > 0
+        assert pts[0].v == pytest.approx(5.0)
+
+    def test_exit_heading_near_zero(self):
+        """对称 S 弯出口航向应接近 0。"""
+        pts = generate_s_curve(radius=50.0, arc_angle=math.pi / 4, speed=5.0)
+        assert pts[-1].theta == pytest.approx(0.0, abs=0.05)
+
+    def test_curvature_sign_changes(self):
+        """S 弯应包含正负曲率（左转+右转）。"""
+        pts = generate_s_curve(radius=50.0, arc_angle=math.pi / 4, speed=5.0)
+        kappas = [p.kappa for p in pts]
+        assert max(kappas) > 0.001, "应有正曲率（左转段）"
+        assert min(kappas) < -0.001, "应有负曲率（右转段）"
+
+
+class TestMultiSpeedTrajectories:
+    """验证多速度轨迹生成器正确嵌入目标速度。"""
+
+    @pytest.mark.parametrize("speed_mps", [25/3.6, 40/3.6, 50/3.6, 60/3.6])
+    def test_lane_change_speed_embedded(self, speed_mps):
+        """不同速度的换道轨迹应正确嵌入对应速度。"""
+        pts = generate_lane_change(lane_width=3.5, change_length=80.0,
+                                   speed=speed_mps)
+        assert pts[0].v == pytest.approx(speed_mps, abs=0.01)
+        assert len(pts) > 50
 
 
 class TestAnalyzer:

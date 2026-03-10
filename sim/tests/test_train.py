@@ -216,3 +216,19 @@ class TestTrain:
             verbose=False,
         )
         assert len(result['losses']) == 2
+
+    def test_multi_speed_trajectory(self):
+        """多速度换道训练应能正常运行（覆盖查找表不同断点）。"""
+        result = train(
+            trajectories=['lane_change', 'lane_change_40kph'],
+            n_epochs=2,
+            lr=1e-3,
+            sim_length=40.0,
+            sim_speed=5.0,
+            verbose=False,
+        )
+        assert len(result['losses']) == 2
+        # 两条轨迹速度不同，per_trajectory 应各有明细
+        hist = result['training_history'][0]
+        assert 'lane_change' in hist['per_trajectory']
+        assert 'lane_change_40kph' in hist['per_trajectory']

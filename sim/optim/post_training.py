@@ -627,7 +627,9 @@ def run_post_training(train_result, hyperparams, verbose=True, plant=None):
     """
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     sim_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
-    output_dir = _ensure_dir(os.path.join(sim_dir, 'results', 'training', timestamp))
+    plant_name = plant or 'kinematic'
+    output_dir = _ensure_dir(os.path.join(sim_dir, 'results', 'training',
+                                          plant_name, timestamp))
 
     if verbose:
         print(f"\n{'='*60}")
