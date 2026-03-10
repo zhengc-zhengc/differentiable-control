@@ -16,7 +16,9 @@ sim/
 ├── compare_results.py     # 调参前后对比（轨迹 + 横向误差对比图）
 ├── health_check.py        # 一键体检（测试 + 基线性能 + 梯度健康）
 ├── model/
-│   ├── vehicle.py         # BicycleModel (x,y,yaw,v)，dt=0.02s
+│   ├── vehicle.py         # BicycleModel — 运动学模型 (x,y,yaw,v)，dt=0.02s
+│   ├── dynamic_vehicle.py # DynamicVehicle — 6-DOF 动力学模型适配器，接口与 BicycleModel 一致
+│   ├── vehicle_factory.py # create_vehicle() — 根据 cfg 创建 kinematic/dynamic 模型
 │   └── trajectory.py      # 5 种轨迹生成 + TrajectoryAnalyzer（detached argmin）
 ├── controller/
 │   ├── lat_truck.py       # LatControllerTruck (nn.Module, 可微:T2-T6, 固定:kLh/T1/T7/T8)
@@ -51,9 +53,11 @@ sim/
 cd sim/
 python -m pytest tests/ -q                                  # 跑测试
 python health_check.py                                      # 一键体检（测试+基线+梯度）
-python run_demo.py --save --no-show                         # 生成结果图
+python run_demo.py --save --no-show                         # 生成结果图（运动学模型）
+python run_demo.py --plant dynamic --save --no-show         # 生成结果图（动力学模型）
 python run_demo.py --config configs/tuned/xxx.yaml          # 加载调参结果
-python optim/train.py --epochs 50 --trajectories circle sine  # 训练（完成后自动生成对比图+日志）
+python optim/train.py --epochs 50 --trajectories circle sine  # 训练（运动学模型）
+python optim/train.py --plant dynamic --epochs 50           # 训练（动力学模型）
 ```
 
 ## 与 controller_spec.md 的差异

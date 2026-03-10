@@ -28,8 +28,14 @@ class LatControllerTruck(nn.Module):
         veh = cfg['vehicle']
         lat = cfg['lat_truck']
 
-        self.wheelbase = veh['wheelbase']
-        self.steer_ratio = veh['steer_ratio']
+        model_type = veh.get('model_type', 'kinematic')
+        if model_type == 'dynamic':
+            dyn = cfg['dynamic_vehicle']
+            self.wheelbase = dyn['lf'] + dyn['lr']
+            self.steer_ratio = dyn['steer_ratio']
+        else:
+            self.wheelbase = veh['wheelbase']
+            self.steer_ratio = veh['steer_ratio']
         self.differentiable = differentiable
 
         # 固定物理参数（不参与梯度优化）

@@ -7,7 +7,7 @@ import torch
 from common import normalize_angle, TrajectoryPoint
 from config import load_config
 from model.trajectory import TrajectoryAnalyzer
-from model.vehicle import BicycleModel
+from model.vehicle_factory import create_vehicle
 from controller.lat_truck import LatControllerTruck
 from controller.lon import LonController
 
@@ -45,8 +45,14 @@ def run_simulation(trajectory: list[TrajectoryPoint],
         cfg = load_config()
 
     veh = cfg['vehicle']
-    wheelbase = veh['wheelbase']
-    steer_ratio = veh['steer_ratio']
+    model_type = veh.get('model_type', 'kinematic')
+    if model_type == 'dynamic':
+        dyn = cfg['dynamic_vehicle']
+        wheelbase = dyn['lf'] + dyn['lr']
+        steer_ratio = dyn['steer_ratio']
+    else:
+        wheelbase = veh['wheelbase']
+        steer_ratio = veh['steer_ratio']
     dt = cfg['simulation']['dt']
 
     analyzer = TrajectoryAnalyzer(trajectory)
@@ -57,9 +63,8 @@ def run_simulation(trajectory: list[TrajectoryPoint],
     y0 = init_y if init_y is not None else p0.y
     yaw0 = init_yaw if init_yaw is not None else p0.theta
 
-    car = BicycleModel(wheelbase=wheelbase, x=x0, y=y0,
-                       yaw=yaw0, v=init_speed, dt=dt,
-                       differentiable=differentiable)
+    car = create_vehicle(cfg, x=x0, y=y0, yaw=yaw0, v=init_speed,
+                         dt=dt, differentiable=differentiable)
 
     # 控制器：外部传入时重置状态，否则内部创建
     if lat_ctrl is None:
