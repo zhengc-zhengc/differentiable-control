@@ -50,6 +50,10 @@ def run_simulation(trajectory: list[TrajectoryPoint],
         dyn = cfg['dynamic_vehicle']
         wheelbase = dyn['lf'] + dyn['lr']
         steer_ratio = dyn['steer_ratio']
+    elif model_type == 'hybrid_dynamic':
+        hyb = cfg['hybrid_dynamic_vehicle']
+        wheelbase = hyb['lf'] + hyb['lr']
+        steer_ratio = hyb['steer_ratio']
     else:
         wheelbase = veh['wheelbase']
         steer_ratio = veh['steer_ratio']

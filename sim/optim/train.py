@@ -145,7 +145,7 @@ _TRAJECTORY_BUILDERS = {
 }
 
 
-def train(trajectories=None, n_epochs=100, lr=1e-3, lr_tables=5e-4,
+def train(trajectories=None, n_epochs=100, lr=1e-2, lr_tables=1e-2,
           sim_length=None, sim_speed=5.0, tbptt_k=64, grad_clip=10.0,
           param_snapshot_interval=10, verbose=True, plant=None):
     """运行可微调参训练。
@@ -356,10 +356,12 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='V2 可微调参训练')
     parser.add_argument('--epochs', type=int, default=100,
                         help='训练轮数')
-    parser.add_argument('--lr', type=float, default=1e-3,
-                        help='主学习率')
+    parser.add_argument('--lr', type=float, default=1e-2,
+                        help='主学习率（PID 增益等标量参数）')
+    parser.add_argument('--lr-tables', type=float, default=1e-2,
+                        help='查找表 y 值学习率')
     parser.add_argument('--trajectories', nargs='+',
-                        default=['circle', 'sine', 'combined'],
+                        default=['circle', 'sine', 'combined', 'lane_change'],
                         help='训练轨迹')
     parser.add_argument('--speed', type=float, default=5.0,
                         help='仿真速度 (m/s)')
@@ -372,12 +374,13 @@ if __name__ == '__main__':
     parser.add_argument('--snapshot-interval', type=int, default=10,
                         help='参数快照打印间隔（epoch 数）')
     parser.add_argument('--plant', type=str, default=None,
-                        choices=['kinematic', 'dynamic'],
+                        choices=['kinematic', 'dynamic', 'hybrid_dynamic'],
                         help='被控对象类型（覆盖 YAML 配置）')
     args = parser.parse_args()
 
     result = train(trajectories=args.trajectories, n_epochs=args.epochs,
-                   lr=args.lr, sim_speed=args.speed,
+                   lr=args.lr, lr_tables=args.lr_tables,
+                   sim_speed=args.speed,
                    sim_length=args.sim_length,
                    tbptt_k=args.tbptt_k,
                    grad_clip=args.grad_clip,
@@ -391,6 +394,7 @@ if __name__ == '__main__':
     hyperparams = {
         'epochs': args.epochs,
         'lr': args.lr,
+        'lr_tables': args.lr_tables,
         'trajectories': args.trajectories,
         'speed': args.speed,
         'sim_length': args.sim_length,
