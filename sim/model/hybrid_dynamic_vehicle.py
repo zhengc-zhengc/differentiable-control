@@ -88,6 +88,9 @@ def _reconstruct_full_error(motion_error, base_next, dt):
 class HybridDynamicVehicle:
     """混合动力学车辆：Base(Euler) + MLP 残差修正。
 
+    内部维护 6D 状态 [x_f, y_f, yaw, vx, vy, r]（前轴参考点），
+    对外暴露后轴坐标 x, y（通过 x_r = x_f - L*cos(yaw), y_r = y_f - L*sin(yaw) 转换）。
+
     每步执行：
     1. Base Euler 积分 -> base_next
     2. 构建 MLP 特征 [state(6), delta_sw(1), T_rl(1), T_rr(1), dt(1)] = 10D
@@ -103,9 +106,15 @@ class HybridDynamicVehicle:
         self.dynamics = VehicleDynamics(params)
         self._steer_ratio = self.dynamics.steer_ratio
 
+        # 输入 (x, y) 是后轴坐标，转换为前轴坐标存储
+        L = self.dynamics.lf + self.dynamics.lr
+        yaw_f = float(yaw)
+        x_f = float(x) + L * math.cos(yaw_f)
+        y_f = float(y) + L * math.sin(yaw_f)
+
         # 6D 状态：[x_f, y_f, yaw, vx, vy, r]
         self._state = torch.tensor(
-            [float(x), float(y), float(yaw), float(v), 0.0, 0.0])
+            [x_f, y_f, yaw_f, float(v), 0.0, 0.0])
 
         self._mlp = None
         self._feature_mean = None
@@ -210,11 +219,19 @@ class HybridDynamicVehicle:
 
     @property
     def x(self):
-        return self._state[0]
+        """后轴 x 坐标（从前轴内部状态转换）。"""
+        x_f = self._state[0]
+        yaw = self._state[2]
+        L = self.dynamics.lf + self.dynamics.lr
+        return x_f - L * torch.cos(yaw)
 
     @property
     def y(self):
-        return self._state[1]
+        """后轴 y 坐标（从前轴内部状态转换）。"""
+        y_f = self._state[1]
+        yaw = self._state[2]
+        L = self.dynamics.lf + self.dynamics.lr
+        return y_f - L * torch.sin(yaw)
 
     @property
     def yaw(self):
