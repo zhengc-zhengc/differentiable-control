@@ -9,6 +9,8 @@
 内部将 acc 转换为后驱扭矩分配：T_rl = T_rr = (m * acc / 2) * R，T_fl = T_fr = 0。
 使用 RK4 积分。
 """
+import math
+
 import torch
 import torch.nn as nn
 
@@ -123,8 +125,9 @@ class VehicleDynamics(nn.Module):
 class DynamicVehicle:
     """动力学车辆适配器——与 BicycleModel 接口一致。
 
-    内部维护 6D 状态 [x_f, y_f, yaw, vx, vy, r]，
-    对外暴露 x, y, yaw, v（合速度）。
+    内部维护 6D 状态 [x_f, y_f, yaw, vx, vy, r]（前轴参考点），
+    对外暴露后轴坐标 x, y（通过 x_r = x_f - L*cos(yaw), y_r = y_f - L*sin(yaw) 转换），
+    yaw 和 v（合速度）不变。
     """
     def __init__(self, params, x=0.0, y=0.0, yaw=0.0, v=0.0,
                  dt=0.02, differentiable=False):
@@ -134,9 +137,15 @@ class DynamicVehicle:
         self.dynamics = VehicleDynamics(params)
         self._steer_ratio = self.dynamics.steer_ratio
 
-        # 初始 6D 状态：vx=v, vy=0, r=0
+        # 输入 (x, y) 是后轴坐标，转换为前轴坐标存储
+        L = self.dynamics.lf + self.dynamics.lr
+        yaw_f = float(yaw)
+        x_f = float(x) + L * math.cos(yaw_f)
+        y_f = float(y) + L * math.sin(yaw_f)
+
+        # 6D 状态：[x_f, y_f, yaw, vx, vy, r]
         self._state = torch.tensor(
-            [float(x), float(y), float(yaw), float(v), 0.0, 0.0])
+            [x_f, y_f, yaw_f, float(v), 0.0, 0.0])
 
     def step(self, delta, acc):
         """前进一步。
@@ -172,11 +181,19 @@ class DynamicVehicle:
 
     @property
     def x(self):
-        return self._state[0]
+        """后轴 x 坐标（从前轴内部状态转换）。"""
+        x_f = self._state[0]
+        yaw = self._state[2]
+        L = self.dynamics.lf + self.dynamics.lr
+        return x_f - L * torch.cos(yaw)
 
     @property
     def y(self):
-        return self._state[1]
+        """后轴 y 坐标（从前轴内部状态转换）。"""
+        y_f = self._state[1]
+        yaw = self._state[2]
+        L = self.dynamics.lf + self.dynamics.lr
+        return y_f - L * torch.sin(yaw)
 
     @property
     def yaw(self):
