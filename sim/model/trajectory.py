@@ -398,6 +398,82 @@ def generate_s_curve(radius: float, arc_angle: float, speed: float,
     return pts
 
 
+def generate_offset_recovery(speed: float, lateral_offset: float = 1.5,
+                              heading_error_deg: float = 5.0,
+                              length: float = 200.0,
+                              curvature: float = 0.0,
+                              dt: float = 0.02) -> list[TrajectoryPoint]:
+    """生成偏移恢复轨迹：参考轨迹为直线或缓弯，车辆从偏移初始状态出发。
+
+    测试控制器的阻尼/恢复能力。参考轨迹本身无偏移，初始状态偏移通过 sim_loop
+    的 init_x/init_y/init_yaw 参数设置。此处返回的参考轨迹自身是直线或缓弯。
+
+    Args:
+        speed: 行驶速度 (m/s)
+        lateral_offset: 横向偏移量 (m)，仅作为元数据记录
+        heading_error_deg: 航向偏差 (deg)，仅作为元数据记录
+        length: 轨迹总长 (m)
+        curvature: 参考轨迹曲率 (1/m)，0 为直线
+        dt: 时间步长 (s)
+    """
+    if abs(curvature) < 1e-6:
+        # 直线参考轨迹
+        return generate_straight(length=length, speed=speed, dt=dt)
+    else:
+        # 缓弯参考轨迹
+        radius = 1.0 / abs(curvature)
+        arc_angle = length / radius
+        return generate_circle(radius=radius, speed=speed,
+                               arc_angle=min(arc_angle, math.pi), dt=dt)
+
+
+def generate_compound_curve(speed: float, radius: float = 50.0,
+                            arc_angle: float = None,
+                            straight_length: float = 30.0,
+                            lead_in: float = 20.0, lead_out: float = 20.0,
+                            dt: float = 0.02) -> list[TrajectoryPoint]:
+    """生成复合弯轨迹：直线 → 左转弧 → 直线 → 右转弧 → 直线。
+
+    与 S 弯不同：中间有直线过渡段，测试曲率突变响应。
+    """
+    if arc_angle is None:
+        arc_angle = math.pi / 4  # 45°
+
+    pts: list[TrajectoryPoint] = []
+    s, t = 0.0, 0.0
+
+    # 1) lead-in 直线
+    n_in = int(lead_in / (speed * dt))
+    for i in range(n_in):
+        x = speed * i * dt
+        pts.append(TrajectoryPoint(x=x, y=0.0, theta=0.0, kappa=0.0,
+                                   v=speed, a=0.0, s=s, t=t))
+        s += speed * dt
+        t += dt
+
+    # 2) 左转弧
+    last = pts[-1]
+    s, t, theta_mid1 = _append_arc(pts, radius, arc_angle, 'left', speed, dt,
+                                    last.x, last.y, last.theta, s, t)
+
+    # 3) 中间直线过渡
+    last = pts[-1]
+    s, t = _append_straight(pts, straight_length, speed, dt,
+                            last.x, last.y, theta_mid1, s, t)
+
+    # 4) 右转弧（同角度，出口航向回到约 0°）
+    last = pts[-1]
+    s, t, theta_mid2 = _append_arc(pts, radius, arc_angle, 'right', speed, dt,
+                                    last.x, last.y, last.theta, s, t)
+
+    # 5) lead-out 直线
+    last = pts[-1]
+    s, t = _append_straight(pts, lead_out, speed, dt,
+                            last.x, last.y, theta_mid2, s, t)
+
+    return pts
+
+
 class TrajectoryAnalyzer:
     """轨迹分析器：位置查询、时间查询、Frenet 变换。V2: torch 化。"""
 

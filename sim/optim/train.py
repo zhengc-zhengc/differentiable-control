@@ -22,7 +22,8 @@ from controller.lon import LonController
 from model.trajectory import (generate_straight, generate_circle,
                               generate_combined, generate_lane_change,
                               generate_double_lane_change,
-                              generate_s_curve)
+                              generate_s_curve, generate_offset_recovery,
+                              generate_compound_curve)
 from sim_loop import run_simulation
 
 
@@ -74,8 +75,8 @@ class DiffControllerParams(nn.Module):
 
 
 def tracking_loss(history, ref_speed,
-                  w_lat=10.0, w_head=5.0, w_speed=1.0,
-                  w_steer_rate=0.01, w_acc_rate=0.01,
+                  w_lat=10.0, w_head=5.0, w_speed=3.0,
+                  w_steer_rate=0.05, w_acc_rate=0.01,
                   return_details=False):
     """计算跟踪 loss：横向误差 + 航向误差 + 速度误差 + 平滑度惩罚。
 
@@ -161,6 +162,10 @@ _TRAJECTORY_BUILDERS = {
         lane_width=3.5, change_length=50.0, speed=speed),
     's_curve': lambda speed: generate_s_curve(
         radius=50.0, arc_angle=3.14159 / 4, speed=speed),
+    'compound_curve': lambda speed: generate_compound_curve(speed=speed),
+    'offset_recovery': lambda speed: generate_offset_recovery(speed=speed),
+    'offset_recovery_curve': lambda speed: generate_offset_recovery(
+        speed=speed, curvature=1.0 / 80.0),
 
     # ---- 0-10 km/h（低速：5 km/h = 1.4 m/s）----
     'circle_5kph': lambda _: generate_circle(
@@ -170,6 +175,10 @@ _TRAJECTORY_BUILDERS = {
     'double_lc_5kph': lambda _: generate_double_lane_change(
         lane_width=3.5, change_length=30.0, speed=5.0 / 3.6),
     'combined_5kph': lambda _: generate_combined(speed=5.0 / 3.6),
+    's_curve_5kph': lambda _: generate_s_curve(
+        radius=30.0, arc_angle=3.14159 / 4, speed=5.0 / 3.6),
+    'compound_5kph': lambda _: generate_compound_curve(speed=5.0 / 3.6, radius=30.0),
+    'offset_recovery_5kph': lambda _: generate_offset_recovery(speed=5.0 / 3.6),
 
     # ---- 20-30 km/h（25 km/h = 6.9 m/s）----
     'circle_25kph': lambda _: generate_circle(
@@ -179,6 +188,10 @@ _TRAJECTORY_BUILDERS = {
     'double_lc_25kph': lambda _: generate_double_lane_change(
         lane_width=3.5, change_length=40.0, speed=25.0 / 3.6),
     'combined_25kph': lambda _: generate_combined(speed=25.0 / 3.6),
+    's_curve_25kph': lambda _: generate_s_curve(
+        radius=50.0, arc_angle=3.14159 / 4, speed=25.0 / 3.6),
+    'compound_25kph': lambda _: generate_compound_curve(speed=25.0 / 3.6, radius=50.0),
+    'offset_recovery_25kph': lambda _: generate_offset_recovery(speed=25.0 / 3.6),
 
     # ---- 30-40 km/h（35 km/h = 9.7 m/s）----
     'circle_35kph': lambda _: generate_circle(
@@ -188,6 +201,10 @@ _TRAJECTORY_BUILDERS = {
     'double_lc_35kph': lambda _: generate_double_lane_change(
         lane_width=3.5, change_length=55.0, speed=35.0 / 3.6),
     'combined_35kph': lambda _: generate_combined(speed=35.0 / 3.6),
+    's_curve_35kph': lambda _: generate_s_curve(
+        radius=60.0, arc_angle=3.14159 / 4, speed=35.0 / 3.6),
+    'compound_35kph': lambda _: generate_compound_curve(speed=35.0 / 3.6, radius=60.0),
+    'offset_recovery_35kph': lambda _: generate_offset_recovery(speed=35.0 / 3.6),
 
     # ---- 40-50 km/h（45 km/h = 12.5 m/s）----
     'circle_45kph': lambda _: generate_circle(
@@ -197,6 +214,10 @@ _TRAJECTORY_BUILDERS = {
     'double_lc_45kph': lambda _: generate_double_lane_change(
         lane_width=3.5, change_length=75.0, speed=45.0 / 3.6),
     'combined_45kph': lambda _: generate_combined(speed=45.0 / 3.6),
+    's_curve_45kph': lambda _: generate_s_curve(
+        radius=70.0, arc_angle=3.14159 / 4, speed=45.0 / 3.6),
+    'compound_45kph': lambda _: generate_compound_curve(speed=45.0 / 3.6, radius=70.0),
+    'offset_recovery_45kph': lambda _: generate_offset_recovery(speed=45.0 / 3.6),
 
     # ---- 50-60 km/h（55 km/h = 15.3 m/s）----
     'circle_55kph': lambda _: generate_circle(
@@ -206,11 +227,23 @@ _TRAJECTORY_BUILDERS = {
     'double_lc_55kph': lambda _: generate_double_lane_change(
         lane_width=3.5, change_length=90.0, speed=55.0 / 3.6),
     'combined_55kph': lambda _: generate_combined(speed=55.0 / 3.6),
+    's_curve_55kph': lambda _: generate_s_curve(
+        radius=80.0, arc_angle=3.14159 / 4, speed=55.0 / 3.6),
+    'compound_55kph': lambda _: generate_compound_curve(speed=55.0 / 3.6, radius=80.0),
+    'offset_recovery_55kph': lambda _: generate_offset_recovery(speed=55.0 / 3.6),
+}
+
+# 偏移恢复轨迹的初始状态覆盖：(init_y_offset, init_yaw_offset_rad)
+# 车辆从参考轨迹起点偏移 1.5m 横向 + 5° 航向误差开始
+import math as _math
+_OFFSET_RECOVERY_INIT = {
+    name: {'init_y': 1.5, 'init_yaw': 5.0 * _math.pi / 180.0}
+    for name in _TRAJECTORY_BUILDERS if 'offset_recovery' in name
 }
 
 
 def train(trajectories=None, n_epochs=100, lr=1e-2, lr_tables=1e-2,
-          sim_length=None, sim_speed=5.0, tbptt_k=64, grad_clip=10.0,
+          sim_length=None, sim_speed=5.0, tbptt_k=150, grad_clip=10.0,
           param_snapshot_interval=10, verbose=True, plant=None):
     """运行可微调参训练。
 
@@ -232,20 +265,27 @@ def train(trajectories=None, n_epochs=100, lr=1e-2, lr_tables=1e-2,
                'saved_path', 'params'}
     """
     if trajectories is None:
-        # 每速度段：lane_change + combined，覆盖 T1-T8 全部断点 [0,10,...,60] km/h
+        # 每速度段：lane_change + combined + s_curve + compound_curve
+        # 覆盖 T1-T8 全部断点 [0,10,...,60] km/h，丰富几何多样性
         trajectories = [
             # 0-10 kph
             'lane_change_5kph', 'combined_5kph',
+            's_curve_5kph', 'compound_5kph',
             # 10-20 kph (默认 5 m/s = 18 kph)
             'lane_change', 'combined',
+            's_curve', 'compound_curve',
             # 20-30 kph
             'lane_change_25kph', 'combined_25kph',
+            's_curve_25kph', 'compound_25kph',
             # 30-40 kph
             'lane_change_35kph', 'combined_35kph',
+            's_curve_35kph', 'compound_35kph',
             # 40-50 kph
             'lane_change_45kph', 'combined_45kph',
+            's_curve_45kph', 'compound_45kph',
             # 50-60 kph
             'lane_change_55kph', 'combined_55kph',
+            's_curve_55kph', 'compound_55kph',
         ]
 
     cfg = load_config()
@@ -280,6 +320,9 @@ def train(trajectories=None, n_epochs=100, lr=1e-2, lr_tables=1e-2,
         {'params': table_params, 'lr': lr_tables},
     ])
 
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, T_max=n_epochs, eta_min=lr * 0.01)
+
     losses = []
     training_history = []
     initial_params = {name: p.detach().clone() for name, p in params.named_parameters()}
@@ -304,8 +347,15 @@ def train(trajectories=None, n_epochs=100, lr=1e-2, lr_tables=1e-2,
                 if len(traj) < 10:
                     continue
 
+            # 偏移恢复轨迹需要非零初始偏移
+            init_overrides = _OFFSET_RECOVERY_INIT.get(traj_name, {})
+            init_y = traj[0].y + init_overrides.get('init_y', 0.0)
+            init_yaw = traj[0].theta + init_overrides.get('init_yaw', 0.0)
+
             history = run_simulation(
-                traj, init_speed=traj_speed, cfg=params.cfg,
+                traj, init_speed=traj_speed,
+                init_x=traj[0].x, init_y=init_y, init_yaw=init_yaw,
+                cfg=params.cfg,
                 lat_ctrl=params.lat_ctrl, lon_ctrl=params.lon_ctrl,
                 differentiable=True, tbptt_k=tbptt_k)
 
@@ -344,6 +394,8 @@ def train(trajectories=None, n_epochs=100, lr=1e-2, lr_tables=1e-2,
                     p.clamp_(min=0.0)
                 elif name == 'lon_ctrl.switch_speed':
                     p.clamp_(min=0.5, max=10.0)
+
+        scheduler.step()
 
         losses.append(epoch_loss.item())
         dt = _time.time() - t_epoch
@@ -448,8 +500,8 @@ if __name__ == '__main__':
                         help='仿真速度 (m/s)')
     parser.add_argument('--sim-length', type=float, default=None,
                         help='仿真距离限制 (m)')
-    parser.add_argument('--tbptt-k', type=int, default=64,
-                        help='Truncated BPTT 窗口大小（步数）')
+    parser.add_argument('--tbptt-k', type=int, default=150,
+                        help='Truncated BPTT 窗口大小（步数），默认 150（3 秒）')
     parser.add_argument('--grad-clip', type=float, default=10.0,
                         help='全局梯度范数裁剪阈值')
     parser.add_argument('--snapshot-interval', type=int, default=10,

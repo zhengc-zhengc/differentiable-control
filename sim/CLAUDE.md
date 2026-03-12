@@ -25,7 +25,7 @@ sim/
 │   ├── dynamic_vehicle.py # DynamicVehicle — 6-DOF 动力学模型适配器，接口与 BicycleModel 一致
 │   ├── hybrid_dynamic_vehicle.py # HybridDynamicVehicle — 机理模型+MLP 残差修正（plant 仓库集成）
 │   ├── vehicle_factory.py # create_vehicle() — 根据 cfg 创建 kinematic/dynamic/hybrid_dynamic 模型
-│   └── trajectory.py      # 7 种轨迹生成 + TrajectoryAnalyzer（detached argmin）
+│   └── trajectory.py      # 9 种轨迹生成 + TrajectoryAnalyzer（detached argmin）
 ├── controller/
 │   ├── lat_truck.py       # LatControllerTruck (nn.Module, 可微:T2-T6, 固定:kLh/T1/T7/T8)
 │   └── lon.py             # LonController (nn.Module, 可微:7 PID, 固定:L1-L5)
@@ -89,8 +89,7 @@ python optim/train.py --plant hybrid_dynamic --epochs 50    # 训练（混合模
 | 横向 LatControllerTruck | T2_y (prev_time_dist) | 预瞄距离时间系数 |
 | | T3_y (reach_time_theta) | 收敛时间因子 |
 | | T4_y (T_dt) | 角速度误差预瞄时间 |
-| | T5_y (near_point_time) | 近预瞄点时间 |
-| | T6_y (far_point_time) | 远预瞄点时间 |
+| | T6_y (far_point_time) | 远预瞄点时间（前馈核心输入） |
 | 纵向 LonController | station_kp, station_ki | 站位 PID 增益 |
 | | low_speed_kp, low_speed_ki | 低速速度 PID 增益 |
 | | high_speed_kp, high_speed_ki | 高速速度 PID 增益 |
@@ -102,6 +101,7 @@ python optim/train.py --plant hybrid_dynamic --epochs 50    # 训练（混合模
 |--------|------|----------|
 | 横向 | kLh | 车辆物理属性（铰接修正） |
 | 横向 | T1_y (max_theta_deg) | 安全约束（航向误差上限） |
+| 横向 | T5_y (near_point_time) | 不参与反馈控制律（仅输出监控） |
 | 横向 | T7_y (max_steer_angle) | 物理极限（转向机构） |
 | 横向 | T8_y (slip_param) | 车辆物理属性（轮胎侧滑） |
 | 纵向 | L1_y (acc_up_lim) | 物理极限（动力系统能力） |
