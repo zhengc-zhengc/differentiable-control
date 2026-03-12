@@ -18,7 +18,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from config import load_config, _get_commit_hash, _tensor_to_python
 from model.trajectory import (generate_circle, generate_combined,
                               generate_lane_change,
-                              generate_double_lane_change)
+                              generate_double_lane_change,
+                              generate_s_curve, generate_compound_curve)
 from sim_loop import run_simulation
 
 plt.rcParams['font.sans-serif'] = ['Microsoft YaHei', 'SimHei', 'DejaVu Sans']
@@ -185,6 +186,15 @@ _EVAL_SCENARIOS = [
      lambda: generate_double_lane_change(lane_width=3.5, change_length=90.0, speed=55.0 / 3.6), 55.0 / 3.6),
     ('combined_55kph', '组合 (55kph)',
      lambda: generate_combined(speed=55.0 / 3.6), 55.0 / 3.6),
+    # ---- 新增几何类型（代表性速度）----
+    ('s_curve', 'S弯 (18kph)',
+     lambda: generate_s_curve(radius=50.0, arc_angle=math.pi / 4, speed=5.0), 5.0),
+    ('s_curve_35kph', 'S弯 (35kph)',
+     lambda: generate_s_curve(radius=60.0, arc_angle=math.pi / 4, speed=35.0 / 3.6), 35.0 / 3.6),
+    ('compound', '复合弯 (18kph)',
+     lambda: generate_compound_curve(speed=5.0), 5.0),
+    ('compound_35kph', '复合弯 (35kph)',
+     lambda: generate_compound_curve(speed=35.0 / 3.6, radius=60.0), 35.0 / 3.6),
 ]
 
 

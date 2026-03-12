@@ -65,13 +65,15 @@ class TestLatTruckBasic:
         assert isinstance(ctrl, torch.nn.Module)
 
     def test_has_parameters(self):
-        """应有 nn.Parameter：T2-T6 的 y 值（控制设计参数）。"""
+        """应有 nn.Parameter：T2-T4, T6 的 y 值（控制设计参数）。
+        T5 不参与反馈控制律（仅输出 near_kappa 供监控），归入 buffer。
+        """
         ctrl = LatControllerTruck(CFG)
         param_names = {n for n, _ in ctrl.named_parameters()}
-        for i in [2, 3, 4, 5, 6]:
+        for i in [2, 3, 4, 6]:
             assert f'T{i}_y' in param_names
-        # kLh, T1, T7, T8 应为 buffer（物理参数/安全约束）
-        for name in ['kLh', 'T1_y', 'T7_y', 'T8_y']:
+        # kLh, T1, T5, T7, T8 应为 buffer（物理参数/安全约束/无梯度信号）
+        for name in ['kLh', 'T1_y', 'T5_y', 'T7_y', 'T8_y']:
             assert name not in param_names
 
     def test_has_buffers(self):
