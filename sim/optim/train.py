@@ -245,7 +245,8 @@ _OFFSET_RECOVERY_INIT = {
 def train(trajectories=None, n_epochs=100, lr=3e-2, lr_tables=3e-2,
           sim_length=None, sim_speed=5.0, tbptt_k=150, grad_clip=10.0,
           param_snapshot_interval=10, verbose=True, plant=None,
-          config_path=None):
+          config_path=None, w_lat=10.0, w_head=8.0, w_speed=3.0,
+          w_steer_rate=0.05, w_acc_rate=0.01):
     """运行可微调参训练。
 
     Args:
@@ -260,6 +261,8 @@ def train(trajectories=None, n_epochs=100, lr=3e-2, lr_tables=3e-2,
         param_snapshot_interval: 参数快照打印间隔（epoch 数），0 表示不打印
         plant: 被控对象类型 ('kinematic'/'dynamic')，None 使用配置默认值
         config_path: 初始参数配置路径，用于 warm-start（从上次调参结果继续）
+        w_lat/w_head/w_speed: Loss 权重（横向/航向/速度误差）
+        w_steer_rate/w_acc_rate: 平滑度惩罚权重
         verbose: 是否打印 epoch 信息
 
     Returns:
@@ -363,6 +366,10 @@ def train(trajectories=None, n_epochs=100, lr=3e-2, lr_tables=3e-2,
                 differentiable=True, tbptt_k=tbptt_k)
 
             loss, details = tracking_loss(history, ref_speed=traj_speed,
+                                          w_lat=w_lat, w_head=w_head,
+                                          w_speed=w_speed,
+                                          w_steer_rate=w_steer_rate,
+                                          w_acc_rate=w_acc_rate,
                                           return_details=True)
 
             # Per-trajectory loss 归一化：第 1 epoch 记录 baseline，
@@ -488,6 +495,9 @@ def train(trajectories=None, n_epochs=100, lr=3e-2, lr_tables=3e-2,
         'lr_tables': lr_tables,
         'tbptt_k': tbptt_k,
         'grad_clip': grad_clip,
+        'w_lat': w_lat,
+        'w_head': w_head,
+        'w_speed': w_speed,
         'total_time_s': round(total_time, 1),
     })
     if verbose:
@@ -532,6 +542,16 @@ if __name__ == '__main__':
                         help='被控对象类型（覆盖 YAML 配置）')
     parser.add_argument('--config', type=str, default=None,
                         help='初始参数配置路径，用于 warm-start（从上次调参结果继续）')
+    parser.add_argument('--w-lat', type=float, default=10.0,
+                        help='横向误差 loss 权重')
+    parser.add_argument('--w-head', type=float, default=8.0,
+                        help='航向误差 loss 权重')
+    parser.add_argument('--w-speed', type=float, default=3.0,
+                        help='速度误差 loss 权重')
+    parser.add_argument('--w-steer-rate', type=float, default=0.05,
+                        help='转向平滑度惩罚权重')
+    parser.add_argument('--w-acc-rate', type=float, default=0.01,
+                        help='加速度平滑度惩罚权重')
     args = parser.parse_args()
 
     result = train(trajectories=args.trajectories, n_epochs=args.epochs,
@@ -542,7 +562,11 @@ if __name__ == '__main__':
                    grad_clip=args.grad_clip,
                    param_snapshot_interval=args.snapshot_interval,
                    plant=args.plant,
-                   config_path=args.config)
+                   config_path=args.config,
+                   w_lat=args.w_lat, w_head=args.w_head,
+                   w_speed=args.w_speed,
+                   w_steer_rate=args.w_steer_rate,
+                   w_acc_rate=args.w_acc_rate)
     print(f"\n最终 loss: {result['losses'][-1]:.6f}")
     print(f"保存路径: {result['saved_path']}")
 
@@ -558,5 +582,8 @@ if __name__ == '__main__':
         'tbptt_k': args.tbptt_k,
         'grad_clip': args.grad_clip,
         'plant': args.plant,
+        'w_lat': args.w_lat,
+        'w_head': args.w_head,
+        'w_speed': args.w_speed,
     }
     run_post_training(result, hyperparams, plant=args.plant)
