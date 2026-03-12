@@ -398,6 +398,364 @@ def generate_s_curve(radius: float, arc_angle: float, speed: float,
     return pts
 
 
+def generate_clothoid_turn(radius: float, turn_angle: float, speed: float,
+                           clothoid_ratio: float = 0.3,
+                           lead_in: float = 30.0, lead_out: float = 30.0,
+                           dt: float = 0.02) -> list[TrajectoryPoint]:
+    """生成带缓和曲线（clothoid）过渡的弯道轨迹。
+
+    直道 → clothoid(κ: 0→κ_max) → 圆弧(κ_max) → clothoid(κ_max→0) → 直道。
+    clothoid 段曲率线性变化，避免曲率瞬变。
+
+    Args:
+        radius: 弯道半径 (m)，> 0
+        turn_angle: 总航向变化 (rad)，正=左转(CCW+)，负=右转
+        speed: 恒定参考速度 (m/s)
+        clothoid_ratio: 两段 clothoid 合计占总角度变化的比例 (0~1)
+        lead_in/lead_out: 弯道前后直线段长度 (m)
+    """
+    sign = 1.0 if turn_angle > 0 else -1.0
+    abs_angle = abs(turn_angle)
+    kappa_max = sign / radius
+
+    # 角度分配：clothoid 占比 + 圆弧占比
+    theta_cl_each = clothoid_ratio * abs_angle / 2
+    theta_arc = (1 - clothoid_ratio) * abs_angle
+
+    # 各段弧长
+    L_cl = 2 * theta_cl_each * radius
+    L_arc = theta_arc * radius
+    total_length = lead_in + L_cl + L_arc + L_cl + lead_out
+
+    # 段边界（沿弧长）
+    s_cl1_start = lead_in
+    s_cl1_end = lead_in + L_cl
+    s_arc_end = s_cl1_end + L_arc
+    s_cl2_end = s_arc_end + L_cl
+
+    # 精细离散化 + 数值积分
+    ds_fine = 0.01
+    n_fine = int(total_length / ds_fine) + 1
+    xs = [0.0]
+    ys = [0.0]
+    thetas = [0.0]
+    kappas = [0.0]
+    x, y, theta = 0.0, 0.0, 0.0
+
+    for i in range(1, n_fine + 1):
+        s = i * ds_fine
+        if s <= s_cl1_start:
+            kappa = 0.0
+        elif s <= s_cl1_end:
+            frac = (s - s_cl1_start) / L_cl if L_cl > 0 else 1.0
+            kappa = kappa_max * frac
+        elif s <= s_arc_end:
+            kappa = kappa_max
+        elif s <= s_cl2_end:
+            frac = (s - s_arc_end) / L_cl if L_cl > 0 else 1.0
+            kappa = kappa_max * (1 - frac)
+        else:
+            kappa = 0.0
+
+        theta += kappa * ds_fine
+        x += math.cos(theta) * ds_fine
+        y += math.sin(theta) * ds_fine
+        xs.append(x)
+        ys.append(y)
+        thetas.append(theta)
+        kappas.append(kappa)
+
+    # 等速重采样
+    n_steps = int(total_length / (speed * dt))
+    pts = []
+    for step in range(n_steps + 1):
+        target_s = step * speed * dt
+        idx = min(int(target_s / ds_fine), len(xs) - 2)
+        frac = (target_s - idx * ds_fine) / ds_fine
+        px = xs[idx] + frac * (xs[idx + 1] - xs[idx])
+        py = ys[idx] + frac * (ys[idx + 1] - ys[idx])
+        ptheta = thetas[idx] + frac * (thetas[idx + 1] - thetas[idx])
+        pkappa = kappas[idx] + frac * (kappas[idx + 1] - kappas[idx])
+        pts.append(TrajectoryPoint(x=px, y=py, theta=ptheta, kappa=pkappa,
+                                   v=speed, a=0.0, s=target_s, t=step * dt))
+    return pts
+
+
+def generate_uturn(radius: float, speed: float,
+                   clothoid_ratio: float = 0.3,
+                   lead_in: float = 20.0, lead_out: float = 20.0,
+                   dt: float = 0.02) -> list[TrajectoryPoint]:
+    """生成掉头（U-turn）轨迹：180° clothoid 弯道。"""
+    return generate_clothoid_turn(
+        radius=radius, turn_angle=math.pi, speed=speed,
+        clothoid_ratio=clothoid_ratio,
+        lead_in=lead_in, lead_out=lead_out, dt=dt)
+
+
+def generate_stop_and_go(cruise_speed: float, accel_rate: float = 0.5,
+                         decel_rate: float = 0.5,
+                         cruise_in: float = 50.0, cruise_out: float = 50.0,
+                         stop_duration: float = 2.0,
+                         dt: float = 0.02) -> list[TrajectoryPoint]:
+    """生成停靠起步轨迹：直线上 巡航→减速→停车→起步→巡航。"""
+    pts = []
+    x, s, t = 0.0, 0.0, 0.0
+
+    n1 = int(cruise_in / (cruise_speed * dt))
+    for i in range(n1 + 1):
+        pts.append(TrajectoryPoint(x=x, y=0.0, theta=0.0, kappa=0.0,
+                                   v=cruise_speed, a=0.0, s=s, t=t))
+        x += cruise_speed * dt
+        s += cruise_speed * dt
+        t += dt
+
+    decel_time = cruise_speed / decel_rate
+    n2 = int(decel_time / dt)
+    for i in range(1, n2 + 1):
+        v = max(0.0, cruise_speed - decel_rate * i * dt)
+        v_mid = max(0.0, cruise_speed - decel_rate * (i - 0.5) * dt)
+        a = -decel_rate if v > 0 else 0.0
+        dx = v_mid * dt
+        x += dx
+        s += dx
+        t += dt
+        pts.append(TrajectoryPoint(x=x, y=0.0, theta=0.0, kappa=0.0,
+                                   v=v, a=a, s=s, t=t))
+
+    n3 = int(stop_duration / dt)
+    for i in range(1, n3 + 1):
+        t += dt
+        pts.append(TrajectoryPoint(x=x, y=0.0, theta=0.0, kappa=0.0,
+                                   v=0.0, a=0.0, s=s, t=t))
+
+    accel_time = cruise_speed / accel_rate
+    n4 = int(accel_time / dt)
+    for i in range(1, n4 + 1):
+        v = min(cruise_speed, accel_rate * i * dt)
+        v_mid = min(cruise_speed, accel_rate * (i - 0.5) * dt)
+        a = accel_rate if v < cruise_speed else 0.0
+        dx = v_mid * dt
+        x += dx
+        s += dx
+        t += dt
+        pts.append(TrajectoryPoint(x=x, y=0.0, theta=0.0, kappa=0.0,
+                                   v=v, a=a, s=s, t=t))
+
+    n5 = int(cruise_out / (cruise_speed * dt))
+    for i in range(1, n5 + 1):
+        x += cruise_speed * dt
+        s += cruise_speed * dt
+        t += dt
+        pts.append(TrajectoryPoint(x=x, y=0.0, theta=0.0, kappa=0.0,
+                                   v=cruise_speed, a=0.0, s=s, t=t))
+
+    return pts
+
+
+def _chain_segments(segments: list[list[TrajectoryPoint]]) -> list[TrajectoryPoint]:
+    """将多段轨迹首尾相连。每段的起点坐标系变换到前一段的终点。"""
+    if not segments or not segments[0]:
+        return []
+    result = list(segments[0])
+    for seg in segments[1:]:
+        if not seg:
+            continue
+        prev = result[-1]
+        cos_t = math.cos(prev.theta)
+        sin_t = math.sin(prev.theta)
+        s_off = prev.s
+        t_off = prev.t
+        for p in seg[1:]:
+            rx = cos_t * p.x - sin_t * p.y
+            ry = sin_t * p.x + cos_t * p.y
+            result.append(TrajectoryPoint(
+                x=prev.x + rx, y=prev.y + ry,
+                theta=prev.theta + p.theta,
+                kappa=p.kappa, v=p.v, a=p.a,
+                s=s_off + p.s, t=t_off + p.t))
+    return result
+
+
+def generate_park_route(cruise_speed: float = 4.17, turn_speed: float = 2.78,
+                        accel_rate: float = 0.5, stop_duration: float = 2.0,
+                        dt: float = 0.02) -> list[TrajectoryPoint]:
+    """生成综合园区路线（含速度变化和启停）。
+
+    路线：起步加速→直道巡航→减速右转→加速→直道→换道→直道→停靠→起步→
+          直道→减速左转→加速→直道→减速停车。
+    所有弯道带 clothoid 过渡，速度在弯前/弯后平滑过渡。
+    """
+    clothoid_ratio = 0.3
+    R1, angle1 = 40.0, math.pi / 2
+    R2, angle2 = 35.0, math.pi / 2
+
+    def _turn_lengths(R, angle):
+        theta_cl = clothoid_ratio * angle / 2
+        L_cl = 2 * theta_cl * R
+        L_arc = (1 - clothoid_ratio) * angle * R
+        return L_cl, L_arc, 2 * L_cl + L_arc
+
+    L_cl1, L_arc1, turn1_len = _turn_lengths(R1, angle1)
+    L_cl2, L_arc2, turn2_len = _turn_lengths(R2, angle2)
+
+    seg_defs = [
+        ('S', 80.0),
+        ('T', turn1_len, -1.0 / R1, L_cl1, L_arc1),
+        ('S', 60.0),
+        ('LC', 30.0, 3.5),
+        ('S', 40.0),
+        ('S', 40.0),
+        ('T', turn2_len, 1.0 / R2, L_cl2, L_arc2),
+        ('S', 60.0),
+    ]
+
+    seg_bounds = [0.0]
+    for sd in seg_defs:
+        seg_bounds.append(seg_bounds[-1] + sd[1])
+    total_length = seg_bounds[-1]
+
+    def kappa_at(s):
+        for i, sd in enumerate(seg_defs):
+            if s < seg_bounds[i] or s > seg_bounds[i + 1]:
+                continue
+            ls = s - seg_bounds[i]
+            if sd[0] == 'S':
+                return 0.0
+            elif sd[0] == 'T':
+                _, length, kmax, L_cl, L_arc = sd
+                if ls <= L_cl:
+                    return kmax * (ls / L_cl) if L_cl > 0 else kmax
+                elif ls <= L_cl + L_arc:
+                    return kmax
+                elif ls <= 2 * L_cl + L_arc:
+                    return kmax * (1 - (ls - L_cl - L_arc) / L_cl)
+                return 0.0
+            elif sd[0] == 'LC':
+                _, length, d = sd
+                k = math.pi / length
+                dydx = (d / 2) * k * math.sin(k * ls)
+                d2ydx2 = (d / 2) * k * k * math.cos(k * ls)
+                return d2ydx2 / (1 + dydx ** 2) ** 1.5
+        return 0.0
+
+    ds = 0.01
+    n_fine = int(total_length / ds) + 1
+    fine_x = [0.0]
+    fine_y = [0.0]
+    fine_theta = [0.0]
+    fine_kappa = [0.0]
+    x, y, theta = 0.0, 0.0, 0.0
+    for i in range(1, n_fine + 1):
+        s_i = i * ds
+        kappa = kappa_at(s_i)
+        theta += kappa * ds
+        x += math.cos(theta) * ds
+        y += math.sin(theta) * ds
+        fine_x.append(x)
+        fine_y.append(y)
+        fine_theta.append(theta)
+        fine_kappa.append(kappa)
+
+    def _accel_dist(v0, v1):
+        return abs(v1 * v1 - v0 * v0) / (2 * accel_rate)
+
+    d_start = _accel_dist(0, cruise_speed)
+    d_to_turn = _accel_dist(turn_speed, cruise_speed)
+    d_from_turn = d_to_turn
+    d_stop = _accel_dist(cruise_speed, 0)
+
+    turn1_s = seg_bounds[1]
+    turn1_e = seg_bounds[2]
+    stop_s = seg_bounds[5]
+    turn2_s = seg_bounds[6]
+    turn2_e = seg_bounds[7]
+
+    speed_wps = [
+        (0.0, 0.0),
+        (d_start, cruise_speed),
+        (turn1_s - d_to_turn, cruise_speed),
+        (turn1_s, turn_speed),
+        (turn1_e, turn_speed),
+        (turn1_e + d_from_turn, cruise_speed),
+        (stop_s - d_stop, cruise_speed),
+        (stop_s, 0.0),
+        (stop_s, 0.0),
+        (stop_s + d_start, cruise_speed),
+        (turn2_s - d_to_turn, cruise_speed),
+        (turn2_s, turn_speed),
+        (turn2_e, turn_speed),
+        (turn2_e + d_from_turn, cruise_speed),
+        (total_length - d_stop, cruise_speed),
+        (total_length, 0.0),
+    ]
+
+    clean_wps = []
+    for s_wp, v_wp in speed_wps:
+        s_wp = max(0.0, min(s_wp, total_length))
+        if clean_wps and s_wp < clean_wps[-1][0]:
+            continue
+        clean_wps.append((s_wp, v_wp))
+
+    def speed_at(s):
+        if s <= clean_wps[0][0]:
+            return clean_wps[0][1]
+        if s >= clean_wps[-1][0]:
+            return clean_wps[-1][1]
+        for j in range(len(clean_wps) - 1):
+            s0, v0 = clean_wps[j]
+            s1, v1 = clean_wps[j + 1]
+            if s0 <= s <= s1:
+                if s1 - s0 < 1e-6:
+                    return v1
+                frac = (s - s0) / (s1 - s0)
+                return v0 + frac * (v1 - v0)
+        return 0.0
+
+    pts = []
+    s_cur, t_cur = 0.0, 0.0
+    v0 = speed_at(0.0)
+    pts.append(TrajectoryPoint(x=0.0, y=0.0, theta=0.0,
+                               kappa=kappa_at(0.0), v=v0, a=0.0, s=0.0, t=0.0))
+
+    def _lookup_geom(s_val):
+        idx = min(int(s_val / ds), len(fine_x) - 2)
+        f = (s_val - idx * ds) / ds
+        return (fine_x[idx] + f * (fine_x[idx + 1] - fine_x[idx]),
+                fine_y[idx] + f * (fine_y[idx + 1] - fine_y[idx]),
+                fine_theta[idx] + f * (fine_theta[idx + 1] - fine_theta[idx]),
+                fine_kappa[idx] + f * (fine_kappa[idx + 1] - fine_kappa[idx]))
+
+    def _append_stop(s_val, n_steps):
+        gx, gy, gth, gk = _lookup_geom(s_val)
+        for _ in range(n_steps):
+            nonlocal t_cur
+            t_cur += dt
+            pts.append(TrajectoryPoint(x=gx, y=gy, theta=gth, kappa=gk,
+                                       v=0.0, a=0.0, s=s_val, t=t_cur))
+
+    V_SNAP = 0.15
+    stop_done = False
+    while s_cur < total_length - 1e-6:
+        v = speed_at(s_cur)
+        if not stop_done and v < V_SNAP and abs(s_cur - stop_s) < 2.0:
+            s_cur = stop_s
+            _append_stop(s_cur, int(stop_duration / dt))
+            stop_done = True
+            continue
+        if v < V_SNAP and (total_length - s_cur) < 2.0:
+            break
+        ds_step = max(v, 0.05) * dt
+        s_cur = min(s_cur + ds_step, total_length)
+        t_cur += dt
+        gx, gy, gth, gk = _lookup_geom(s_cur)
+        v_now = speed_at(s_cur)
+        a = (v_now - v) / dt if dt > 0 else 0.0
+        pts.append(TrajectoryPoint(x=gx, y=gy, theta=gth, kappa=gk,
+                                   v=v_now, a=a, s=s_cur, t=t_cur))
+
+    return pts
+
+
 def generate_offset_recovery(speed: float, lateral_offset: float = 1.5,
                               heading_error_deg: float = 5.0,
                               length: float = 200.0,

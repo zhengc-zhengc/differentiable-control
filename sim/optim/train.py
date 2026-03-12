@@ -23,7 +23,9 @@ from model.trajectory import (generate_straight, generate_circle,
                               generate_combined, generate_lane_change,
                               generate_double_lane_change,
                               generate_s_curve, generate_offset_recovery,
-                              generate_compound_curve)
+                              generate_compound_curve, generate_clothoid_turn,
+                              generate_uturn, generate_stop_and_go,
+                              generate_park_route)
 from sim_loop import run_simulation
 
 
@@ -166,6 +168,20 @@ _TRAJECTORY_BUILDERS = {
     'offset_recovery': lambda speed: generate_offset_recovery(speed=speed),
     'offset_recovery_curve': lambda speed: generate_offset_recovery(
         speed=speed, curvature=1.0 / 80.0),
+
+    # ---- 真实工况轨迹 ----
+    'clothoid_left': lambda speed: generate_clothoid_turn(
+        radius=40.0, turn_angle=3.14159 / 2, speed=speed),
+    'clothoid_right': lambda speed: generate_clothoid_turn(
+        radius=40.0, turn_angle=-3.14159 / 2, speed=speed),
+    'clothoid_left_35kph': lambda _: generate_clothoid_turn(
+        radius=50.0, turn_angle=3.14159 / 2, speed=35.0 / 3.6),
+    'clothoid_right_35kph': lambda _: generate_clothoid_turn(
+        radius=50.0, turn_angle=-3.14159 / 2, speed=35.0 / 3.6),
+    'uturn': lambda speed: generate_uturn(radius=15.0, speed=speed),
+    'uturn_5kph': lambda _: generate_uturn(radius=10.0, speed=5.0 / 3.6),
+    'stop_and_go': lambda speed: generate_stop_and_go(cruise_speed=speed),
+    'park_route': lambda _: generate_park_route(),
 
     # ---- 0-10 km/h（低速：5 km/h = 1.4 m/s）----
     'circle_5kph': lambda _: generate_circle(
