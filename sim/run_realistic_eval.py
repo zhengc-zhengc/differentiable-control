@@ -216,7 +216,7 @@ def build_scenarios():
 
     # --- 综合园区路线 ---
     v = 15.0 / 3.6
-    traj = generate_park_route(v)
+    traj = generate_park_route(cruise_speed=v)
     scenarios.append(('综合园区路线 15kph', traj, v, 'park_route_15kph'))
 
     # --- 直道巡航 ---

@@ -588,23 +588,217 @@ def _chain_segments(segments: list[list[TrajectoryPoint]]) -> list[TrajectoryPoi
     return result
 
 
-def generate_park_route(speed: float = 4.17, dt: float = 0.02
-                        ) -> list[TrajectoryPoint]:
-    """生成综合园区路线：直道→右转→直道→换道→直道→左转→直道。
+def generate_park_route(cruise_speed: float = 4.17, turn_speed: float = 2.78,
+                        accel_rate: float = 0.5, stop_duration: float = 2.0,
+                        dt: float = 0.02) -> list[TrajectoryPoint]:
+    """生成综合园区路线（含速度变化和启停）。
 
-    默认速度 4.17 m/s ≈ 15 km/h，所有弯道带 clothoid 过渡。
+    路线：起步加速→直道巡航→减速右转→加速→直道→换道→直道→停靠→起步→
+          直道→减速左转→加速→直道→减速停车。
+
+    所有弯道带 clothoid 过渡，速度在弯前/弯后平滑过渡。
+
+    Args:
+        cruise_speed: 巡航速度 (m/s)，默认 4.17 ≈ 15 km/h
+        turn_speed: 弯道速度 (m/s)，默认 2.78 ≈ 10 km/h
+        accel_rate: 加减速率 (m/s²)
+        stop_duration: 中途停车时长 (s)
     """
-    seg1 = generate_straight(100.0, speed, dt)
-    seg2 = generate_clothoid_turn(40.0, -math.pi / 2, speed,
-                                  lead_in=0, lead_out=0, dt=dt)
-    seg3 = generate_straight(60.0, speed, dt)
-    seg4 = generate_lane_change(3.5, 30.0, speed,
-                                lead_in=0, lead_out=0, dt=dt)
-    seg5 = generate_straight(80.0, speed, dt)
-    seg6 = generate_clothoid_turn(35.0, math.pi / 2, speed,
-                                  lead_in=0, lead_out=0, dt=dt)
-    seg7 = generate_straight(50.0, speed, dt)
-    return _chain_segments([seg1, seg2, seg3, seg4, seg5, seg6, seg7])
+    clothoid_ratio = 0.3
+
+    # ── 1. 定义路段几何（曲率 vs 弧长）──
+    # 每段: (type, length, [extra params])
+    R1, angle1 = 40.0, math.pi / 2   # 右转（sign 在曲率中处理）
+    R2, angle2 = 35.0, math.pi / 2   # 左转
+
+    def _turn_lengths(R, angle):
+        theta_cl = clothoid_ratio * angle / 2
+        L_cl = 2 * theta_cl * R
+        L_arc = (1 - clothoid_ratio) * angle * R
+        return L_cl, L_arc, 2 * L_cl + L_arc
+
+    L_cl1, L_arc1, turn1_len = _turn_lengths(R1, angle1)
+    L_cl2, L_arc2, turn2_len = _turn_lengths(R2, angle2)
+
+    # 段列表: (type, length, ...)
+    # type: 'S'=straight, 'T'=turn, 'LC'=lane_change
+    seg_defs = [
+        ('S', 80.0),                                        # seg0: 起步+巡航
+        ('T', turn1_len, -1.0 / R1, L_cl1, L_arc1),       # seg1: 右转
+        ('S', 60.0),                                        # seg2: 直道
+        ('LC', 30.0, 3.5),                                  # seg3: 换道
+        ('S', 40.0),                                        # seg4: 直道→停靠点
+        ('S', 40.0),                                        # seg5: 停靠后→直道
+        ('T', turn2_len, 1.0 / R2, L_cl2, L_arc2),        # seg6: 左转
+        ('S', 60.0),                                        # seg7: 直道→终点停车
+    ]
+
+    # 计算段边界
+    seg_bounds = [0.0]
+    for sd in seg_defs:
+        seg_bounds.append(seg_bounds[-1] + sd[1])
+    total_length = seg_bounds[-1]
+
+    # ── 2. 构建曲率函数 κ(s) ──
+    def kappa_at(s):
+        for i, sd in enumerate(seg_defs):
+            if s < seg_bounds[i] or s > seg_bounds[i + 1]:
+                continue
+            ls = s - seg_bounds[i]  # local arc length within segment
+            if sd[0] == 'S':
+                return 0.0
+            elif sd[0] == 'T':
+                _, length, kmax, L_cl, L_arc = sd
+                if ls <= L_cl:
+                    return kmax * (ls / L_cl) if L_cl > 0 else kmax
+                elif ls <= L_cl + L_arc:
+                    return kmax
+                elif ls <= 2 * L_cl + L_arc:
+                    return kmax * (1 - (ls - L_cl - L_arc) / L_cl)
+                return 0.0
+            elif sd[0] == 'LC':
+                _, length, d = sd
+                k = math.pi / length
+                dydx = (d / 2) * k * math.sin(k * ls)
+                d2ydx2 = (d / 2) * k * k * math.cos(k * ls)
+                return d2ydx2 / (1 + dydx ** 2) ** 1.5
+        return 0.0
+
+    # ── 3. 精细离散化几何 ──
+    ds = 0.01
+    n_fine = int(total_length / ds) + 1
+    fine_x = [0.0]
+    fine_y = [0.0]
+    fine_theta = [0.0]
+    fine_kappa = [0.0]
+    x, y, theta = 0.0, 0.0, 0.0
+    for i in range(1, n_fine + 1):
+        s_i = i * ds
+        kappa = kappa_at(s_i)
+        theta += kappa * ds
+        x += math.cos(theta) * ds
+        y += math.sin(theta) * ds
+        fine_x.append(x)
+        fine_y.append(y)
+        fine_theta.append(theta)
+        fine_kappa.append(kappa)
+
+    # ── 4. 构建速度剖面 v(s)：分段线性 ──
+    # 加减速所需距离
+    def _accel_dist(v0, v1):
+        """从 v0 加/减速到 v1 所需距离 = (v1²-v0²) / (2a)"""
+        return abs(v1 * v1 - v0 * v0) / (2 * accel_rate)
+
+    d_start = _accel_dist(0, cruise_speed)           # 起步距离
+    d_to_turn = _accel_dist(turn_speed, cruise_speed) # 巡航→弯速
+    d_from_turn = d_to_turn                           # 弯速→巡航
+    d_stop = _accel_dist(cruise_speed, 0)             # 巡航→停
+
+    turn1_s = seg_bounds[1]  # 右转起点弧长
+    turn1_e = seg_bounds[2]  # 右转终点
+    stop_s = seg_bounds[5]   # 停靠点（seg4 终点 = seg5 起点）
+    turn2_s = seg_bounds[6]  # 左转起点
+    turn2_e = seg_bounds[7]  # 左转终点
+
+    # 速度航点: (arc_length, speed)，按弧长递增
+    # 起点和终点保持巡航速度（起停场景由 stop_and_go 单独覆盖），中途有停靠
+    speed_wps = [
+        (0.0, cruise_speed),
+        (turn1_s - d_to_turn, cruise_speed),
+        (turn1_s, turn_speed),
+        (turn1_e, turn_speed),
+        (turn1_e + d_from_turn, cruise_speed),
+        (stop_s - d_stop, cruise_speed),
+        (stop_s, 0.0),                            # 停车点
+        (stop_s, 0.0),                            # 停车后（stop_duration 在时间域处理）
+        (stop_s + d_start, cruise_speed),
+        (turn2_s - d_to_turn, cruise_speed),
+        (turn2_s, turn_speed),
+        (turn2_e, turn_speed),
+        (turn2_e + d_from_turn, cruise_speed),
+        (total_length, cruise_speed),
+    ]
+
+    # 去除无效航点（弧长越界或逆序）并排序
+    clean_wps = []
+    for s_wp, v_wp in speed_wps:
+        s_wp = max(0.0, min(s_wp, total_length))
+        if clean_wps and s_wp < clean_wps[-1][0]:
+            continue  # 跳过逆序点
+        clean_wps.append((s_wp, v_wp))
+
+    def speed_at(s):
+        if s <= clean_wps[0][0]:
+            return clean_wps[0][1]
+        if s >= clean_wps[-1][0]:
+            return clean_wps[-1][1]
+        for j in range(len(clean_wps) - 1):
+            s0, v0 = clean_wps[j]
+            s1, v1 = clean_wps[j + 1]
+            if s0 <= s <= s1:
+                if s1 - s0 < 1e-6:
+                    return v1
+                frac = (s - s0) / (s1 - s0)
+                return v0 + frac * (v1 - v0)
+        return 0.0
+
+    # ── 5. 按变速步进生成轨迹点 ──
+    pts = []
+    s_cur, t_cur = 0.0, 0.0
+
+    # 起点
+    v0 = speed_at(0.0)
+    pts.append(TrajectoryPoint(x=0.0, y=0.0, theta=0.0,
+                               kappa=kappa_at(0.0), v=v0, a=0.0, s=0.0, t=0.0))
+
+    def _lookup_geom(s_val):
+        """从精细几何数组中插值 (x, y, theta, kappa)。"""
+        idx = min(int(s_val / ds), len(fine_x) - 2)
+        f = (s_val - idx * ds) / ds
+        return (fine_x[idx] + f * (fine_x[idx + 1] - fine_x[idx]),
+                fine_y[idx] + f * (fine_y[idx + 1] - fine_y[idx]),
+                fine_theta[idx] + f * (fine_theta[idx + 1] - fine_theta[idx]),
+                fine_kappa[idx] + f * (fine_kappa[idx + 1] - fine_kappa[idx]))
+
+    def _append_stop(s_val, n_steps):
+        """在 s_val 位置插入 n_steps 个停车点。"""
+        gx, gy, gth, gk = _lookup_geom(s_val)
+        for _ in range(n_steps):
+            nonlocal t_cur
+            t_cur += dt
+            pts.append(TrajectoryPoint(x=gx, y=gy, theta=gth, kappa=gk,
+                                       v=0.0, a=0.0, s=s_val, t=t_cur))
+
+    # 速度阈值：低于此值视为已停车，跳到目标点
+    V_SNAP = 0.15  # m/s
+
+    stop_done = False
+    while s_cur < total_length - 1e-6:
+        v = speed_at(s_cur)
+
+        # 中途停靠：速度降到阈值以下且接近停靠点
+        if not stop_done and v < V_SNAP and abs(s_cur - stop_s) < 2.0:
+            s_cur = stop_s
+            _append_stop(s_cur, int(stop_duration / dt))
+            stop_done = True
+            continue
+
+        # 终点停车：速度降到阈值以下且接近终点
+        if v < V_SNAP and (total_length - s_cur) < 2.0:
+            break
+
+        # 前进一步（max 防止零速死循环，记录值仍用真实速度）
+        ds_step = max(v, 0.05) * dt
+        s_cur = min(s_cur + ds_step, total_length)
+        t_cur += dt
+
+        gx, gy, gth, gk = _lookup_geom(s_cur)
+        v_now = speed_at(s_cur)
+        a = (v_now - v) / dt if dt > 0 else 0.0
+        pts.append(TrajectoryPoint(x=gx, y=gy, theta=gth, kappa=gk,
+                                   v=v_now, a=a, s=s_cur, t=t_cur))
+
+    return pts
 
 
 class TrajectoryAnalyzer:
