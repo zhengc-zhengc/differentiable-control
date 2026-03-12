@@ -75,7 +75,7 @@ class DiffControllerParams(nn.Module):
 
 
 def tracking_loss(history, ref_speed,
-                  w_lat=10.0, w_head=5.0, w_speed=3.0,
+                  w_lat=10.0, w_head=8.0, w_speed=3.0,
                   w_steer_rate=0.05, w_acc_rate=0.01,
                   return_details=False):
     """计算跟踪 loss：横向误差 + 航向误差 + 速度误差 + 平滑度惩罚。
@@ -321,7 +321,7 @@ def train(trajectories=None, n_epochs=100, lr=3e-2, lr_tables=3e-2,
     ])
 
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-        optimizer, T_max=n_epochs, eta_min=lr * 0.01)
+        optimizer, T_max=n_epochs, eta_min=lr * 0.1)
 
     losses = []
     training_history = []
