@@ -375,6 +375,14 @@ def train(trajectories=None, n_epochs=100, lr=3e-2, lr_tables=3e-2,
             traj_details[traj_name] = details
 
         epoch_loss = epoch_loss / len(trajectories)
+
+        # L2 正则化：惩罚参数偏离初始值，防止过拟合
+        l2_reg = torch.tensor(0.0)
+        for name, p in params.named_parameters():
+            init_p = initial_params[name]
+            l2_reg = l2_reg + ((p - init_p) ** 2).sum()
+        epoch_loss = epoch_loss + 0.01 * l2_reg
+
         # 从 traj_details 计算各轨迹平均（兼容现有打印）
         epoch_details = {}
         if traj_details:
