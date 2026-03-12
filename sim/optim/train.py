@@ -244,7 +244,8 @@ _OFFSET_RECOVERY_INIT = {
 
 def train(trajectories=None, n_epochs=100, lr=3e-2, lr_tables=3e-2,
           sim_length=None, sim_speed=5.0, tbptt_k=150, grad_clip=10.0,
-          param_snapshot_interval=10, verbose=True, plant=None):
+          param_snapshot_interval=10, verbose=True, plant=None,
+          config_path=None):
     """运行可微调参训练。
 
     Args:
@@ -258,6 +259,7 @@ def train(trajectories=None, n_epochs=100, lr=3e-2, lr_tables=3e-2,
         grad_clip: 全局梯度范数裁剪阈值
         param_snapshot_interval: 参数快照打印间隔（epoch 数），0 表示不打印
         plant: 被控对象类型 ('kinematic'/'dynamic')，None 使用配置默认值
+        config_path: 初始参数配置路径，用于 warm-start（从上次调参结果继续）
         verbose: 是否打印 epoch 信息
 
     Returns:
@@ -288,7 +290,7 @@ def train(trajectories=None, n_epochs=100, lr=3e-2, lr_tables=3e-2,
             's_curve_55kph', 'compound_55kph',
         ]
 
-    cfg = load_config()
+    cfg = load_config(config_path)
     if plant:
         cfg['vehicle']['model_type'] = plant
     params = DiffControllerParams(cfg=cfg)
@@ -393,7 +395,7 @@ def train(trajectories=None, n_epochs=100, lr=3e-2, lr_tables=3e-2,
             params.parameters(), max_norm=grad_clip).item()
         optimizer.step()
 
-        # 参数投影：PID 增益非负约束 + switch_speed 有界
+        # 参数投影：物理约束
         with torch.no_grad():
             for name, p in params.named_parameters():
                 if name in ('lon_ctrl.station_kp', 'lon_ctrl.station_ki',
@@ -402,6 +404,9 @@ def train(trajectories=None, n_epochs=100, lr=3e-2, lr_tables=3e-2,
                     p.clamp_(min=0.0)
                 elif name == 'lon_ctrl.switch_speed':
                     p.clamp_(min=0.5, max=10.0)
+                elif name == 'lat_ctrl.T4_y':
+                    # T4 (T_dt) 为角速度预瞄时间，物理上不应为负
+                    p.clamp_(min=0.0)
 
         scheduler.step()
 
@@ -517,6 +522,8 @@ if __name__ == '__main__':
     parser.add_argument('--plant', type=str, default=None,
                         choices=['kinematic', 'dynamic', 'hybrid_dynamic'],
                         help='被控对象类型（覆盖 YAML 配置）')
+    parser.add_argument('--config', type=str, default=None,
+                        help='初始参数配置路径，用于 warm-start（从上次调参结果继续）')
     args = parser.parse_args()
 
     result = train(trajectories=args.trajectories, n_epochs=args.epochs,
@@ -526,7 +533,8 @@ if __name__ == '__main__':
                    tbptt_k=args.tbptt_k,
                    grad_clip=args.grad_clip,
                    param_snapshot_interval=args.snapshot_interval,
-                   plant=args.plant)
+                   plant=args.plant,
+                   config_path=args.config)
     print(f"\n最终 loss: {result['losses'][-1]:.6f}")
     print(f"保存路径: {result['saved_path']}")
 
