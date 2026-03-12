@@ -326,6 +326,7 @@ def train(trajectories=None, n_epochs=100, lr=1e-2, lr_tables=1e-2,
     losses = []
     training_history = []
     initial_params = {name: p.detach().clone() for name, p in params.named_parameters()}
+    baseline_traj_losses = {}  # 第 1 epoch 记录各轨迹 baseline loss，用于归一化
     import time as _time
     t_start = _time.time()
 
@@ -361,7 +362,14 @@ def train(trajectories=None, n_epochs=100, lr=1e-2, lr_tables=1e-2,
 
             loss, details = tracking_loss(history, ref_speed=traj_speed,
                                           return_details=True)
-            epoch_loss = epoch_loss + loss
+
+            # Per-trajectory loss 归一化：第 1 epoch 记录 baseline，
+            # 后续 epoch 除以 baseline 使各轨迹贡献均等
+            if epoch == 0:
+                baseline_traj_losses[traj_name] = max(loss.detach().item(), 1e-6)
+            norm_factor = baseline_traj_losses.get(traj_name, 1.0)
+            epoch_loss = epoch_loss + loss / norm_factor
+
             traj_details[traj_name] = details
 
         epoch_loss = epoch_loss / len(trajectories)
