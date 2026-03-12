@@ -178,6 +178,14 @@ _TRAJECTORY_BUILDERS = {
         radius=50.0, turn_angle=3.14159 / 2, speed=35.0 / 3.6),
     'clothoid_right_35kph': lambda _: generate_clothoid_turn(
         radius=50.0, turn_angle=-3.14159 / 2, speed=35.0 / 3.6),
+    'clothoid_left_45kph': lambda _: generate_clothoid_turn(
+        radius=60.0, turn_angle=3.14159 / 2, speed=45.0 / 3.6),
+    'clothoid_right_45kph': lambda _: generate_clothoid_turn(
+        radius=60.0, turn_angle=-3.14159 / 2, speed=45.0 / 3.6),
+    'clothoid_left_55kph': lambda _: generate_clothoid_turn(
+        radius=70.0, turn_angle=3.14159 / 3, speed=55.0 / 3.6),
+    'clothoid_right_55kph': lambda _: generate_clothoid_turn(
+        radius=70.0, turn_angle=-3.14159 / 3, speed=55.0 / 3.6),
     'uturn': lambda speed: generate_uturn(radius=15.0, speed=speed),
     'uturn_5kph': lambda _: generate_uturn(radius=10.0, speed=5.0 / 3.6),
     'stop_and_go': lambda speed: generate_stop_and_go(cruise_speed=speed),
