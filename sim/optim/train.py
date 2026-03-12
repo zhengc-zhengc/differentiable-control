@@ -242,7 +242,7 @@ _OFFSET_RECOVERY_INIT = {
 }
 
 
-def train(trajectories=None, n_epochs=100, lr=1e-2, lr_tables=1e-2,
+def train(trajectories=None, n_epochs=100, lr=3e-2, lr_tables=3e-2,
           sim_length=None, sim_speed=5.0, tbptt_k=150, grad_clip=10.0,
           param_snapshot_interval=10, verbose=True, plant=None):
     """运行可微调参训练。
@@ -497,9 +497,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='V2 可微调参训练')
     parser.add_argument('--epochs', type=int, default=100,
                         help='训练轮数')
-    parser.add_argument('--lr', type=float, default=1e-2,
+    parser.add_argument('--lr', type=float, default=3e-2,
                         help='主学习率（PID 增益等标量参数）')
-    parser.add_argument('--lr-tables', type=float, default=1e-2,
+    parser.add_argument('--lr-tables', type=float, default=3e-2,
                         help='查找表 y 值学习率')
     parser.add_argument('--trajectories', nargs='+', default=None,
                         help='训练轨迹，默认全速度覆盖（可用: ' +
