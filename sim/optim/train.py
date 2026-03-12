@@ -422,8 +422,10 @@ def train(trajectories=None, n_epochs=100, lr=5e-2, lr_tables=5e-2,
                     p.clamp_(min=0.0)
                 elif name == 'lon_ctrl.switch_speed':
                     p.clamp_(min=0.5, max=10.0)
-                elif name == 'lat_ctrl.T4_y':
-                    # T4 (T_dt) 为角速度预瞄时间，物理上不应为负
+                elif name in ('lat_ctrl.T2_y', 'lat_ctrl.T3_y',
+                              'lat_ctrl.T4_y', 'lat_ctrl.T6_y'):
+                    # T2(预瞄时间)、T3(收敛时间)、T4(角速度预瞄)、T6(远预瞄时间)
+                    # 均为时间相关参数，物理上不应为负
                     p.clamp_(min=0.0)
 
         scheduler.step()
