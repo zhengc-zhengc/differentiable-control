@@ -398,6 +398,215 @@ def generate_s_curve(radius: float, arc_angle: float, speed: float,
     return pts
 
 
+def generate_clothoid_turn(radius: float, turn_angle: float, speed: float,
+                           clothoid_ratio: float = 0.3,
+                           lead_in: float = 30.0, lead_out: float = 30.0,
+                           dt: float = 0.02) -> list[TrajectoryPoint]:
+    """生成带缓和曲线（clothoid）过渡的弯道轨迹。
+
+    直道 → clothoid(κ: 0→κ_max) → 圆弧(κ_max) → clothoid(κ_max→0) → 直道。
+    clothoid 段曲率线性变化，避免曲率瞬变。
+
+    Args:
+        radius: 弯道半径 (m)，> 0
+        turn_angle: 总航向变化 (rad)，正=左转(CCW+)，负=右转
+        speed: 恒定参考速度 (m/s)
+        clothoid_ratio: 两段 clothoid 合计占总角度变化的比例 (0~1)
+        lead_in/lead_out: 弯道前后直线段长度 (m)
+    """
+    sign = 1.0 if turn_angle > 0 else -1.0
+    abs_angle = abs(turn_angle)
+    kappa_max = sign / radius
+
+    # 角度分配：clothoid 占比 + 圆弧占比
+    theta_cl_each = clothoid_ratio * abs_angle / 2  # 每段 clothoid 的角度变化
+    theta_arc = (1 - clothoid_ratio) * abs_angle    # 圆弧段角度
+
+    # 各段弧长
+    L_cl = 2 * theta_cl_each * radius   # 一段 clothoid 长度
+    L_arc = theta_arc * radius          # 圆弧长度
+    total_length = lead_in + L_cl + L_arc + L_cl + lead_out
+
+    # 段边界（沿弧长）
+    s_cl1_start = lead_in
+    s_cl1_end = lead_in + L_cl
+    s_arc_end = s_cl1_end + L_arc
+    s_cl2_end = s_arc_end + L_cl
+
+    # 精细离散化 + 数值积分
+    ds_fine = 0.01
+    n_fine = int(total_length / ds_fine) + 1
+    xs = [0.0]
+    ys = [0.0]
+    thetas = [0.0]
+    kappas = [0.0]
+    x, y, theta = 0.0, 0.0, 0.0
+
+    for i in range(1, n_fine + 1):
+        s = i * ds_fine
+        if s <= s_cl1_start:
+            kappa = 0.0
+        elif s <= s_cl1_end:
+            frac = (s - s_cl1_start) / L_cl if L_cl > 0 else 1.0
+            kappa = kappa_max * frac
+        elif s <= s_arc_end:
+            kappa = kappa_max
+        elif s <= s_cl2_end:
+            frac = (s - s_arc_end) / L_cl if L_cl > 0 else 1.0
+            kappa = kappa_max * (1 - frac)
+        else:
+            kappa = 0.0
+
+        theta += kappa * ds_fine
+        x += math.cos(theta) * ds_fine
+        y += math.sin(theta) * ds_fine
+        xs.append(x)
+        ys.append(y)
+        thetas.append(theta)
+        kappas.append(kappa)
+
+    # 等速重采样
+    n_steps = int(total_length / (speed * dt))
+    pts = []
+    for step in range(n_steps + 1):
+        target_s = step * speed * dt
+        idx = min(int(target_s / ds_fine), len(xs) - 2)
+        frac = (target_s - idx * ds_fine) / ds_fine
+        px = xs[idx] + frac * (xs[idx + 1] - xs[idx])
+        py = ys[idx] + frac * (ys[idx + 1] - ys[idx])
+        ptheta = thetas[idx] + frac * (thetas[idx + 1] - thetas[idx])
+        pkappa = kappas[idx] + frac * (kappas[idx + 1] - kappas[idx])
+        pts.append(TrajectoryPoint(x=px, y=py, theta=ptheta, kappa=pkappa,
+                                   v=speed, a=0.0, s=target_s, t=step * dt))
+    return pts
+
+
+def generate_uturn(radius: float, speed: float,
+                   clothoid_ratio: float = 0.3,
+                   lead_in: float = 20.0, lead_out: float = 20.0,
+                   dt: float = 0.02) -> list[TrajectoryPoint]:
+    """生成掉头（U-turn）轨迹：180° clothoid 弯道。"""
+    return generate_clothoid_turn(
+        radius=radius, turn_angle=math.pi, speed=speed,
+        clothoid_ratio=clothoid_ratio,
+        lead_in=lead_in, lead_out=lead_out, dt=dt)
+
+
+def generate_stop_and_go(cruise_speed: float, accel_rate: float = 0.5,
+                         decel_rate: float = 0.5,
+                         cruise_in: float = 50.0, cruise_out: float = 50.0,
+                         stop_duration: float = 2.0,
+                         dt: float = 0.02) -> list[TrajectoryPoint]:
+    """生成停靠起步轨迹：直线上 巡航→减速→停车→起步→巡航。
+
+    Args:
+        cruise_speed: 巡航速度 (m/s)
+        accel_rate / decel_rate: 加/减速率 (m/s²)，正值
+        cruise_in / cruise_out: 减速前/加速后巡航距离 (m)
+        stop_duration: 停车时长 (s)
+    """
+    pts = []
+    x, s, t = 0.0, 0.0, 0.0
+
+    # Phase 1: 巡航进入
+    n1 = int(cruise_in / (cruise_speed * dt))
+    for i in range(n1 + 1):
+        pts.append(TrajectoryPoint(x=x, y=0.0, theta=0.0, kappa=0.0,
+                                   v=cruise_speed, a=0.0, s=s, t=t))
+        x += cruise_speed * dt
+        s += cruise_speed * dt
+        t += dt
+
+    # Phase 2: 匀减速到 0
+    decel_time = cruise_speed / decel_rate
+    n2 = int(decel_time / dt)
+    for i in range(1, n2 + 1):
+        v = max(0.0, cruise_speed - decel_rate * i * dt)
+        v_mid = max(0.0, cruise_speed - decel_rate * (i - 0.5) * dt)
+        a = -decel_rate if v > 0 else 0.0
+        dx = v_mid * dt
+        x += dx
+        s += dx
+        t += dt
+        pts.append(TrajectoryPoint(x=x, y=0.0, theta=0.0, kappa=0.0,
+                                   v=v, a=a, s=s, t=t))
+
+    # Phase 3: 停车
+    n3 = int(stop_duration / dt)
+    for i in range(1, n3 + 1):
+        t += dt
+        pts.append(TrajectoryPoint(x=x, y=0.0, theta=0.0, kappa=0.0,
+                                   v=0.0, a=0.0, s=s, t=t))
+
+    # Phase 4: 匀加速到巡航速度
+    accel_time = cruise_speed / accel_rate
+    n4 = int(accel_time / dt)
+    for i in range(1, n4 + 1):
+        v = min(cruise_speed, accel_rate * i * dt)
+        v_mid = min(cruise_speed, accel_rate * (i - 0.5) * dt)
+        a = accel_rate if v < cruise_speed else 0.0
+        dx = v_mid * dt
+        x += dx
+        s += dx
+        t += dt
+        pts.append(TrajectoryPoint(x=x, y=0.0, theta=0.0, kappa=0.0,
+                                   v=v, a=a, s=s, t=t))
+
+    # Phase 5: 巡航驶出
+    n5 = int(cruise_out / (cruise_speed * dt))
+    for i in range(1, n5 + 1):
+        x += cruise_speed * dt
+        s += cruise_speed * dt
+        t += dt
+        pts.append(TrajectoryPoint(x=x, y=0.0, theta=0.0, kappa=0.0,
+                                   v=cruise_speed, a=0.0, s=s, t=t))
+
+    return pts
+
+
+def _chain_segments(segments: list[list[TrajectoryPoint]]) -> list[TrajectoryPoint]:
+    """将多段轨迹首尾相连。每段的起点坐标系变换到前一段的终点。"""
+    if not segments or not segments[0]:
+        return []
+    result = list(segments[0])
+    for seg in segments[1:]:
+        if not seg:
+            continue
+        prev = result[-1]
+        cos_t = math.cos(prev.theta)
+        sin_t = math.sin(prev.theta)
+        s_off = prev.s
+        t_off = prev.t
+        for p in seg[1:]:  # 跳过第一个点（与前段终点重合）
+            rx = cos_t * p.x - sin_t * p.y
+            ry = sin_t * p.x + cos_t * p.y
+            result.append(TrajectoryPoint(
+                x=prev.x + rx, y=prev.y + ry,
+                theta=prev.theta + p.theta,
+                kappa=p.kappa, v=p.v, a=p.a,
+                s=s_off + p.s, t=t_off + p.t))
+    return result
+
+
+def generate_park_route(speed: float = 4.17, dt: float = 0.02
+                        ) -> list[TrajectoryPoint]:
+    """生成综合园区路线：直道→右转→直道→换道→直道→左转→直道。
+
+    默认速度 4.17 m/s ≈ 15 km/h，所有弯道带 clothoid 过渡。
+    """
+    seg1 = generate_straight(100.0, speed, dt)
+    seg2 = generate_clothoid_turn(40.0, -math.pi / 2, speed,
+                                  lead_in=0, lead_out=0, dt=dt)
+    seg3 = generate_straight(60.0, speed, dt)
+    seg4 = generate_lane_change(3.5, 30.0, speed,
+                                lead_in=0, lead_out=0, dt=dt)
+    seg5 = generate_straight(80.0, speed, dt)
+    seg6 = generate_clothoid_turn(35.0, math.pi / 2, speed,
+                                  lead_in=0, lead_out=0, dt=dt)
+    seg7 = generate_straight(50.0, speed, dt)
+    return _chain_segments([seg1, seg2, seg3, seg4, seg5, seg6, seg7])
+
+
 class TrajectoryAnalyzer:
     """轨迹分析器：位置查询、时间查询、Frenet 变换。V2: torch 化。"""
 
