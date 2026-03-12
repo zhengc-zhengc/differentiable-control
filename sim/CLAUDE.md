@@ -18,7 +18,7 @@ sim/
 ├── config.py              # YAML 加载/保存，table_from_config → (Tensor, Tensor)
 ├── sim_loop.py            # 50Hz 闭环仿真（lat→lon→vehicle step）
 ├── run_demo.py            # 可视化 Demo（--save --no-show --config）
-├── compare_results.py     # 调参前后对比（轨迹 + 横向误差对比图）
+├── compare_results.py     # [deprecated, 已被 post_training.py 取代] 旧版 4 场景对比
 ├── health_check.py        # 一键体检（测试 + 基线性能 + 梯度健康）
 ├── model/
 │   ├── vehicle.py         # BicycleModel — 运动学模型 (x,y,yaw,v)，dt=0.02s
@@ -30,8 +30,8 @@ sim/
 │   ├── lat_truck.py       # LatControllerTruck (nn.Module, 可微:T2-T6, 固定:kLh/T1/T7/T8)
 │   └── lon.py             # LonController (nn.Module, 可微:7 PID, 固定:L1-L5)
 ├── optim/
-│   ├── train.py           # 可微调参（参数快照、分轨迹 loss、完整训练历史）
-│   └── post_training.py   # 训练后自动化（loss 曲线、对比图、实验日志）
+│   ├── train.py           # 可微调参（TBPTT、参数快照、分轨迹 loss、自动 post_training）
+│   └── post_training.py   # 训练后自动化（loss 曲线、24 场景对比图×5 种、参数变化图、实验日志）
 ├── configs/
 │   ├── default.yaml       # 默认参数（C++ 原始控制器参数，作为训练基线）
 │   └── tuned/             # 调参结果 YAML（文件名含 commit hash + timestamp）
@@ -50,11 +50,13 @@ sim/
 
 **仿真**：`trajectory` 生成参考轨迹 → `sim_loop` 每步调用 `lat_ctrl.compute()` → `lon_ctrl.compute()` → `vehicle.step()` → 记录 history
 
-**训练**：`DiffControllerParams` 封装两个控制器（nn.Module） → `sim_loop(differentiable=True)` 构建计算图 → `tracking_loss` 汇总误差（横向/航向/速度/平滑度） → `backward()` → Adam 更新 nn.Parameter → `save_tuned_config` 导出 YAML
+**训练**：`DiffControllerParams` 封装两个控制器（nn.Module） → `sim_loop(differentiable=True, tbptt_k=K)` 构建计算图（每 K 步 detach 状态截断梯度链） → `tracking_loss` 汇总误差 → `backward()` → Adam 更新 nn.Parameter → `save_tuned_config` 导出 YAML
+
+**loss 公式**：`loss = w_lat(10) × lat_mse + w_head(5) × head_mse + w_speed(1) × speed_mse + w_steer_rate(0.01) × Δsteer² + w_acc_rate(0.01) × Δacc²`。括号内为默认权重。横向误差主导，平滑度为正则项。
 
 **梯度路径**：loss → history 中的 tensor → vehicle 状态传播 → 控制器输出 → 查找表 y 值 / PID 增益（nn.Parameter）。不可微操作的处理：rate_limit 用 Straight-Through Estimator，条件分支用 smooth_step 混合，argmin 用 detach 隔离。
 
-**验证**：训练使用平滑近似（`differentiable=True`），得到的参数必须用原始硬限幅控制器（`differentiable=False`，即 V1 路径）重新跑仿真验证，确保参数在真实限幅逻辑下同样有效。`run_demo.py --config` 默认即为 V1 路径。
+**验证**：训练使用平滑近似（`differentiable=True`），得到的参数必须用原始硬限幅控制器（`differentiable=False`，即 V1 路径）重新跑仿真验证，确保参数在真实限幅逻辑下同样有效。验证覆盖 24 场景（6 速度段 × 4 几何：圆弧/换道/双换道/组合，速度 5~55 kph）。
 
 ## 常用命令
 
@@ -70,6 +72,21 @@ python optim/train.py --epochs 50 --trajectories circle sine lane_change_40kph  
 python optim/train.py --plant dynamic --epochs 50           # 训练（动力学模型）
 python optim/train.py --plant hybrid_dynamic --epochs 50    # 训练（混合模型）
 ```
+
+## train.py 参数速查
+
+| 参数 | 默认 | 说明 |
+|------|------|------|
+| `--epochs` | 100 | 训练轮数 |
+| `--lr` | 1e-2 | 主学习率（PID 增益） |
+| `--lr-tables` | 1e-2 | 查找表 y 值学习率 |
+| `--trajectories` | None（全部） | 训练轨迹名，空格分隔 |
+| `--speed` | 5.0 | 仿真速度 (m/s) |
+| `--sim-length` | None | 仿真距离限制 (m) |
+| `--tbptt-k` | 64 | TBPTT 截断窗口（步数） |
+| `--grad-clip` | 10.0 | 梯度范数裁剪阈值 |
+| `--snapshot-interval` | 10 | 参数快照间隔（epoch） |
+| `--plant` | None | 被控对象：kinematic / dynamic / hybrid_dynamic |
 
 ## 与 controller_spec.md 的差异
 
@@ -111,12 +128,6 @@ python optim/train.py --plant hybrid_dynamic --epochs 50    # 训练（混合模
 | 纵向 | L5_y (acc_rate_gain) | 安全约束辅助 |
 | 横向 | rate_limit_fb/ff/total | 硬编码安全约束 |
 
-## 参考文档
-
-- `docs/controller_spec.md` — 控制器完整规格
-- `docs/tunable_params_analysis.md` — 可调参数分析
-- `docs/plans/2026-03-02-differentiable-tuning-v2-design.md` — V2 设计
-
 ## 训练规范
 
 - **训练脚本必须实时打印每个 epoch 的进度**，包括：loss、各分项 RMSE（lat/head/speed）、梯度范数、耗时、NaN 梯度数
@@ -128,6 +139,15 @@ python optim/train.py --plant hybrid_dynamic --epochs 50    # 训练（混合模
 ## 梯度爆炸防治（关键！）
 
 **将硬限幅代码改为可微版本时，先化简数学表达式再选择近似方式**。例如 `sign(x)*min(|x|,L)` 本质是 `clamp(x,-L,L)`，直接用 STE clamp（导数=1）而非 smooth_sign（导数=100）。smooth 近似的 temperature 过小会导致 BPTT 链式乘法溢出（梯度爆炸≠loss 爆炸，用有限差分可验证真实梯度有界）。详见 `docs/bptt_gradient_explosion_analysis.md`。
+
+## hybrid_dynamic 模型关键约束
+
+- **必须用 Euler 积分**：MLP 训练时 base 用 Euler，用 RK4 会导致残差不匹配
+- **参数与 dynamic 不同**：corner_stiff=56000, air_density=1.206（与 MLP 训练时一致，不同于 dynamic 的 80000/1.225）
+- **MLP 冻结**：权重 requires_grad=False，但梯度通过计算图流到控制器参数
+- **Checkpoint 路径**：`../../plant/best_error_model_from_carsim.pth`（相对于 sim/）
+- **MLP 输入**：[state(6), delta_sw(1), T_rl(1), T_rr(1), dt(1)] = 10D，归一化后输入
+- **MLP 输出**：3D [Δvx, Δvy, Δr] → 旋转到世界系 → ×dt 得位置修正 → 拼接为 6D
 
 ## 备注
 
