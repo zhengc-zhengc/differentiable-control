@@ -198,7 +198,13 @@ _EVAL_SCENARIOS = [
 ]
 
 
-def run_comparison(tuned_config_path, output_dir, verbose=True, plant=None):
+def get_scenario_keys():
+    """返回所有可用场景的 key 列表。"""
+    return [key for key, _, _, _ in _EVAL_SCENARIOS]
+
+
+def run_comparison(tuned_config_path, output_dir, verbose=True, plant=None,
+                   scenarios=None):
     """用 V1 路径（float）跑 baseline vs tuned 对比，生成 4 种对比图 + 返回指标。
 
     Args:
@@ -206,6 +212,7 @@ def run_comparison(tuned_config_path, output_dir, verbose=True, plant=None):
         output_dir: 输出目录路径
         verbose: 是否打印指标表格
         plant: 被控对象类型 ('kinematic'/'dynamic')，None 使用配置默认值
+        scenarios: 场景 key 列表，None 则使用全部 _EVAL_SCENARIOS
 
     Returns:
         comparison_metrics: {scenario_key: {baseline, tuned, delta_lat_pct, delta_head_pct}}
@@ -215,6 +222,18 @@ def run_comparison(tuned_config_path, output_dir, verbose=True, plant=None):
     if plant:
         cfg_base['vehicle']['model_type'] = plant
         cfg_tuned['vehicle']['model_type'] = plant
+
+    # 场景过滤
+    if scenarios is not None:
+        valid_keys = {key for key, _, _, _ in _EVAL_SCENARIOS}
+        invalid = [s for s in scenarios if s not in valid_keys]
+        if invalid:
+            raise ValueError(f"未知场景: {invalid}。可用场景: {sorted(valid_keys)}")
+        scenario_set = set(scenarios)
+        eval_scenarios = [(k, n, fn, v) for k, n, fn, v in _EVAL_SCENARIOS
+                          if k in scenario_set]
+    else:
+        eval_scenarios = _EVAL_SCENARIOS
 
     all_base = []
     all_tuned = []
@@ -226,7 +245,7 @@ def run_comparison(tuned_config_path, output_dir, verbose=True, plant=None):
 
     comparison_metrics = {}
 
-    for key, name, traj_fn, init_v in _EVAL_SCENARIOS:
+    for key, name, traj_fn, init_v in eval_scenarios:
         traj = traj_fn()
         h_base = run_simulation(traj, init_speed=init_v, cfg=cfg_base)
         h_tuned = run_simulation(traj, init_speed=init_v, cfg=cfg_tuned)
@@ -684,6 +703,67 @@ def plot_parameter_changes(train_result, output_dir):
     return path
 
 
+def run_validation(tuned_config_path, output_dir=None, verbose=True,
+                    plant=None, scenarios=None):
+    """独立验证入口：仅跑 V1 对比 + 生成对比图，不需要 train_result。
+
+    Args:
+        tuned_config_path: 调参后的配置文件路径
+        output_dir: 输出目录（None 则自动生成 results/validation/{plant}/{timestamp}/）
+        verbose: 是否打印进度
+        plant: 被控对象类型，None 使用配置默认值
+        scenarios: 场景 key 列表，None 则使用全部 28 场景
+
+    Returns:
+        output_dir: 产物保存目录路径
+    """
+    if output_dir is None:
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        sim_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
+        plant_name = plant or 'kinematic'
+        output_dir = _ensure_dir(os.path.join(sim_dir, 'results', 'validation',
+                                              plant_name, timestamp))
+
+    _ensure_dir(output_dir)
+
+    if verbose:
+        print(f"\n{'='*60}")
+        print(f"独立验证 — 配置: {tuned_config_path}")
+        if scenarios:
+            print(f"  场景: {', '.join(scenarios)}")
+        else:
+            print(f"  场景: 全部 {len(_EVAL_SCENARIOS)} 个")
+        print(f"  产物保存到: {output_dir}")
+        print(f"{'='*60}\n")
+
+    comparison_metrics = run_comparison(tuned_config_path, output_dir,
+                                        verbose=verbose, plant=plant,
+                                        scenarios=scenarios)
+
+    # 复制 tuned config 到产物目录
+    shutil.copy2(tuned_config_path,
+                 os.path.join(output_dir, os.path.basename(tuned_config_path)))
+
+    if verbose:
+        # 汇总统计
+        n_improved = sum(1 for v in comparison_metrics.values()
+                         if v['delta_lat_pct'] < 0)
+        n_degraded = sum(1 for v in comparison_metrics.values()
+                         if v['delta_lat_pct'] > 0)
+        avg_lat = (sum(v['delta_lat_pct'] for v in comparison_metrics.values())
+                   / len(comparison_metrics))
+        avg_head = (sum(v['delta_head_pct'] for v in comparison_metrics.values())
+                    / len(comparison_metrics))
+        print(f"\n--- 验证汇总 ---")
+        print(f"  场景数: {len(comparison_metrics)} "
+              f"(改善: {n_improved}, 退化: {n_degraded})")
+        print(f"  平均 lat_rmse 变化: {avg_lat:+.2f}%")
+        print(f"  平均 head_rmse 变化: {avg_head:+.2f}%")
+        print(f"  产物目录: {output_dir}")
+
+    return output_dir
+
+
 def run_post_training(train_result, hyperparams, verbose=True, plant=None):
     """训练后一站式自动化入口。
 
@@ -748,3 +828,25 @@ def run_post_training(train_result, hyperparams, verbose=True, plant=None):
         print(f"\n训练产物已全部保存到: {output_dir}")
 
     return output_dir
+
+
+if __name__ == '__main__':
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description='独立验证：用 V1 路径跑 baseline vs tuned 对比',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=f"可用场景 key:\n  {', '.join(get_scenario_keys())}")
+    parser.add_argument('--config', required=True,
+                        help='调参后的配置文件路径（YAML）')
+    parser.add_argument('--scenarios', nargs='+', default=None,
+                        help='验证场景 key 列表（空格分隔），默认全部 28 个场景')
+    parser.add_argument('--plant', default=None,
+                        choices=['kinematic', 'dynamic', 'hybrid_dynamic'],
+                        help='被控对象类型，默认使用配置中的值')
+    parser.add_argument('--output-dir', default=None,
+                        help='输出目录，默认 results/validation/{plant}/{timestamp}/')
+    args = parser.parse_args()
+
+    run_validation(args.config, output_dir=args.output_dir, plant=args.plant,
+                   scenarios=args.scenarios)
