@@ -31,7 +31,7 @@ sim/
 │   └── lon.py             # LonController (nn.Module, 可微:7 PID, 固定:L1-L5)
 ├── optim/
 │   ├── train.py           # 可微调参（per-traj loss 归一化、CosineAnnealing、L2 正则、warm-start、TBPTT）
-│   └── post_training.py   # 训练后自动化（loss 曲线、28 场景对比图、参数变化图、实验日志）
+│   └── post_training.py   # 训练后自动化 + 独立验证 CLI（loss 曲线、28 场景对比图、参数变化图、实验日志）
 ├── configs/
 │   ├── default.yaml       # 默认参数（C++ 原始控制器参数，作为训练基线）
 │   └── tuned/             # 调参结果 YAML（文件名含 commit hash + timestamp）
@@ -71,6 +71,9 @@ python run_demo.py --config configs/tuned/xxx.yaml          # 加载调参结果
 python optim/train.py --plant hybrid_dynamic --epochs 6     # 快速训练（推荐：6 条轨迹，单 epoch < 90s）
 python optim/train.py --plant hybrid_dynamic --epochs 6 --config configs/tuned/xxx.yaml  # warm-start 继续训练
 python optim/train.py --trajectories clothoid_left_35kph lane_change_55kph  # 指定轨迹
+python optim/post_training.py --config configs/tuned/xxx.yaml              # 独立验证（全部 28 场景）
+python optim/post_training.py --config configs/tuned/xxx.yaml --scenarios circle lane_change  # 指定场景验证
+python optim/post_training.py --config configs/tuned/xxx.yaml --plant dynamic  # 指定被控对象验证
 ```
 
 ## train.py 参数速查
