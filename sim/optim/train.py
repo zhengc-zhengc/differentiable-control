@@ -343,6 +343,8 @@ def train(trajectories=None, n_epochs=100, lr=5e-2, lr_tables=5e-2,
     training_history = []
     initial_params = {name: p.detach().clone() for name, p in params.named_parameters()}
     baseline_traj_losses = {}  # 第 1 epoch 记录各轨迹 baseline loss，用于归一化
+    norm_floor = 1.0  # 归一化下限（第 1 epoch 结束后更新为中位数^alpha）
+    norm_alpha = 0.5  # 软归一化指数：0=不归一化，1=完全归一化
     import time as _time
     t_start = _time.time()
 
@@ -383,14 +385,24 @@ def train(trajectories=None, n_epochs=100, lr=5e-2, lr_tables=5e-2,
                                           w_acc_rate=w_acc_rate,
                                           return_details=True)
 
-            # Per-trajectory loss 归一化：第 1 epoch 记录 baseline，
-            # 后续 epoch 除以 baseline 使各轨迹贡献均等
+            # Per-trajectory loss 软归一化：baseline^alpha + 中位数下限
+            # 防止已经很好的轨迹被过度放大，同时压低高 loss 轨迹的主导地位
             if epoch == 0:
                 baseline_traj_losses[traj_name] = max(loss.detach().item(), 1e-6)
-            norm_factor = baseline_traj_losses.get(traj_name, 1.0)
+            raw_baseline = baseline_traj_losses.get(traj_name, 1.0)
+            norm_factor = max(raw_baseline ** norm_alpha, norm_floor)
             epoch_loss = epoch_loss + loss / norm_factor
 
             traj_details[traj_name] = details
+
+        # 第 1 epoch 结束后，用中位数 baseline 设置归一化下限
+        if epoch == 0 and len(baseline_traj_losses) > 1:
+            sorted_baselines = sorted(baseline_traj_losses.values())
+            median_baseline = sorted_baselines[len(sorted_baselines) // 2]
+            norm_floor = median_baseline ** norm_alpha
+            if verbose:
+                print(f"  归一化下限: median_baseline={median_baseline:.4f}, "
+                      f"norm_floor={norm_floor:.4f} (alpha={norm_alpha})")
 
         epoch_loss = epoch_loss / len(trajectories)
 
