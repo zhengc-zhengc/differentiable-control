@@ -19,13 +19,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from config import load_config, save_tuned_config
 from controller.lat_truck import LatControllerTruck
 from controller.lon import LonController
-from model.trajectory import (generate_straight, generate_circle,
-                              generate_combined, generate_lane_change,
-                              generate_double_lane_change,
-                              generate_s_curve, generate_offset_recovery,
-                              generate_compound_curve, generate_clothoid_turn,
-                              generate_uturn, generate_stop_and_go,
-                              generate_park_route)
+from model.trajectory import (expand_trajectories, TRAJECTORY_TYPES,
+                              SPEED_BANDS_KPH)
 from sim_loop import run_simulation
 
 
@@ -135,151 +130,40 @@ def tracking_loss(history, ref_speed,
     return loss
 
 
-# ---------- 轨迹生成器映射 ----------
-# builder(speed) → list[TrajectoryPoint]
-# 带 _<N>kph 后缀的条目内置速度（忽略传入 speed），用于覆盖查找表的不同速度断点。
-# 查找表 T1-T8 断点为 [0,10,20,30,40,50,60] km/h，训练时需多种速度覆盖全部断点。
-#
-# 速度覆盖设计：
-#   训练：每段 lane_change + combined（12 条）
-#   验证：每段 circle + lane_change + double_lane_change + combined（24 条）
-#
-# 速度段 → 断点 [0,10,20,30,40,50,60] km/h：
-#   0-10 km/h  : *_5kph    (5 km/h = 1.4 m/s)
-#   10-20 km/h : 基础名    (默认 5 m/s = 18 kph)
-#   20-30 km/h : *_25kph   (25 km/h = 6.9 m/s)
-#   30-40 km/h : *_35kph   (35 km/h = 9.7 m/s)
-#   40-50 km/h : *_45kph   (45 km/h = 12.5 m/s)
-#   50-60 km/h : *_55kph   (55 km/h = 15.3 m/s)
-_TRAJECTORY_BUILDERS = {
-    # ---- 基础几何（使用全局 speed，默认 5m/s=18kph → 覆盖 10-20）----
-    'straight': lambda speed: generate_straight(length=200, speed=speed),
-    'circle': lambda speed: generate_circle(radius=30.0, speed=speed,
-                                            arc_angle=3.14159 / 2),
-    'combined': lambda speed: generate_combined(speed=speed),
-    'lane_change': lambda speed: generate_lane_change(lane_width=3.5,
-                                                      change_length=50.0,
-                                                      speed=speed),
-    'double_lane_change': lambda speed: generate_double_lane_change(
-        lane_width=3.5, change_length=50.0, speed=speed),
-    's_curve': lambda speed: generate_s_curve(
-        radius=50.0, arc_angle=3.14159 / 4, speed=speed),
-    'compound_curve': lambda speed: generate_compound_curve(speed=speed),
-    'offset_recovery': lambda speed: generate_offset_recovery(speed=speed),
-    'offset_recovery_curve': lambda speed: generate_offset_recovery(
-        speed=speed, curvature=1.0 / 80.0),
+def _build_traj_list(type_names, verbose=True):
+    """将 CLI 类型名展开为 [(key, generator), ...] 训练列表。
 
-    # ---- 真实工况轨迹 ----
-    'clothoid_left': lambda speed: generate_clothoid_turn(
-        radius=40.0, turn_angle=3.14159 / 2, speed=speed),
-    'clothoid_right': lambda speed: generate_clothoid_turn(
-        radius=40.0, turn_angle=-3.14159 / 2, speed=speed),
-    'clothoid_left_35kph': lambda _: generate_clothoid_turn(
-        radius=50.0, turn_angle=3.14159 / 2, speed=35.0 / 3.6),
-    'clothoid_right_35kph': lambda _: generate_clothoid_turn(
-        radius=50.0, turn_angle=-3.14159 / 2, speed=35.0 / 3.6),
-    'clothoid_left_45kph': lambda _: generate_clothoid_turn(
-        radius=60.0, turn_angle=3.14159 / 2, speed=45.0 / 3.6),
-    'clothoid_right_45kph': lambda _: generate_clothoid_turn(
-        radius=60.0, turn_angle=-3.14159 / 2, speed=45.0 / 3.6),
-    'clothoid_left_55kph': lambda _: generate_clothoid_turn(
-        radius=70.0, turn_angle=3.14159 / 3, speed=55.0 / 3.6),
-    'clothoid_right_55kph': lambda _: generate_clothoid_turn(
-        radius=70.0, turn_angle=-3.14159 / 3, speed=55.0 / 3.6),
-    'uturn': lambda speed: generate_uturn(radius=15.0, speed=speed),
-    'uturn_5kph': lambda _: generate_uturn(radius=10.0, speed=5.0 / 3.6),
-    'stop_and_go': lambda speed: generate_stop_and_go(cruise_speed=speed),
-    'park_route': lambda _: generate_park_route(),
+    Args:
+        type_names: 轨迹类型名列表，None 则使用全部 TRAJECTORY_TYPES (8×6=48 条)
 
-    # ---- 0-10 km/h（低速：5 km/h = 1.4 m/s）----
-    'circle_5kph': lambda _: generate_circle(
-        radius=15.0, speed=5.0 / 3.6, arc_angle=3.14159),
-    'lane_change_5kph': lambda _: generate_lane_change(
-        lane_width=3.5, change_length=30.0, speed=5.0 / 3.6),
-    'double_lc_5kph': lambda _: generate_double_lane_change(
-        lane_width=3.5, change_length=30.0, speed=5.0 / 3.6),
-    'combined_5kph': lambda _: generate_combined(speed=5.0 / 3.6),
-    's_curve_5kph': lambda _: generate_s_curve(
-        radius=30.0, arc_angle=3.14159 / 4, speed=5.0 / 3.6),
-    'compound_5kph': lambda _: generate_compound_curve(speed=5.0 / 3.6, radius=30.0),
-    'offset_recovery_5kph': lambda _: generate_offset_recovery(speed=5.0 / 3.6),
-
-    # ---- 20-30 km/h（25 km/h = 6.9 m/s）----
-    'circle_25kph': lambda _: generate_circle(
-        radius=35.0, speed=25.0 / 3.6, arc_angle=3.14159 / 2),
-    'lane_change_25kph': lambda _: generate_lane_change(
-        lane_width=3.5, change_length=40.0, speed=25.0 / 3.6),
-    'double_lc_25kph': lambda _: generate_double_lane_change(
-        lane_width=3.5, change_length=40.0, speed=25.0 / 3.6),
-    'combined_25kph': lambda _: generate_combined(speed=25.0 / 3.6),
-    's_curve_25kph': lambda _: generate_s_curve(
-        radius=50.0, arc_angle=3.14159 / 4, speed=25.0 / 3.6),
-    'compound_25kph': lambda _: generate_compound_curve(speed=25.0 / 3.6, radius=50.0),
-    'offset_recovery_25kph': lambda _: generate_offset_recovery(speed=25.0 / 3.6),
-
-    # ---- 30-40 km/h（35 km/h = 9.7 m/s）----
-    'circle_35kph': lambda _: generate_circle(
-        radius=50.0, speed=35.0 / 3.6, arc_angle=3.14159 / 2),
-    'lane_change_35kph': lambda _: generate_lane_change(
-        lane_width=3.5, change_length=55.0, speed=35.0 / 3.6),
-    'double_lc_35kph': lambda _: generate_double_lane_change(
-        lane_width=3.5, change_length=55.0, speed=35.0 / 3.6),
-    'combined_35kph': lambda _: generate_combined(speed=35.0 / 3.6),
-    's_curve_35kph': lambda _: generate_s_curve(
-        radius=60.0, arc_angle=3.14159 / 4, speed=35.0 / 3.6),
-    'compound_35kph': lambda _: generate_compound_curve(speed=35.0 / 3.6, radius=60.0),
-    'offset_recovery_35kph': lambda _: generate_offset_recovery(speed=35.0 / 3.6),
-
-    # ---- 40-50 km/h（45 km/h = 12.5 m/s）----
-    'circle_45kph': lambda _: generate_circle(
-        radius=60.0, speed=45.0 / 3.6, arc_angle=3.14159 / 2),
-    'lane_change_45kph': lambda _: generate_lane_change(
-        lane_width=3.5, change_length=75.0, speed=45.0 / 3.6),
-    'double_lc_45kph': lambda _: generate_double_lane_change(
-        lane_width=3.5, change_length=75.0, speed=45.0 / 3.6),
-    'combined_45kph': lambda _: generate_combined(speed=45.0 / 3.6),
-    's_curve_45kph': lambda _: generate_s_curve(
-        radius=70.0, arc_angle=3.14159 / 4, speed=45.0 / 3.6),
-    'compound_45kph': lambda _: generate_compound_curve(speed=45.0 / 3.6, radius=70.0),
-    'offset_recovery_45kph': lambda _: generate_offset_recovery(speed=45.0 / 3.6),
-
-    # ---- 50-60 km/h（55 km/h = 15.3 m/s）----
-    'circle_55kph': lambda _: generate_circle(
-        radius=70.0, speed=55.0 / 3.6, arc_angle=3.14159 / 2),
-    'lane_change_55kph': lambda _: generate_lane_change(
-        lane_width=3.5, change_length=90.0, speed=55.0 / 3.6),
-    'double_lc_55kph': lambda _: generate_double_lane_change(
-        lane_width=3.5, change_length=90.0, speed=55.0 / 3.6),
-    'combined_55kph': lambda _: generate_combined(speed=55.0 / 3.6),
-    's_curve_55kph': lambda _: generate_s_curve(
-        radius=80.0, arc_angle=3.14159 / 4, speed=55.0 / 3.6),
-    'compound_55kph': lambda _: generate_compound_curve(speed=55.0 / 3.6, radius=80.0),
-    'offset_recovery_55kph': lambda _: generate_offset_recovery(speed=55.0 / 3.6),
-}
-
-# 偏移恢复轨迹的初始状态覆盖：(init_y_offset, init_yaw_offset_rad)
-# 车辆从参考轨迹起点偏移 1.5m 横向 + 5° 航向误差开始
-import math as _math
-_OFFSET_RECOVERY_INIT = {
-    name: {'init_y': 1.5, 'init_yaw': 5.0 * _math.pi / 180.0}
-    for name in _TRAJECTORY_BUILDERS if 'offset_recovery' in name
-}
+    Returns:
+        list of (key, lazy_generator) tuples
+    """
+    expanded = expand_trajectories(type_names)
+    if verbose:
+        n_types = len(type_names) if type_names else len(TRAJECTORY_TYPES)
+        n_bands = len(SPEED_BANDS_KPH)
+        print(f"训练轨迹: {n_types} 类型 × {n_bands} 速度段 = {len(expanded)} 条")
+        types_str = ', '.join(type_names) if type_names else '全部'
+        print(f"  类型: {types_str}")
+        print(f"  速度段: {SPEED_BANDS_KPH} kph")
+    return [(key, gen) for key, _label, gen in expanded]
 
 
 def train(trajectories=None, n_epochs=100, lr=5e-2, lr_tables=5e-2,
-          sim_length=None, sim_speed=5.0, tbptt_k=150, grad_clip=10.0,
+          sim_length=None, tbptt_k=150, grad_clip=10.0,
           param_snapshot_interval=10, verbose=True, plant=None,
           config_path=None, w_lat=10.0, w_head=8.0, w_speed=3.0,
           w_steer_rate=0.05, w_acc_rate=0.01):
     """运行可微调参训练。
 
     Args:
-        trajectories: 轨迹名列表，如 ['circle', 'combined', 'lane_change']
+        trajectories: 轨迹类型名列表，如 ['lane_change', 'clothoid_decel']。
+                      每个类型自动展开到全 6 速度段。None 则全量训练 (8×6=48 条)。
         n_epochs: 训练轮数
         lr: 主学习率（PID 增益等标量参数）
         lr_tables: 查找表 y 值学习率（通常低于主学习率）
         sim_length: 仿真距离限制 (m)，None 为全长
-        sim_speed: 仿真速度 (m/s)
         tbptt_k: Truncated BPTT 窗口大小（步数），每 K 步截断梯度链
         grad_clip: 全局梯度范数裁剪阈值
         param_snapshot_interval: 参数快照打印间隔（epoch 数），0 表示不打印
@@ -293,16 +177,7 @@ def train(trajectories=None, n_epochs=100, lr=5e-2, lr_tables=5e-2,
         dict: {'losses', 'training_history', 'initial_params', 'final_params',
                'saved_path', 'params'}
     """
-    if trajectories is None:
-        # 优化后的默认训练集：6 条轨迹覆盖 18/35/55 kph 三个速度段
-        # 使用 clothoid 弯道（渐变曲率，更贴近真实道路）替代纯弧线
-        # 实验验证：6 epoch 即可获得 30-46% 横向改善，单 epoch < 90s
-        trajectories = [
-            'lane_change', 'combined',              # 18 kph（换道+组合弯道）
-            'clothoid_left_35kph',                   # 35 kph 左转 clothoid
-            'clothoid_right_35kph',                  # 35 kph 右转 clothoid
-            'lane_change_55kph', 'combined_55kph',   # 55 kph（高速换道+组合）
-        ]
+    traj_list = _build_traj_list(trajectories, verbose=verbose)
 
     cfg = load_config(config_path)
     if plant:
@@ -339,6 +214,8 @@ def train(trajectories=None, n_epochs=100, lr=5e-2, lr_tables=5e-2,
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer, T_max=n_epochs, eta_min=lr * 0.1)
 
+    traj_keys = [key for key, _gen in traj_list]
+
     losses = []
     training_history = []
     initial_params = {name: p.detach().clone() for name, p in params.named_parameters()}
@@ -354,26 +231,20 @@ def train(trajectories=None, n_epochs=100, lr=5e-2, lr_tables=5e-2,
         epoch_loss = torch.tensor(0.0)
         traj_details = {}
 
-        for traj_name in trajectories:
-            builder = _TRAJECTORY_BUILDERS[traj_name]
-            traj = builder(sim_speed)
-            # 从轨迹本身提取速度（多速度条目内置不同速度）
+        for traj_key, traj_gen in traj_list:
+            traj = traj_gen()
+            # 从轨迹本身提取速度（变速轨迹取初始速度）
             traj_speed = traj[0].v
 
             if sim_length is not None:
-                max_t = sim_length / traj_speed
+                max_t = sim_length / max(traj_speed, 0.1)
                 traj = [p for p in traj if p.t <= max_t]
                 if len(traj) < 10:
                     continue
 
-            # 偏移恢复轨迹需要非零初始偏移
-            init_overrides = _OFFSET_RECOVERY_INIT.get(traj_name, {})
-            init_y = traj[0].y + init_overrides.get('init_y', 0.0)
-            init_yaw = traj[0].theta + init_overrides.get('init_yaw', 0.0)
-
             history = run_simulation(
                 traj, init_speed=traj_speed,
-                init_x=traj[0].x, init_y=init_y, init_yaw=init_yaw,
+                init_x=traj[0].x, init_y=traj[0].y, init_yaw=traj[0].theta,
                 cfg=params.cfg,
                 lat_ctrl=params.lat_ctrl, lon_ctrl=params.lon_ctrl,
                 differentiable=True, tbptt_k=tbptt_k)
@@ -386,14 +257,13 @@ def train(trajectories=None, n_epochs=100, lr=5e-2, lr_tables=5e-2,
                                           return_details=True)
 
             # Per-trajectory loss 软归一化：baseline^alpha + 中位数下限
-            # 防止已经很好的轨迹被过度放大，同时压低高 loss 轨迹的主导地位
             if epoch == 0:
-                baseline_traj_losses[traj_name] = max(loss.detach().item(), 1e-6)
-            raw_baseline = baseline_traj_losses.get(traj_name, 1.0)
+                baseline_traj_losses[traj_key] = max(loss.detach().item(), 1e-6)
+            raw_baseline = baseline_traj_losses.get(traj_key, 1.0)
             norm_factor = max(raw_baseline ** norm_alpha, norm_floor)
             epoch_loss = epoch_loss + loss / norm_factor
 
-            traj_details[traj_name] = details
+            traj_details[traj_key] = details
 
         # 第 1 epoch 结束后，用中位数 baseline 设置归一化下限
         if epoch == 0 and len(baseline_traj_losses) > 1:
@@ -404,7 +274,7 @@ def train(trajectories=None, n_epochs=100, lr=5e-2, lr_tables=5e-2,
                 print(f"  归一化下限: median_baseline={median_baseline:.4f}, "
                       f"norm_floor={norm_floor:.4f} (alpha={norm_alpha})")
 
-        epoch_loss = epoch_loss / len(trajectories)
+        epoch_loss = epoch_loss / len(traj_list)
 
         # L2 正则化：惩罚参数偏离初始值，防止过拟合
         l2_reg = torch.tensor(0.0)
@@ -474,11 +344,11 @@ def train(trajectories=None, n_epochs=100, lr=5e-2, lr_tables=5e-2,
                   f"dt={dt:.1f}s{nan_warn}",
                   flush=True)
 
-        if verbose and len(trajectories) > 1:
-            for tn in trajectories:
-                if tn in traj_details:
-                    td = traj_details[tn]
-                    print(f"    {tn:12s}: lat={td['lat_rmse']:.4f} head={td['head_rmse']:.4f} "
+        if verbose and len(traj_list) > 1:
+            for traj_key in traj_keys:
+                if traj_key in traj_details:
+                    td = traj_details[traj_key]
+                    print(f"    {traj_key:30s}: lat={td['lat_rmse']:.4f} head={td['head_rmse']:.4f} "
                           f"spd={td['speed_rmse']:.4f} | "
                           f"L_lat={td['loss_lat']:.3f} L_head={td['loss_head']:.3f} "
                           f"L_spd={td['loss_speed']:.3f}")
@@ -511,11 +381,14 @@ def train(trajectories=None, n_epochs=100, lr=5e-2, lr_tables=5e-2,
 
     # 保存调参结果
     cfg_out = params.to_config_dict()
+    type_names = trajectories if trajectories else TRAJECTORY_TYPES
     saved_path = save_tuned_config(cfg_out, meta={
         'final_loss': losses[-1],
         'initial_loss': losses[0],
         'epochs': n_epochs,
-        'trajectories': trajectories,
+        'trajectory_types': type_names,
+        'trajectory_count': len(traj_list),
+        'speed_bands_kph': SPEED_BANDS_KPH,
         'lr': lr,
         'lr_tables': lr_tables,
         'tbptt_k': tbptt_k,
@@ -530,7 +403,8 @@ def train(trajectories=None, n_epochs=100, lr=5e-2, lr_tables=5e-2,
 
     return {
         'losses': losses,
-        'trajectories': trajectories,
+        'trajectory_types': trajectories if trajectories else TRAJECTORY_TYPES,
+        'trajectory_keys': traj_keys,
         'training_history': training_history,
         'initial_params': {name: p.cpu().tolist() if p.numel() > 1 else p.item()
                            for name, p in initial_params.items()},
@@ -550,10 +424,9 @@ if __name__ == '__main__':
     parser.add_argument('--lr-tables', type=float, default=5e-2,
                         help='查找表 y 值学习率')
     parser.add_argument('--trajectories', nargs='+', default=None,
-                        help='训练轨迹，默认全速度覆盖（可用: ' +
-                             ', '.join(sorted(_TRAJECTORY_BUILDERS.keys())) + '）')
-    parser.add_argument('--speed', type=float, default=5.0,
-                        help='仿真速度 (m/s)')
+                        help='轨迹类型名，自动展开到全速度段。'
+                             '默认全量训练 (8×6=48 条)。可用类型: ' +
+                             ', '.join(TRAJECTORY_TYPES))
     parser.add_argument('--sim-length', type=float, default=None,
                         help='仿真距离限制 (m)')
     parser.add_argument('--tbptt-k', type=int, default=150,
@@ -581,7 +454,6 @@ if __name__ == '__main__':
 
     result = train(trajectories=args.trajectories, n_epochs=args.epochs,
                    lr=args.lr, lr_tables=args.lr_tables,
-                   sim_speed=args.speed,
                    sim_length=args.sim_length,
                    tbptt_k=args.tbptt_k,
                    grad_clip=args.grad_clip,
@@ -601,8 +473,7 @@ if __name__ == '__main__':
         'epochs': args.epochs,
         'lr': args.lr,
         'lr_tables': args.lr_tables,
-        'trajectories': result['trajectories'],
-        'speed': args.speed,
+        'trajectory_types': result['trajectory_types'],
         'sim_length': args.sim_length,
         'tbptt_k': args.tbptt_k,
         'grad_clip': args.grad_clip,
@@ -611,4 +482,5 @@ if __name__ == '__main__':
         'w_head': args.w_head,
         'w_speed': args.w_speed,
     }
-    run_post_training(result, hyperparams, plant=args.plant)
+    run_post_training(result, hyperparams, plant=args.plant,
+                      trajectory_types=args.trajectories)

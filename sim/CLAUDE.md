@@ -25,13 +25,13 @@ sim/
 │   ├── dynamic_vehicle.py # DynamicVehicle — 6-DOF 动力学模型适配器，接口与 BicycleModel 一致
 │   ├── hybrid_dynamic_vehicle.py # HybridDynamicVehicle — 机理模型+MLP 残差修正（plant 仓库集成）
 │   ├── vehicle_factory.py # create_vehicle() — 根据 cfg 创建 kinematic/dynamic/hybrid_dynamic 模型
-│   └── trajectory.py      # 13+ 种轨迹生成（含 clothoid/uturn/stop_and_go/park_route）+ TrajectoryAnalyzer
+│   └── trajectory.py      # 轨迹生成（8 标准类型×6 速度段 + park_route）、变速剖面、expand_trajectories() + TrajectoryAnalyzer
 ├── controller/
 │   ├── lat_truck.py       # LatControllerTruck (nn.Module, 可微:T2-T4/T6, 固定:kLh/T1/T5/T7/T8)
 │   └── lon.py             # LonController (nn.Module, 可微:7 PID, 固定:L1-L5)
 ├── optim/
-│   ├── train.py           # 可微调参（per-traj loss 归一化、CosineAnnealing、L2 正则、warm-start、TBPTT）
-│   └── post_training.py   # 训练后自动化 + 独立验证 CLI（loss 曲线、28 场景对比图、参数变化图、实验日志）
+│   ├── train.py           # 可微调参（--trajectories 接收类型名自动展开全速度段、per-traj loss 归一化、TBPTT）
+│   └── post_training.py   # 训练后自动化 + 独立验证 CLI（49 场景对比图、参数变化图、实验日志）
 ├── configs/
 │   ├── default.yaml       # 默认参数（C++ 原始控制器参数，作为训练基线）
 │   └── tuned/             # 调参结果 YAML（文件名含 commit hash + timestamp）
@@ -56,7 +56,7 @@ sim/
 
 **梯度路径**：loss → history 中的 tensor → vehicle 状态传播 → 控制器输出 → 查找表 y 值 / PID 增益（nn.Parameter）。不可微操作的处理：rate_limit 用 Straight-Through Estimator，条件分支用 smooth_step 混合，argmin 用 detach 隔离。T6 梯度通过 `query_by_time_differentiable` 回传（仅在变曲率轨迹上有梯度）。
 
-**验证**：训练使用平滑近似（`differentiable=True`），得到的参数必须用原始硬限幅控制器（`differentiable=False`，即 V1 路径）重新跑仿真验证，确保参数在真实限幅逻辑下同样有效。验证覆盖 28 场景（7 速度段 × 4 几何：圆弧/换道/双换道/组合，速度 5~55 kph）。
+**验证**：训练使用平滑近似（`differentiable=True`），得到的参数必须用原始硬限幅控制器（`differentiable=False`，即 V1 路径）重新跑仿真验证，确保参数在真实限幅逻辑下同样有效。验证覆盖 49 场景（8 类型 × 6 速度段 + park_route，速度 5~55 kph）。
 
 ## 常用命令
 
@@ -68,11 +68,12 @@ python run_demo.py --save --no-show                         # 生成结果图（
 python run_demo.py --plant dynamic --save --no-show         # 生成结果图（动力学模型）
 python run_demo.py --plant hybrid_dynamic --save --no-show  # 生成结果图（混合模型，需 plant checkpoint）
 python run_demo.py --config configs/tuned/xxx.yaml          # 加载调参结果
-python optim/train.py --plant hybrid_dynamic --epochs 6     # 快速训练（推荐：6 条轨迹，单 epoch < 90s）
-python optim/train.py --plant hybrid_dynamic --epochs 6 --config configs/tuned/xxx.yaml  # warm-start 继续训练
-python optim/train.py --trajectories clothoid_left_35kph lane_change_55kph  # 指定轨迹
-python optim/post_training.py --config configs/tuned/xxx.yaml              # 独立验证（全部 28 场景）
-python optim/post_training.py --config configs/tuned/xxx.yaml --scenarios circle lane_change  # 指定场景验证
+python optim/train.py --epochs 6                            # 全量训练（8 类型×6 速度段=48 条轨迹）
+python optim/train.py --trajectories lane_change clothoid_decel  # 指定类型（自动展开到全速度段）
+python optim/train.py --config configs/tuned/xxx.yaml --epochs 6  # warm-start 继续训练
+python optim/train.py --plant hybrid_dynamic --epochs 6     # 指定被控对象
+python optim/post_training.py --config configs/tuned/xxx.yaml              # 独立验证（全量 49 场景）
+python optim/post_training.py --config configs/tuned/xxx.yaml --trajectories lane_change  # 指定类型验证
 python optim/post_training.py --config configs/tuned/xxx.yaml --plant dynamic  # 指定被控对象验证
 ```
 
@@ -83,8 +84,7 @@ python optim/post_training.py --config configs/tuned/xxx.yaml --plant dynamic  #
 | `--epochs` | 100 | 训练轮数（推荐 6，快速迭代） |
 | `--lr` | 5e-2 | 主学习率（PID 增益） |
 | `--lr-tables` | 5e-2 | 查找表 y 值学习率 |
-| `--trajectories` | None（6 条默认） | 训练轨迹名，空格分隔 |
-| `--speed` | 5.0 | 基础仿真速度 (m/s) |
+| `--trajectories` | None（全量 8×6=48） | 轨迹类型名，自动展开到全速度段 |
 | `--sim-length` | None | 仿真距离限制 (m) |
 | `--tbptt-k` | 150 | TBPTT 截断窗口（步数，3 秒） |
 | `--grad-clip` | 10.0 | 梯度范数裁剪阈值 |
@@ -150,7 +150,7 @@ python optim/post_training.py --config configs/tuned/xxx.yaml --plant dynamic  #
 
 ## 训练最佳实践
 
-**默认训练集**（6 条轨迹，覆盖 18/35/55 kph）：lane_change, combined, clothoid_left_35kph, clothoid_right_35kph, lane_change_55kph, combined_55kph。单 epoch ~90s。
+**默认训练集**（8 类型 × 6 速度段 = 48 条轨迹）：lane_change, double_lc, clothoid_left, clothoid_right, s_curve（恒速）+ combined_decel, clothoid_decel（弯前减速）+ lc_accel（梯形加减速），覆盖 5/18/25/35/45/55 kph 全速度段。
 
 **推荐流程**：默认配置训练 6 epoch → 检查 V1 验证 → warm-start 继续训练 → 若 5kph 退化 > 15% 或 heading 退化 > 30% 则停止。
 

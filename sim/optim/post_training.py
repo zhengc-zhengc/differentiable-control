@@ -16,10 +16,8 @@ import yaml
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from config import load_config, _get_commit_hash, _tensor_to_python
-from model.trajectory import (generate_circle, generate_combined,
-                              generate_lane_change,
-                              generate_double_lane_change,
-                              generate_s_curve, generate_compound_curve)
+from model.trajectory import (expand_trajectories, generate_park_route,
+                              TRAJECTORY_TYPES, SPEED_BANDS_KPH)
 from sim_loop import run_simulation
 
 plt.rcParams['font.sans-serif'] = ['Microsoft YaHei', 'SimHei', 'DejaVu Sans']
@@ -131,88 +129,41 @@ def _calc_metrics(history):
     }
 
 
-_EVAL_SCENARIOS = [
-    # ---- 0-10 km/h（5 km/h = 1.4 m/s）----
-    ('circle_5kph', '圆弧 (5kph)',
-     lambda: generate_circle(radius=15.0, speed=5.0 / 3.6, arc_angle=math.pi), 5.0 / 3.6),
-    ('lane_change_5kph', '换道 (5kph)',
-     lambda: generate_lane_change(lane_width=3.5, change_length=30.0, speed=5.0 / 3.6), 5.0 / 3.6),
-    ('double_lc_5kph', '双换道 (5kph)',
-     lambda: generate_double_lane_change(lane_width=3.5, change_length=30.0, speed=5.0 / 3.6), 5.0 / 3.6),
-    ('combined_5kph', '组合 (5kph)',
-     lambda: generate_combined(speed=5.0 / 3.6), 5.0 / 3.6),
-    # ---- 10-20 km/h（默认 5 m/s = 18 kph）----
-    ('circle', '圆弧 (18kph)',
-     lambda: generate_circle(radius=30.0, speed=5.0, arc_angle=math.pi), 5.0),
-    ('lane_change', '换道 (18kph)',
-     lambda: generate_lane_change(lane_width=3.5, change_length=50.0, speed=5.0), 5.0),
-    ('double_lane_change', '双换道 (18kph)',
-     lambda: generate_double_lane_change(lane_width=3.5, change_length=50.0, speed=5.0), 5.0),
-    ('combined', '组合 (18kph)',
-     lambda: generate_combined(speed=5.0), 5.0),
-    # ---- 20-30 km/h（25 km/h = 6.9 m/s）----
-    ('circle_25kph', '圆弧 (25kph)',
-     lambda: generate_circle(radius=35.0, speed=25.0 / 3.6, arc_angle=math.pi / 2), 25.0 / 3.6),
-    ('lane_change_25kph', '换道 (25kph)',
-     lambda: generate_lane_change(lane_width=3.5, change_length=40.0, speed=25.0 / 3.6), 25.0 / 3.6),
-    ('double_lc_25kph', '双换道 (25kph)',
-     lambda: generate_double_lane_change(lane_width=3.5, change_length=40.0, speed=25.0 / 3.6), 25.0 / 3.6),
-    ('combined_25kph', '组合 (25kph)',
-     lambda: generate_combined(speed=25.0 / 3.6), 25.0 / 3.6),
-    # ---- 30-40 km/h（35 km/h = 9.7 m/s）----
-    ('circle_35kph', '圆弧 (35kph)',
-     lambda: generate_circle(radius=50.0, speed=35.0 / 3.6, arc_angle=math.pi / 2), 35.0 / 3.6),
-    ('lane_change_35kph', '换道 (35kph)',
-     lambda: generate_lane_change(lane_width=3.5, change_length=55.0, speed=35.0 / 3.6), 35.0 / 3.6),
-    ('double_lc_35kph', '双换道 (35kph)',
-     lambda: generate_double_lane_change(lane_width=3.5, change_length=55.0, speed=35.0 / 3.6), 35.0 / 3.6),
-    ('combined_35kph', '组合 (35kph)',
-     lambda: generate_combined(speed=35.0 / 3.6), 35.0 / 3.6),
-    # ---- 40-50 km/h（45 km/h = 12.5 m/s）----
-    ('circle_45kph', '圆弧 (45kph)',
-     lambda: generate_circle(radius=60.0, speed=45.0 / 3.6, arc_angle=math.pi / 2), 45.0 / 3.6),
-    ('lane_change_45kph', '换道 (45kph)',
-     lambda: generate_lane_change(lane_width=3.5, change_length=75.0, speed=45.0 / 3.6), 45.0 / 3.6),
-    ('double_lc_45kph', '双换道 (45kph)',
-     lambda: generate_double_lane_change(lane_width=3.5, change_length=75.0, speed=45.0 / 3.6), 45.0 / 3.6),
-    ('combined_45kph', '组合 (45kph)',
-     lambda: generate_combined(speed=45.0 / 3.6), 45.0 / 3.6),
-    # ---- 50-60 km/h（55 km/h = 15.3 m/s）----
-    ('circle_55kph', '圆弧 (55kph)',
-     lambda: generate_circle(radius=70.0, speed=55.0 / 3.6, arc_angle=math.pi / 2), 55.0 / 3.6),
-    ('lane_change_55kph', '换道 (55kph)',
-     lambda: generate_lane_change(lane_width=3.5, change_length=90.0, speed=55.0 / 3.6), 55.0 / 3.6),
-    ('double_lc_55kph', '双换道 (55kph)',
-     lambda: generate_double_lane_change(lane_width=3.5, change_length=90.0, speed=55.0 / 3.6), 55.0 / 3.6),
-    ('combined_55kph', '组合 (55kph)',
-     lambda: generate_combined(speed=55.0 / 3.6), 55.0 / 3.6),
-    # ---- 新增几何类型（代表性速度）----
-    ('s_curve', 'S弯 (18kph)',
-     lambda: generate_s_curve(radius=50.0, arc_angle=math.pi / 4, speed=5.0), 5.0),
-    ('s_curve_35kph', 'S弯 (35kph)',
-     lambda: generate_s_curve(radius=60.0, arc_angle=math.pi / 4, speed=35.0 / 3.6), 35.0 / 3.6),
-    ('compound', '复合弯 (18kph)',
-     lambda: generate_compound_curve(speed=5.0), 5.0),
-    ('compound_35kph', '复合弯 (35kph)',
-     lambda: generate_compound_curve(speed=35.0 / 3.6, radius=60.0), 35.0 / 3.6),
-]
+def _build_eval_scenarios(trajectory_types=None):
+    """构建验证场景列表：类型×速度段 + park_route。
+
+    Args:
+        trajectory_types: 轨迹类型名列表，None 则使用全部 TRAJECTORY_TYPES
+
+    Returns:
+        [(key, label, generator, init_speed), ...]
+    """
+    expanded = expand_trajectories(trajectory_types)
+    scenarios = []
+    for key, label, gen in expanded:
+        # 从 generator 获取 init_speed（生成后取首点速度）
+        scenarios.append((key, label, gen))
+
+    # 始终追加 park_route
+    scenarios.append(('park_route', '园区综合', generate_park_route))
+    return scenarios
 
 
-def get_scenario_keys():
+def get_scenario_keys(trajectory_types=None):
     """返回所有可用场景的 key 列表。"""
-    return [key for key, _, _, _ in _EVAL_SCENARIOS]
+    return [key for key, _, _ in _build_eval_scenarios(trajectory_types)]
 
 
 def run_comparison(tuned_config_path, output_dir, verbose=True, plant=None,
-                   scenarios=None):
-    """用 V1 路径（float）跑 baseline vs tuned 对比，生成 4 种对比图 + 返回指标。
+                   trajectory_types=None):
+    """用 V1 路径（float）跑 baseline vs tuned 对比，生成对比图 + 返回指标。
 
     Args:
         tuned_config_path: 调参后的配置文件路径
         output_dir: 输出目录路径
         verbose: 是否打印指标表格
         plant: 被控对象类型 ('kinematic'/'dynamic')，None 使用配置默认值
-        scenarios: 场景 key 列表，None 则使用全部 _EVAL_SCENARIOS
+        trajectory_types: 轨迹类型名列表，None 则使用全部（8×6 + park_route = 49）
 
     Returns:
         comparison_metrics: {scenario_key: {baseline, tuned, delta_lat_pct, delta_head_pct}}
@@ -223,30 +174,27 @@ def run_comparison(tuned_config_path, output_dir, verbose=True, plant=None,
         cfg_base['vehicle']['model_type'] = plant
         cfg_tuned['vehicle']['model_type'] = plant
 
-    # 场景过滤
-    if scenarios is not None:
-        valid_keys = {key for key, _, _, _ in _EVAL_SCENARIOS}
-        invalid = [s for s in scenarios if s not in valid_keys]
-        if invalid:
-            raise ValueError(f"未知场景: {invalid}。可用场景: {sorted(valid_keys)}")
-        scenario_set = set(scenarios)
-        eval_scenarios = [(k, n, fn, v) for k, n, fn, v in _EVAL_SCENARIOS
-                          if k in scenario_set]
-    else:
-        eval_scenarios = _EVAL_SCENARIOS
+    eval_scenarios = _build_eval_scenarios(trajectory_types)
 
     all_base = []
     all_tuned = []
+    # key → label 映射，用于图表
+    scenario_labels = {}
 
     if verbose:
-        header = f"{'场景':<25} {'':>8} {'lat_rmse(m)':>12} {'head_rmse(rad)':>14} {'lat_max(m)':>10}"
+        n_total = len(eval_scenarios)
+        header = f"{'场景':<35} {'':>8} {'lat_rmse(m)':>12} {'head_rmse(rad)':>14} {'lat_max(m)':>10}"
         print(header)
         print('-' * len(header))
 
     comparison_metrics = {}
 
-    for key, name, traj_fn, init_v in eval_scenarios:
-        traj = traj_fn()
+    for idx, (key, name, traj_gen) in enumerate(eval_scenarios):
+        traj = traj_gen()
+        init_v = traj[0].v
+        scenario_labels[key] = name
+        if verbose:
+            print(f"  [{idx+1}/{len(eval_scenarios)}] {name}...", end='', flush=True)
         h_base = run_simulation(traj, init_speed=init_v, cfg=cfg_base)
         h_tuned = run_simulation(traj, init_speed=init_v, cfg=cfg_tuned)
         m_base = _calc_metrics(h_base)
@@ -268,12 +216,12 @@ def run_comparison(tuned_config_path, output_dir, verbose=True, plant=None,
         }
 
         if verbose:
-            print(f"{name:<25} {'baseline':>8} {m_base['lat_rmse']:>12.4f} "
-                  f"{m_base['head_rmse']:>14.4f} {m_base['lat_max']:>10.4f}")
-            print(f"{'':25} {'tuned':>8} {m_tuned['lat_rmse']:>12.4f} "
-                  f"{m_tuned['head_rmse']:>14.4f} {m_tuned['lat_max']:>10.4f}")
-            print(f"{'':25} {'delta':>8} {d_lat:>+11.1f}% {d_head:>+13.1f}%")
-            print()
+            sign_lat = '+' if d_lat > 0 else ''
+            sign_head = '+' if d_head > 0 else ''
+            print(f" lat: {m_base['lat_rmse']:.4f}→{m_tuned['lat_rmse']:.4f} "
+                  f"({sign_lat}{d_lat:.1f}%) "
+                  f"head: {m_base['head_rmse']:.4f}→{m_tuned['head_rmse']:.4f} "
+                  f"({sign_head}{d_head:.1f}%)")
 
     # 5 种对比图
     _plot_comparison_grid(all_base, all_tuned, output_dir,
@@ -287,7 +235,7 @@ def run_comparison(tuned_config_path, output_dir, verbose=True, plant=None,
     _plot_comparison_grid(all_base, all_tuned, output_dir,
                           plot_type='acc', filename='comparison_acc.png')
 
-    return comparison_metrics
+    return comparison_metrics, scenario_labels
 
 
 def _plot_comparison_grid(all_base, all_tuned, output_dir, plot_type, filename):
@@ -454,7 +402,8 @@ def save_experiment_log(train_result, comparison_metrics, output_dir,
     return path
 
 
-def plot_training_summary(train_result, comparison_metrics, hyperparams, output_dir):
+def plot_training_summary(train_result, comparison_metrics, hyperparams, output_dir,
+                          scenario_labels=None):
     """训练摘要仪表板：上半表格（超参+指标对比），下半柱状图（lat_rmse 变化%）。"""
     n_scenarios = len(comparison_metrics)
     fig_h = max(14, 12 + (n_scenarios - 8) * 0.3)  # 场景多时增大高度
@@ -471,11 +420,16 @@ def plot_training_summary(train_result, comparison_metrics, hyperparams, output_
     loss_n = train_result['losses'][-1]
     loss_pct = (loss_n - loss_0) / loss_0 * 100
 
+    traj_types = hyperparams.get('trajectory_types', [])
+    traj_str = ', '.join(traj_types) if isinstance(traj_types, list) else str(traj_types)
+    if len(traj_str) > 40:
+        traj_str = traj_str[:37] + '...'
+
     info_data = [
         ['Epochs', str(hyperparams.get('epochs', '?'))],
         ['学习率', f"{hyperparams.get('lr', '?')}"],
-        ['轨迹', ', '.join(hyperparams.get('trajectories', []))],
-        ['速度 (m/s)', f"{hyperparams.get('speed', '?')}"],
+        ['轨迹类型', traj_str],
+        ['速度段 (kph)', ', '.join(str(s) for s in SPEED_BANDS_KPH)],
         ['TBPTT-K', str(hyperparams.get('tbptt_k', '?'))],
         ['梯度裁剪', str(hyperparams.get('grad_clip', '?'))],
         ['初始 Loss', f"{loss_0:.4f}"],
@@ -501,8 +455,8 @@ def plot_training_summary(train_result, comparison_metrics, hyperparams, output_
     ax_comp.axis('off')
     ax_comp.set_title('V1 路径验证（baseline vs tuned）', fontsize=12, pad=10)
 
-    # 从 _EVAL_SCENARIOS 的显示名提取简短名
-    scenario_names = {key: label for key, label, _, _ in _EVAL_SCENARIOS}
+    # 从 scenario_labels 获取显示名（由 run_comparison 传入或重建）
+    scenario_names = scenario_labels or {k: k for k in comparison_metrics}
     comp_data = []
     for key in comparison_metrics:
         cm = comparison_metrics[key]
@@ -704,7 +658,7 @@ def plot_parameter_changes(train_result, output_dir):
 
 
 def run_validation(tuned_config_path, output_dir=None, verbose=True,
-                    plant=None, scenarios=None):
+                    plant=None, trajectory_types=None):
     """独立验证入口：仅跑 V1 对比 + 生成对比图，不需要 train_result。
 
     Args:
@@ -712,7 +666,7 @@ def run_validation(tuned_config_path, output_dir=None, verbose=True,
         output_dir: 输出目录（None 则自动生成 results/validation/{plant}/{timestamp}/）
         verbose: 是否打印进度
         plant: 被控对象类型，None 使用配置默认值
-        scenarios: 场景 key 列表，None 则使用全部 28 场景
+        trajectory_types: 轨迹类型名列表，None 则全量验证
 
     Returns:
         output_dir: 产物保存目录路径
@@ -725,20 +679,20 @@ def run_validation(tuned_config_path, output_dir=None, verbose=True,
                                               plant_name, timestamp))
 
     _ensure_dir(output_dir)
+    eval_scenarios = _build_eval_scenarios(trajectory_types)
 
     if verbose:
+        types_str = ', '.join(trajectory_types) if trajectory_types else '全部'
         print(f"\n{'='*60}")
         print(f"独立验证 — 配置: {tuned_config_path}")
-        if scenarios:
-            print(f"  场景: {', '.join(scenarios)}")
-        else:
-            print(f"  场景: 全部 {len(_EVAL_SCENARIOS)} 个")
+        print(f"  类型: {types_str}")
+        print(f"  场景数: {len(eval_scenarios)} (含 park_route)")
         print(f"  产物保存到: {output_dir}")
         print(f"{'='*60}\n")
 
-    comparison_metrics = run_comparison(tuned_config_path, output_dir,
-                                        verbose=verbose, plant=plant,
-                                        scenarios=scenarios)
+    comparison_metrics, scenario_labels = run_comparison(
+        tuned_config_path, output_dir, verbose=verbose, plant=plant,
+        trajectory_types=trajectory_types)
 
     # 复制 tuned config 到产物目录
     shutil.copy2(tuned_config_path,
@@ -764,7 +718,8 @@ def run_validation(tuned_config_path, output_dir=None, verbose=True,
     return output_dir
 
 
-def run_post_training(train_result, hyperparams, verbose=True, plant=None):
+def run_post_training(train_result, hyperparams, verbose=True, plant=None,
+                      trajectory_types=None):
     """训练后一站式自动化入口。
 
     Args:
@@ -772,6 +727,7 @@ def run_post_training(train_result, hyperparams, verbose=True, plant=None):
         hyperparams: 训练超参数 dict
         verbose: 是否打印进度
         plant: 被控对象类型 ('kinematic'/'dynamic')，None 使用配置默认值
+        trajectory_types: 验证用轨迹类型，None 则全量
 
     Returns:
         output_dir: 产物保存目录路径
@@ -793,19 +749,21 @@ def run_post_training(train_result, hyperparams, verbose=True, plant=None):
         print(f"  Loss 曲线: {p}")
 
     # 2. 分轨迹 loss 分项
-    trajectories = hyperparams.get('trajectories', ['circle', 'combined', 'lane_change'])
-    p = plot_loss_breakdown(train_result['training_history'], trajectories, output_dir)
+    traj_keys = train_result.get('trajectory_keys', [])
+    p = plot_loss_breakdown(train_result['training_history'], traj_keys, output_dir)
     if verbose:
         print(f"  Loss 分项: {p}")
 
     # 3. V1 路径对比
     if verbose:
         print(f"\n  --- V1 路径验证（baseline vs tuned）---")
-    comparison_metrics = run_comparison(train_result['saved_path'], output_dir,
-                                        verbose=verbose, plant=plant)
+    comparison_metrics, scenario_labels = run_comparison(
+        train_result['saved_path'], output_dir, verbose=verbose, plant=plant,
+        trajectory_types=trajectory_types)
 
     # 4. 训练摘要仪表板
-    p = plot_training_summary(train_result, comparison_metrics, hyperparams, output_dir)
+    p = plot_training_summary(train_result, comparison_metrics, hyperparams, output_dir,
+                              scenario_labels=scenario_labels)
     if verbose:
         print(f"  训练摘要: {p}")
 
@@ -836,11 +794,12 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description='独立验证：用 V1 路径跑 baseline vs tuned 对比',
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=f"可用场景 key:\n  {', '.join(get_scenario_keys())}")
+        epilog=f"可用轨迹类型:\n  {', '.join(TRAJECTORY_TYPES)}")
     parser.add_argument('--config', required=True,
                         help='调参后的配置文件路径（YAML）')
-    parser.add_argument('--scenarios', nargs='+', default=None,
-                        help='验证场景 key 列表（空格分隔），默认全部 28 个场景')
+    parser.add_argument('--trajectories', nargs='+', default=None,
+                        help='轨迹类型名（自动展开到全速度段 + park_route）。'
+                             '默认全量验证 (8×6+1=49)')
     parser.add_argument('--plant', default=None,
                         choices=['kinematic', 'dynamic', 'hybrid_dynamic'],
                         help='被控对象类型，默认使用配置中的值')
@@ -849,4 +808,4 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     run_validation(args.config, output_dir=args.output_dir, plant=args.plant,
-                   scenarios=args.scenarios)
+                   trajectory_types=args.trajectories)

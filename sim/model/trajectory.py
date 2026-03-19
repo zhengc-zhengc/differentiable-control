@@ -89,13 +89,15 @@ def generate_sine(amplitude: float, wavelength: float, n_waves: float,
 
 
 def generate_combined(speed: float, dt: float = 0.02,
-                      seg3_length: float = 30.0) -> list[TrajectoryPoint]:
-    """生成组合轨迹：直线(30m) -> 左转圆弧(R=30m, 90度) -> 直线(seg3_length)。"""
+                      seg3_length: float = 30.0,
+                      radius: float = 30.0,
+                      lead_in: float = 30.0) -> list[TrajectoryPoint]:
+    """生成组合轨迹：直线(lead_in) -> 左转圆弧(R, 90度) -> 直线(seg3_length)。"""
     pts = []
     s = 0.0
     t = 0.0
 
-    seg1_len = 30.0
+    seg1_len = lead_in
     n1 = int(seg1_len / (speed * dt))
     for i in range(n1):
         x = speed * i * dt
@@ -104,7 +106,7 @@ def generate_combined(speed: float, dt: float = 0.02,
         s += speed * dt
         t += dt
 
-    R = 30.0
+    R = radius
     arc = math.pi / 2
     arc_len = R * arc
     n2 = int(arc_len / (speed * dt))
@@ -830,6 +832,266 @@ def generate_compound_curve(speed: float, radius: float = 50.0,
                             last.x, last.y, theta_mid2, s, t)
 
     return pts
+
+
+# ---------------------------------------------------------------------------
+# 变速剖面后处理
+# ---------------------------------------------------------------------------
+
+def apply_curvature_speed_profile(
+    pts: list[TrajectoryPoint],
+    v_cruise: float,
+    a_lat_max: float = 2.0,
+    decel_rate: float = 0.8,
+    accel_rate: float = 0.5,
+) -> list[TrajectoryPoint]:
+    """根据曲率约束生成弯前减速/弯后加速的速度剖面。
+
+    算法：
+      1. 曲率上限: v_max[i] = min(v_cruise, sqrt(a_lat_max / |κ|))
+      2. 前向约束（减速）: v[i] <= sqrt(v[i-1]² + 2·decel_rate·ds)
+      3. 后向约束（加速）: v[i] <= sqrt(v[i+1]² + 2·accel_rate·ds)
+      4. 更新 v 和 a
+    """
+    n = len(pts)
+    if n < 2:
+        return pts
+
+    eps = 1e-6
+    # 1) 曲率速度上限
+    v_max = [0.0] * n
+    for i in range(n):
+        kabs = abs(pts[i].kappa)
+        v_curv = math.sqrt(a_lat_max / max(kabs, eps)) if kabs > eps else v_cruise
+        v_max[i] = min(v_cruise, v_curv)
+
+    # 2) 前向约束（减速限制）
+    v_fwd = [0.0] * n
+    v_fwd[0] = v_max[0]
+    for i in range(1, n):
+        ds = pts[i].s - pts[i - 1].s
+        ds = max(ds, eps)
+        v_lim = math.sqrt(v_fwd[i - 1] ** 2 + 2 * decel_rate * ds)
+        v_fwd[i] = min(v_max[i], v_lim)
+
+    # 3) 后向约束（加速限制）
+    v_bwd = [0.0] * n
+    v_bwd[-1] = v_fwd[-1]
+    for i in range(n - 2, -1, -1):
+        ds = pts[i + 1].s - pts[i].s
+        ds = max(ds, eps)
+        v_lim = math.sqrt(v_bwd[i + 1] ** 2 + 2 * accel_rate * ds)
+        v_bwd[i] = min(v_fwd[i], v_lim)
+
+    # 4) 生成新轨迹点
+    dt = pts[1].t - pts[0].t if pts[1].t > pts[0].t else 0.02
+    result = []
+    for i in range(n):
+        v_new = v_bwd[i]
+        a_new = (v_bwd[i] - v_bwd[i - 1]) / dt if i > 0 and dt > 0 else 0.0
+        result.append(TrajectoryPoint(
+            x=pts[i].x, y=pts[i].y, theta=pts[i].theta, kappa=pts[i].kappa,
+            v=v_new, a=a_new, s=pts[i].s, t=pts[i].t,
+        ))
+    return result
+
+
+def apply_trapezoidal_speed_profile(
+    pts: list[TrajectoryPoint],
+    v_base: float,
+    delta_ratio: float = 0.15,
+    accel_rate: float = 0.5,
+) -> list[TrajectoryPoint]:
+    """在轨迹上叠加梯形速度波动：v_lo → 加速到 v_hi → 巡航 → 减速到 v_lo。
+
+    速度剖面按弧长分配：
+      [0, s1]: 起步巡航 v_lo
+      [s1, s2]: 加速 v_lo → v_hi
+      [s2, s3]: 高速巡航 v_hi
+      [s3, s4]: 减速 v_hi → v_lo
+      [s4, end]: 收尾巡航 v_lo
+    """
+    n = len(pts)
+    if n < 2:
+        return pts
+
+    v_lo = v_base * (1.0 - delta_ratio)
+    v_hi = v_base * (1.0 + delta_ratio)
+    delta_v = v_hi - v_lo
+
+    total_s = pts[-1].s - pts[0].s
+    if total_s < 1e-3 or delta_v < 1e-6:
+        return pts
+
+    # 加减速所需距离: v_hi² - v_lo² = 2·a·d → d = (v_hi²-v_lo²)/(2·a)
+    d_accel = (v_hi ** 2 - v_lo ** 2) / (2 * accel_rate)
+    d_decel = d_accel  # 对称
+
+    # 如果加减速距离超过总长的 80%，按比例缩小 delta_ratio
+    if 2 * d_accel > 0.8 * total_s:
+        d_accel = 0.4 * total_s
+        d_decel = d_accel
+        # 反算实际 v_hi: v_hi² = v_lo² + 2·a·d
+        v_hi = math.sqrt(v_lo ** 2 + 2 * accel_rate * d_accel)
+        delta_v = v_hi - v_lo
+
+    # 弧长分段: 巡航(20%) → 加速 → 高速巡航 → 减速 → 巡航(20%)
+    s0 = pts[0].s
+    cruise_margin = 0.10 * total_s  # 前后各 10% 低速巡航
+    s1 = s0 + cruise_margin                  # 加速起点
+    s2 = s1 + d_accel                        # 加速终点
+    s4 = s0 + total_s - cruise_margin        # 减速终点
+    s3 = s4 - d_decel                        # 减速起点
+
+    # 安全检查：确保 s2 <= s3
+    if s2 > s3:
+        s_mid = (s1 + s4) / 2
+        s2 = s_mid
+        s3 = s_mid
+
+    dt = pts[1].t - pts[0].t if pts[1].t > pts[0].t else 0.02
+    result = []
+    for i in range(n):
+        s = pts[i].s
+        if s <= s1:
+            v_new = v_lo
+        elif s <= s2:
+            frac = (s - s1) / max(s2 - s1, 1e-6)
+            v_new = v_lo + frac * delta_v
+        elif s <= s3:
+            v_new = v_hi
+        elif s <= s4:
+            frac = (s - s3) / max(s4 - s3, 1e-6)
+            v_new = v_hi - frac * delta_v
+        else:
+            v_new = v_lo
+
+        a_new = (v_new - (result[-1].v if result else v_new)) / dt if dt > 0 else 0.0
+        result.append(TrajectoryPoint(
+            x=pts[i].x, y=pts[i].y, theta=pts[i].theta, kappa=pts[i].kappa,
+            v=v_new, a=a_new, s=pts[i].s, t=pts[i].t,
+        ))
+    return result
+
+
+# ---------------------------------------------------------------------------
+# 速度段参数表 + 轨迹类型注册表
+# ---------------------------------------------------------------------------
+
+SPEED_BANDS_KPH = [5, 18, 25, 35, 45, 55]
+
+# 每个速度段的几何参数
+_SPEED_PARAMS = {
+    5:  {'lc_len': 30, 'r_clothoid': 20, 'clothoid_angle': math.pi / 2,
+         'r_combined': 15, 'r_scurve': 30, 'scurve_angle': math.pi / 4},
+    18: {'lc_len': 50, 'r_clothoid': 40, 'clothoid_angle': math.pi / 2,
+         'r_combined': 30, 'r_scurve': 50, 'scurve_angle': math.pi / 4},
+    25: {'lc_len': 40, 'r_clothoid': 45, 'clothoid_angle': math.pi / 2,
+         'r_combined': 35, 'r_scurve': 50, 'scurve_angle': math.pi / 4},
+    35: {'lc_len': 55, 'r_clothoid': 50, 'clothoid_angle': math.pi / 2,
+         'r_combined': 40, 'r_scurve': 60, 'scurve_angle': math.pi / 4},
+    45: {'lc_len': 75, 'r_clothoid': 60, 'clothoid_angle': math.pi / 2,
+         'r_combined': 50, 'r_scurve': 70, 'scurve_angle': math.pi / 4},
+    55: {'lc_len': 90, 'r_clothoid': 70, 'clothoid_angle': math.pi / 3,
+         'r_combined': 60, 'r_scurve': 80, 'scurve_angle': math.pi / 4},
+}
+
+
+def _build_trajectory(ttype: str, speed_kph: int) -> list[TrajectoryPoint]:
+    """根据类型名和速度段生成轨迹。"""
+    spd = speed_kph / 3.6
+    p = _SPEED_PARAMS[speed_kph]
+
+    if ttype == 'lane_change':
+        return generate_lane_change(lane_width=3.5, change_length=p['lc_len'],
+                                    speed=spd)
+    elif ttype == 'double_lc':
+        return generate_double_lane_change(lane_width=3.5,
+                                           change_length=p['lc_len'], speed=spd)
+    elif ttype == 'clothoid_left':
+        return generate_clothoid_turn(radius=p['r_clothoid'],
+                                      turn_angle=p['clothoid_angle'], speed=spd)
+    elif ttype == 'clothoid_right':
+        return generate_clothoid_turn(radius=p['r_clothoid'],
+                                      turn_angle=-p['clothoid_angle'], speed=spd)
+    elif ttype == 's_curve':
+        return generate_s_curve(radius=p['r_scurve'],
+                                arc_angle=p['scurve_angle'], speed=spd)
+    elif ttype == 'combined_decel':
+        # 使用速度段对应的弯道半径 + 充足的进入直线段（确保高速有足够减速距离）
+        lead_in = max(30.0, spd * 6.0)  # 至少 6 秒预减速距离
+        base = generate_combined(speed=spd, radius=p['r_combined'],
+                                 lead_in=lead_in, seg3_length=lead_in)
+        return apply_curvature_speed_profile(base, v_cruise=spd)
+    elif ttype == 'clothoid_decel':
+        # 用较小半径确保高速段有明显减速，加长 lead_in/out 给足加减速距离
+        r_decel = max(15.0, p['r_clothoid'] * 0.6)
+        lead = max(30.0, spd * 6.0)
+        base = generate_clothoid_turn(radius=r_decel,
+                                      turn_angle=p['clothoid_angle'], speed=spd,
+                                      lead_in=lead, lead_out=lead)
+        return apply_curvature_speed_profile(base, v_cruise=spd)
+    elif ttype == 'lc_accel':
+        base = generate_lane_change(lane_width=3.5, change_length=p['lc_len'],
+                                    speed=spd)
+        return apply_trapezoidal_speed_profile(base, v_base=spd)
+    else:
+        raise ValueError(f"Unknown trajectory type: {ttype}")
+
+
+# 标准类型集（8 种）
+TRAJECTORY_TYPES = [
+    'lane_change', 'double_lc', 'clothoid_left', 'clothoid_right', 's_curve',
+    'combined_decel', 'clothoid_decel', 'lc_accel',
+]
+
+# 中文标签（用于图表显示）
+_TYPE_LABELS = {
+    'lane_change': '单换道',
+    'double_lc': '双换道',
+    'clothoid_left': '左转clothoid',
+    'clothoid_right': '右转clothoid',
+    's_curve': 'S弯',
+    'combined_decel': '组合弯(变速)',
+    'clothoid_decel': 'clothoid(变速)',
+    'lc_accel': '换道(变速)',
+    'park_route': '园区综合',
+}
+
+
+def expand_trajectories(type_names: list[str] | None = None,
+                        speed_bands: list[int] | None = None,
+                        ) -> list[tuple[str, str, 'Callable']]:
+    """将类型名展开为 (key, label, generator) 列表。
+
+    Args:
+        type_names: 轨迹类型列表，None 则使用全部 TRAJECTORY_TYPES
+        speed_bands: 速度段列表 (kph)，None 则使用全部 SPEED_BANDS_KPH
+
+    Returns:
+        [(key, label, lazy_generator), ...] 其中 key 如 'lane_change_35kph',
+        label 如 '单换道 (35kph)', lazy_generator 为无参函数返回轨迹点列表。
+    """
+    types = type_names if type_names is not None else TRAJECTORY_TYPES
+    bands = speed_bands if speed_bands is not None else SPEED_BANDS_KPH
+
+    result = []
+    for tname in types:
+        if tname not in _TYPE_LABELS:
+            raise ValueError(
+                f"Unknown trajectory type '{tname}'. "
+                f"Available: {TRAJECTORY_TYPES}")
+        for kph in bands:
+            if kph not in _SPEED_PARAMS:
+                raise ValueError(
+                    f"Unknown speed band {kph} kph. "
+                    f"Available: {SPEED_BANDS_KPH}")
+            key = f"{tname}_{kph}kph"
+            label = f"{_TYPE_LABELS[tname]} ({kph}kph)"
+            # 用闭包捕获当前值
+            gen = (lambda t=tname, k=kph: _build_trajectory(t, k))
+            result.append((key, label, gen))
+    return result
 
 
 class TrajectoryAnalyzer:

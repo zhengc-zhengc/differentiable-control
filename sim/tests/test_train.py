@@ -157,11 +157,10 @@ class TestTrain:
     def test_pipeline_runs(self):
         """训练 pipeline 应能运行（短仿真 + 少 epoch）。"""
         result = train(
-            trajectories=['straight'],
+            trajectories=['lane_change'],
             n_epochs=2,
             lr=1e-2,
             sim_length=20.0,
-            sim_speed=5.0,
             verbose=False,
         )
         assert len(result['losses']) == 2
@@ -176,11 +175,10 @@ class TestTrain:
     def test_loss_finite(self):
         """训练 loss 应为有限数。"""
         result = train(
-            trajectories=['circle'],
+            trajectories=['lane_change'],
             n_epochs=3,
             lr=1e-3,
             sim_length=30.0,
-            sim_speed=5.0,
             verbose=False,
         )
         for loss_val in result['losses']:
@@ -191,11 +189,10 @@ class TestTrain:
         """保存的配置文件应可加载。"""
         from config import load_config
         result = train(
-            trajectories=['straight'],
+            trajectories=['lane_change'],
             n_epochs=2,
             lr=1e-2,
             sim_length=20.0,
-            sim_speed=5.0,
             verbose=False,
         )
         cfg = load_config(result['saved_path'])
@@ -206,29 +203,27 @@ class TestTrain:
         os.remove(result['saved_path'])
 
     def test_multi_trajectory(self):
-        """多轨迹训练应能正常运行。"""
+        """多轨迹类型训练应能正常运行。"""
         result = train(
-            trajectories=['straight', 'circle'],
+            trajectories=['lane_change', 's_curve'],
             n_epochs=2,
             lr=1e-3,
             sim_length=20.0,
-            sim_speed=5.0,
             verbose=False,
         )
         assert len(result['losses']) == 2
 
     def test_multi_speed_trajectory(self):
-        """多速度换道训练应能正常运行（覆盖查找表不同断点）。"""
+        """多速度段训练应能正常运行（类型自动展开到全速度段）。"""
         result = train(
-            trajectories=['lane_change', 'lane_change_35kph'],
+            trajectories=['lane_change'],
             n_epochs=2,
             lr=1e-3,
             sim_length=40.0,
-            sim_speed=5.0,
             verbose=False,
         )
         assert len(result['losses']) == 2
-        # 两条轨迹速度不同，per_trajectory 应各有明细
+        # 6 个速度段，per_trajectory 应各有明细
         hist = result['training_history'][0]
-        assert 'lane_change' in hist['per_trajectory']
+        assert 'lane_change_18kph' in hist['per_trajectory']
         assert 'lane_change_35kph' in hist['per_trajectory']

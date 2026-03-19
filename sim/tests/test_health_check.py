@@ -27,7 +27,7 @@ class TestCheckGradientHealth:
     def test_returns_gradient_info(self):
         from health_check import check_gradient_health
         grad_info, total_norm, loss = check_gradient_health(
-            trajectories=['circle'], sim_speed=5.0)
+            trajectories=['lane_change'])
         assert len(grad_info) > 0
         assert total_norm >= 0
         assert loss > 0
@@ -35,14 +35,14 @@ class TestCheckGradientHealth:
     def test_some_params_have_gradient(self):
         from health_check import check_gradient_health
         grad_info, _, _ = check_gradient_health(
-            trajectories=['circle'], sim_speed=5.0)
+            trajectories=['lane_change'])
         n_ok = sum(1 for g in grad_info if g['status'] == 'OK')
         assert n_ok > 0, "应至少有部分参数有非零梯度"
 
     def test_gradient_info_fields(self):
         from health_check import check_gradient_health
         grad_info, _, _ = check_gradient_health(
-            trajectories=['circle'], sim_speed=5.0)
+            trajectories=['lane_change'])
         for g in grad_info:
             assert 'name' in g
             assert 'status' in g

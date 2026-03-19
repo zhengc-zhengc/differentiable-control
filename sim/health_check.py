@@ -18,9 +18,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from config import load_config
 from model.trajectory import (generate_straight, generate_circle,
                               generate_combined,
-                              generate_double_lane_change)
+                              generate_double_lane_change,
+                              expand_trajectories)
 from sim_loop import run_simulation
-from optim.train import DiffControllerParams, tracking_loss, _TRAJECTORY_BUILDERS
+from optim.train import DiffControllerParams, tracking_loss
 
 
 def run_pytest():
@@ -76,8 +77,12 @@ def check_baseline_performance():
     return results
 
 
-def check_gradient_health(trajectories=None, sim_speed=5.0, tbptt_k=64):
+def check_gradient_health(trajectories=None, tbptt_k=64):
     """跑 1 epoch 训练（不更新参数），检查所有参数的梯度健康。
+
+    Args:
+        trajectories: 轨迹类型名列表，None 则使用 ['lane_change', 'combined_decel']
+        tbptt_k: TBPTT 截断窗口
 
     Returns:
         grad_info: list of dicts，每个参数的梯度信息
@@ -85,14 +90,14 @@ def check_gradient_health(trajectories=None, sim_speed=5.0, tbptt_k=64):
         loss: float，1 epoch 的 loss 值
     """
     if trajectories is None:
-        trajectories = ['circle', 'combined', 'double_lane_change']
+        trajectories = ['lane_change', 'combined_decel']
 
+    traj_list = expand_trajectories(trajectories, speed_bands=[18])
     params = DiffControllerParams()
 
     epoch_loss = torch.tensor(0.0)
-    for traj_name in trajectories:
-        builder = _TRAJECTORY_BUILDERS[traj_name]
-        traj = builder(sim_speed)
+    for _key, _label, traj_gen in traj_list:
+        traj = traj_gen()
         traj_speed = traj[0].v
         history = run_simulation(
             traj, init_speed=traj_speed, cfg=params.cfg,
@@ -101,7 +106,7 @@ def check_gradient_health(trajectories=None, sim_speed=5.0, tbptt_k=64):
         loss = tracking_loss(history, ref_speed=traj_speed)
         epoch_loss = epoch_loss + loss
 
-    epoch_loss = epoch_loss / len(trajectories)
+    epoch_loss = epoch_loss / len(traj_list)
     epoch_loss.backward()
 
     grad_info = []
