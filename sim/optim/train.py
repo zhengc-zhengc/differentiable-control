@@ -16,7 +16,7 @@ import torch.nn as nn
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from config import load_config, save_tuned_config
+from config import load_config, save_tuned_config, apply_plant_override
 from controller.lat_truck import LatControllerTruck
 from controller.lon import LonController
 from model.trajectory import (expand_trajectories, TRAJECTORY_TYPES,
@@ -181,7 +181,7 @@ def train(trajectories=None, n_epochs=100, lr=5e-2, lr_tables=5e-2,
 
     cfg = load_config(config_path)
     if plant:
-        cfg['vehicle']['model_type'] = plant
+        apply_plant_override(cfg, plant)
     params = DiffControllerParams(cfg=cfg)
 
     # 注册梯度钩子：在 backward 过程中立即清理 NaN/Inf 梯度
@@ -436,7 +436,7 @@ if __name__ == '__main__':
     parser.add_argument('--snapshot-interval', type=int, default=10,
                         help='参数快照打印间隔（epoch 数）')
     parser.add_argument('--plant', type=str, default=None,
-                        choices=['kinematic', 'dynamic', 'hybrid_dynamic'],
+                        choices=['kinematic', 'dynamic', 'hybrid_dynamic', 'hybrid_v2'],
                         help='被控对象类型（覆盖 YAML 配置）')
     parser.add_argument('--config', type=str, default=None,
                         help='初始参数配置路径，用于 warm-start（从上次调参结果继续）')

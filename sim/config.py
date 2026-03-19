@@ -16,6 +16,17 @@ def load_config(path: str | None = None) -> dict:
         return yaml.safe_load(f)
 
 
+def apply_plant_override(cfg: dict, plant: str) -> None:
+    """将 --plant 参数应用到配置。hybrid_v2 需要额外默认值。"""
+    cfg['vehicle']['model_type'] = plant
+    if plant == 'hybrid_v2':
+        cfg['vehicle'].setdefault('base_model', 'dynamic_v2')
+        cfg['vehicle'].setdefault('params_section', 'dynamic_v2_vehicle')
+        cfg['vehicle'].setdefault(
+            'checkpoint_path',
+            'configs/checkpoints/best_error_model_v2.pth')
+
+
 def table_from_config(entries: list[list[float]]) -> tuple[torch.Tensor, torch.Tensor]:
     """将 YAML 格式的表 [[idx, val], ...] 转为 (x_tensor, y_tensor)。
     返回的 y_tensor 可作为 nn.Parameter 进行梯度优化。

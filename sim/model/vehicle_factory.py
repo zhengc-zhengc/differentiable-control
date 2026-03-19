@@ -1,10 +1,17 @@
 # sim/model/vehicle_factory.py
-"""车辆模型工厂：根据配置创建 BicycleModel / DynamicVehicle / HybridDynamicVehicle。"""
+"""车辆模型工厂：根据配置创建车辆模型。"""
 import os
 
 from model.vehicle import BicycleModel
 from model.dynamic_vehicle import DynamicVehicle
 from model.hybrid_dynamic_vehicle import HybridDynamicVehicle
+from model.generic_hybrid_vehicle import GenericHybridVehicle
+from model.dynamic_vehicle_v2 import VehicleDynamicsV2
+
+# base 动力学模型注册表（hybrid_v2 模式下通过 vehicle.base_model 选择）
+_BASE_MODEL_REGISTRY = {
+    'dynamic_v2': VehicleDynamicsV2,
+}
 
 
 def _resolve_checkpoint_path(rel_path):
@@ -51,7 +58,25 @@ def create_vehicle(cfg, x=0.0, y=0.0, yaw=0.0, v=0.0,
             dt=dt, differentiable=differentiable,
             checkpoint_path=checkpoint or None)
 
+    elif model_type == 'hybrid_v2':
+        veh_cfg = cfg['vehicle']
+        base_model_name = veh_cfg.get('base_model', 'dynamic_v2')
+        if base_model_name not in _BASE_MODEL_REGISTRY:
+            raise ValueError(
+                f"未知 base_model: '{base_model_name}'，"
+                f"可用: {list(_BASE_MODEL_REGISTRY.keys())}")
+        base_cls = _BASE_MODEL_REGISTRY[base_model_name]
+        params_key = veh_cfg.get('params_section', 'dynamic_v2_vehicle')
+        params = cfg[params_key]
+        checkpoint = _resolve_checkpoint_path(
+            veh_cfg.get('checkpoint_path', ''))
+        return GenericHybridVehicle(
+            params=params, x=x, y=y, yaw=yaw, v=v,
+            dt=dt, differentiable=differentiable,
+            checkpoint_path=checkpoint or None,
+            base_model_class=base_cls)
+
     else:
         raise ValueError(
             f"未知 vehicle.model_type: '{model_type}'，"
-            f"支持: 'kinematic', 'dynamic', 'hybrid_dynamic'")
+            f"支持: 'kinematic', 'dynamic', 'hybrid_dynamic', 'hybrid_v2'")

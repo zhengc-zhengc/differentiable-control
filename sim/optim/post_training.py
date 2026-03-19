@@ -15,7 +15,7 @@ import yaml
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from config import load_config, _get_commit_hash, _tensor_to_python
+from config import load_config, _get_commit_hash, _tensor_to_python, apply_plant_override
 from model.trajectory import (expand_trajectories, generate_park_route,
                               TRAJECTORY_TYPES, SPEED_BANDS_KPH)
 from sim_loop import run_simulation
@@ -171,8 +171,8 @@ def run_comparison(tuned_config_path, output_dir, verbose=True, plant=None,
     cfg_base = load_config()
     cfg_tuned = load_config(tuned_config_path)
     if plant:
-        cfg_base['vehicle']['model_type'] = plant
-        cfg_tuned['vehicle']['model_type'] = plant
+        apply_plant_override(cfg_base, plant)
+        apply_plant_override(cfg_tuned, plant)
 
     eval_scenarios = _build_eval_scenarios(trajectory_types)
 
@@ -801,7 +801,7 @@ if __name__ == '__main__':
                         help='轨迹类型名（自动展开到全速度段 + park_route）。'
                              '默认全量验证 (8×6+1=49)')
     parser.add_argument('--plant', default=None,
-                        choices=['kinematic', 'dynamic', 'hybrid_dynamic'],
+                        choices=['kinematic', 'dynamic', 'hybrid_dynamic', 'hybrid_v2'],
                         help='被控对象类型，默认使用配置中的值')
     parser.add_argument('--output-dir', default=None,
                         help='输出目录，默认 results/validation/{plant}/{timestamp}/')

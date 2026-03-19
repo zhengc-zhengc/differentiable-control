@@ -166,7 +166,7 @@ def main():
     parser.add_argument('--config', type=str, default=None,
                         help='加载指定 YAML 配置（如调参后的结果）')
     parser.add_argument('--plant', type=str, default=None,
-                        choices=['kinematic', 'dynamic', 'hybrid_dynamic'],
+                        choices=['kinematic', 'dynamic', 'hybrid_dynamic', 'hybrid_v2'],
                         help='被控对象类型（覆盖 YAML 配置）')
     args = parser.parse_args()
 
