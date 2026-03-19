@@ -194,69 +194,70 @@ python optim/train.py --plant hybrid_v2 --config configs/tuned/xxx.yaml --epochs
 
 ## 车辆模型（被控对象）
 
-通过 `--plant` 参数或 `default.yaml` 中的 `vehicle.model_type` 选择。所有模型对外接口一致：`step(delta, acc)` 输入前轮转角和加速度，`x, y, yaw, v` 输出后轴坐标。
+### 配置文件
 
-| `--plant` 值 | 模型 | 说明 |
+所有车辆参数和控制器参数集中在一个 YAML 文件中：**`sim/configs/default.yaml`**。
+
+训练和验证脚本默认加载 `default.yaml`，通过 `--plant` 参数切换被控对象。`--plant` 的值会设置 yaml 中 `vehicle.model_type` 字段，系统据此选择对应的车辆模型类和参数段：
+
+```bash
+# --plant 指定被控对象，系统自动选择 default.yaml 中对应的参数段
+python optim/train.py --plant hybrid_v2 --epochs 6
+```
+
+### 可用模型
+
+| `--plant` 值 | 模型类 | 说明 |
 |------|------|------|
 | `kinematic` | BicycleModel | 运动学自行车模型（默认，训练最快） |
 | `dynamic` | DynamicVehicle | 6-DOF 动力学 V1（RK4 积分） |
 | `hybrid_dynamic` | HybridDynamicVehicle | V1 动力学 + MLP 残差（旧版） |
 | **`hybrid_v2`** | **GenericHybridVehicle** | **V2 动力学 + checkpoint 驱动 MLP（推荐）** |
 
-### hybrid_v2：通用混合车辆
+所有模型对外接口一致：`step(delta, acc)` 输入前轮转角和加速度，`x, y, yaw, v` 输出后轴坐标。控制器和仿真循环不关心内部实现。
 
-`hybrid_v2` 是推荐的高保真被控对象。它由两部分组成：
+### hybrid_v2 配置详解
 
-```
-Base 动力学模型（纯物理方程）  +  MLP 残差修正（从 .pth checkpoint 加载）
-          │                              │
-     可选择不同版本                  结构自动从 checkpoint 元数据重建
-     (dynamic_v2 等)               (层数/激活函数/输入特征/归一化)
-```
-
-**配置方式**（`default.yaml`）：
+`hybrid_v2` 是推荐的高保真被控对象，由 **base 动力学 + 可选 MLP 残差修正** 组成。使用 `--plant hybrid_v2` 时，系统读取 `default.yaml` 中以下配置：
 
 ```yaml
-vehicle:
-  model_type: hybrid_v2           # 使用通用混合车辆
-  base_model: dynamic_v2          # base 动力学模型名
-  params_section: dynamic_v2_vehicle  # 车辆参数在 yaml 中的 section 名
-  checkpoint_path: configs/checkpoints/best_error_model_v2.pth  # MLP 权重
+# ---- sim/configs/default.yaml 中的相关配置 ----
 
-# V2 动力学参数（必须与 MLP 训练时一致）
+vehicle:
+  model_type: hybrid_v2
+  # ↓ hybrid_v2 专属字段（--plant hybrid_v2 时自动填充默认值，也可在 yaml 中显式设置）
+  base_model: dynamic_v2                # base 模型注册名 → 映射到 VehicleDynamicsV2 类
+  params_section: dynamic_v2_vehicle    # 车辆物理参数在 yaml 中的 section 名
+  checkpoint_path: configs/checkpoints/best_error_model_v2.pth  # MLP 权重路径（相对于 sim/）
+
+# base_model: dynamic_v2 对应的物理参数段（参数必须与 MLP 训练时一致）
 dynamic_v2_vehicle:
   mass: 2440.0
   Iz: 9564.8
   lf: 1.354
   lr: 1.446
+  wheel_radius: 0.329
+  steer_ratio: 16.39
   # ... 其他参数
 ```
 
-**不提供 checkpoint_path** 则只使用纯 base 动力学，无 MLP 修正。
+**字段说明：**
+- `model_type`: 决定系统使用哪个车辆类。`hybrid_v2` 对应 `GenericHybridVehicle`
+- `base_model`: 纯物理动力学模型的注册名，在 `vehicle_factory.py` 的 `_BASE_MODEL_REGISTRY` 中查找
+- `params_section`: 指向 yaml 中存放车辆物理参数的 section
+- `checkpoint_path`: MLP 权重文件路径。**不设置则只使用纯 base 动力学，无 MLP**
 
-### 新增被控对象指南
+MLP 的网络结构（层数、激活函数、输入特征、归一化参数）全部从 `.pth` 文件的元数据中自动读取，不需要在 yaml 中配置。
 
-如果需要接入新的被控对象，只需以下步骤：
+### 新增被控对象
 
-| 场景 | 需要做什么 |
-|------|-----------|
-| 仅更换 MLP checkpoint（同 base 模型） | 替换 `.pth` 文件 + 修改 yaml 中 `checkpoint_path`，**零代码改动** |
-| MLP 结构变化（层数/激活函数/输入特征） | 同上，**零代码改动**（MLP 结构从 checkpoint 元数据自动重建） |
-| 新 base 动力学模型 | 1. 写新的 `nn.Module` 类（实现 `forward(state, control, dt) → next_state`） 2. 在 `vehicle_factory.py` 的 `_BASE_MODEL_REGISTRY` 中注册 3. 在 `default.yaml` 添加对应参数段 |
+| 场景 | 操作 |
+|------|------|
+| 更换 MLP checkpoint（同 base 模型） | 替换 `.pth` 文件 + 改 yaml 中 `checkpoint_path`，**零代码改动** |
+| MLP 结构变化（层数/激活函数/输入特征） | 同上，**零代码改动**（结构从 checkpoint 自动重建） |
+| 新 base 动力学模型 | 1. 在 `sim/model/` 下写新的 `nn.Module`（实现 `forward(state, control, dt) → next_state`） 2. 在 `vehicle_factory.py` 的 `_BASE_MODEL_REGISTRY` 注册 3. 在 `default.yaml` 添加物理参数段 |
 
-所有被控对象必须遵循统一接口：
-
-```python
-class AnyVehicle:
-    def step(self, delta, acc): ...    # 前轮转角 (rad) + 加速度 (m/s²)
-    x: Tensor      # 后轴 x 坐标
-    y: Tensor      # 后轴 y 坐标
-    yaw: Tensor    # 航向角
-    v: Tensor      # 合速度
-    def detach_state(self): ...        # TBPTT 梯度截断
-```
-
-> **前后轴约定**：内部动力学可使用任意参考点（前轴/后轴/质心），但 `x`、`y` 属性必须输出**后轴坐标**。坐标转换在 vehicle 内部完成，控制器和仿真循环只看到后轴坐标。
+> **前后轴约定**：所有被控对象的 `x`、`y` 属性必须输出**后轴坐标**。内部动力学可使用任意参考点（前轴/质心），坐标转换在 vehicle 内部完成。
 
 ## 轨迹系统
 
