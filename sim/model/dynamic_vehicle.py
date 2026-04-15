@@ -147,26 +147,25 @@ class DynamicVehicle:
         self._state = torch.tensor(
             [x_f, y_f, yaw_f, float(v), 0.0, 0.0])
 
-    def step(self, delta, acc):
+    def step(self, delta, torque_wheel):
         """前进一步。
 
         Args:
             delta: 前轮转角 (rad)。适配器内部乘回 steer_ratio 得方向盘角。
-            acc: 加速度 (m/s²)。内部转为后驱扭矩。
+            torque_wheel: 车轮总扭矩 (N·m)。由控制器的 compute_torque_wheel 输出，
+                          后驱两轮平分。
         """
         if not isinstance(delta, torch.Tensor):
             delta = torch.tensor(float(delta))
-        if not isinstance(acc, torch.Tensor):
-            acc = torch.tensor(float(acc))
+        if not isinstance(torque_wheel, torch.Tensor):
+            torque_wheel = torch.tensor(float(torque_wheel))
 
         # delta(前轮转角) → 方向盘角
         delta_sw = delta * self._steer_ratio
 
-        # acc → 后驱扭矩：T = (m * acc / 2) * R
-        m = self.dynamics.m
-        R = self.dynamics.R
-        torque_rear = (m * acc / 2.0) * R
-        zero = torch.zeros_like(acc)
+        # 后驱两轮平分车轮总扭矩
+        torque_rear = torque_wheel / 2.0
+        zero = torch.zeros_like(torque_wheel)
 
         control = torch.stack([delta_sw, zero, zero, torque_rear, torque_rear])
         control = control.unsqueeze(0)  # [1, 5]

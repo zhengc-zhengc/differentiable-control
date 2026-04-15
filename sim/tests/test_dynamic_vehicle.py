@@ -41,21 +41,22 @@ class TestDynamicVehicle:
         assert hasattr(car, 'detach_state')
 
     def test_straight_line(self):
-        """零转角+零加速度，直行应保持 y≈0、yaw≈0。"""
+        """零转角+零扭矩，直行应保持 y≈0、yaw≈0。"""
         car = DynamicVehicle(DEFAULT_PARAMS, x=0, y=0, yaw=0, v=10.0, dt=0.02)
         for _ in range(500):  # 10s
-            car.step(delta=0.0, acc=0.0)
+            car.step(delta=0.0, torque_wheel=0.0)
         # 动力学模型有风阻/滚阻会减速，x 应前进但 < 100m
         assert car.x.item() > 50.0
         assert abs(car.y.item()) < 0.5
         assert abs(car.yaw.item()) < 0.01
 
     def test_acceleration(self):
-        """施加正加速度，速度应增大。"""
+        """施加正车轮扭矩，速度应增大。"""
         car = DynamicVehicle(DEFAULT_PARAMS, x=0, y=0, yaw=0, v=1.0, dt=0.02)
         v0 = car.v.item()
+        # 对应 acc≈1.0 m/s²（m·a·R = 2440·1·0.329 ≈ 800 N·m 总车轮扭矩）
         for _ in range(50):
-            car.step(delta=0.0, acc=1.0)
+            car.step(delta=0.0, torque_wheel=800.0)
         assert car.v.item() > v0
 
     def test_steering_causes_lateral_motion(self):
@@ -63,7 +64,7 @@ class TestDynamicVehicle:
         car = DynamicVehicle(DEFAULT_PARAMS, x=0, y=0, yaw=0, v=5.0, dt=0.02)
         delta_front = 0.05  # rad，前轮转角
         for _ in range(200):
-            car.step(delta=delta_front, acc=0.0)
+            car.step(delta=delta_front, torque_wheel=0.0)
         assert abs(car.y.item()) > 0.5
 
     def test_properties(self):
@@ -76,17 +77,17 @@ class TestDynamicVehicle:
         """detach_state 应截断梯度链。"""
         car = DynamicVehicle(DEFAULT_PARAMS, x=0, y=0, yaw=0, v=5.0, dt=0.02,
                              differentiable=True)
-        car.step(delta=0.0, acc=torch.tensor(1.0, requires_grad=True))
+        car.step(delta=0.0, torque_wheel=torch.tensor(800.0, requires_grad=True))
         car.detach_state()
         assert not car.x.requires_grad
         assert not car.v.requires_grad
 
     def test_differentiable_gradient_flows(self):
-        """differentiable 模式下梯度应能回传到 acc 输入。"""
+        """differentiable 模式下梯度应能回传到 torque_wheel 输入。"""
         car = DynamicVehicle(DEFAULT_PARAMS, x=0, y=0, yaw=0, v=5.0, dt=0.02,
                              differentiable=True)
-        acc = torch.tensor(1.0, requires_grad=True)
-        car.step(delta=0.0, acc=acc)
+        torque = torch.tensor(800.0, requires_grad=True)
+        car.step(delta=0.0, torque_wheel=torque)
         car.v.backward()
-        assert acc.grad is not None
-        assert acc.grad.item() != 0.0
+        assert torque.grad is not None
+        assert torque.grad.item() != 0.0

@@ -163,24 +163,22 @@ class HybridDynamicVehicle:
         for p in self._mlp.parameters():
             p.requires_grad_(False)
 
-    def step(self, delta, acc):
+    def step(self, delta, torque_wheel):
         """前进一步。
 
         Args:
             delta: 前轮转角 (rad)
-            acc: 加速度 (m/s^2)
+            torque_wheel: 车轮总扭矩 (N·m)，后驱两轮平分
         """
         if not isinstance(delta, torch.Tensor):
             delta = torch.tensor(float(delta))
-        if not isinstance(acc, torch.Tensor):
-            acc = torch.tensor(float(acc))
+        if not isinstance(torque_wheel, torch.Tensor):
+            torque_wheel = torch.tensor(float(torque_wheel))
 
-        # 控制量转换：前轮角 -> 方向盘角, 加速度 -> 后驱扭矩
+        # 控制量转换：前轮角 -> 方向盘角，后驱两轮平分总扭矩
         delta_sw = delta * self._steer_ratio
-        m = self.dynamics.m
-        R = self.dynamics.R
-        torque_rear = (m * acc / 2.0) * R
-        zero = torch.zeros_like(acc)
+        torque_rear = torque_wheel / 2.0
+        zero = torch.zeros_like(torque_wheel)
 
         control = torch.stack(
             [delta_sw, zero, zero, torque_rear, torque_rear]).unsqueeze(0)

@@ -58,7 +58,7 @@ class TestHybridDynamicVehicleNoCheckpoint:
         car = HybridDynamicVehicle(
             HYBRID_PARAMS, x=0, y=0, yaw=0, v=10.0, dt=0.02)
         for _ in range(500):
-            car.step(delta=0.0, acc=0.0)
+            car.step(delta=0.0, torque_wheel=0.0)
         assert car.x.item() > 50.0
         assert abs(car.y.item()) < 0.5
         assert abs(car.yaw.item()) < 0.01
@@ -67,15 +67,16 @@ class TestHybridDynamicVehicleNoCheckpoint:
         car = HybridDynamicVehicle(
             HYBRID_PARAMS, x=0, y=0, yaw=0, v=1.0, dt=0.02)
         v0 = car.v.item()
+        # 正车轮扭矩 → 正加速度（等效 acc≈1 m/s²）
         for _ in range(50):
-            car.step(delta=0.0, acc=1.0)
+            car.step(delta=0.0, torque_wheel=800.0)
         assert car.v.item() > v0
 
     def test_steering_no_mlp(self):
         car = HybridDynamicVehicle(
             HYBRID_PARAMS, x=0, y=0, yaw=0, v=5.0, dt=0.02)
         for _ in range(200):
-            car.step(delta=0.05, acc=0.0)
+            car.step(delta=0.05, torque_wheel=0.0)
         assert abs(car.y.item()) > 0.5
 
     def test_properties(self):
@@ -88,21 +89,21 @@ class TestHybridDynamicVehicleNoCheckpoint:
         car = HybridDynamicVehicle(
             HYBRID_PARAMS, x=0, y=0, yaw=0, v=5.0, dt=0.02,
             differentiable=True)
-        car.step(delta=0.0, acc=torch.tensor(1.0, requires_grad=True))
+        car.step(delta=0.0, torque_wheel=torch.tensor(800.0, requires_grad=True))
         car.detach_state()
         assert not car.x.requires_grad
         assert not car.v.requires_grad
 
     def test_gradient_flows_no_mlp(self):
-        """无 MLP 时梯度应能回传到 acc。"""
+        """无 MLP 时梯度应能回传到 torque_wheel。"""
         car = HybridDynamicVehicle(
             HYBRID_PARAMS, x=0, y=0, yaw=0, v=5.0, dt=0.02,
             differentiable=True)
-        acc = torch.tensor(1.0, requires_grad=True)
-        car.step(delta=0.0, acc=acc)
+        torque = torch.tensor(800.0, requires_grad=True)
+        car.step(delta=0.0, torque_wheel=torque)
         car.v.backward()
-        assert acc.grad is not None
-        assert acc.grad.item() != 0.0
+        assert torque.grad is not None
+        assert torque.grad.item() != 0.0
 
 
 class TestMLPErrorModel:
@@ -164,22 +165,22 @@ class TestHybridDynamicVehicleWithCheckpoint:
             HYBRID_PARAMS, x=0, y=0, yaw=0, v=10.0, dt=0.02,
             checkpoint_path=_PLANT_CHECKPOINT)
         for _ in range(500):
-            car.step(delta=0.0, acc=0.0)
+            car.step(delta=0.0, torque_wheel=0.0)
         # 即使有 MLP 修正，直行也应大致保持直行
         assert car.x.item() > 30.0
         assert abs(car.y.item()) < 5.0
 
     def test_gradient_flows_with_mlp(self):
-        """MLP 权重冻结，但梯度仍能通过 MLP 计算图回传到 acc。"""
+        """MLP 权重冻结，但梯度仍能通过 MLP 计算图回传到 torque_wheel。"""
         car = HybridDynamicVehicle(
             HYBRID_PARAMS, x=0, y=0, yaw=0, v=5.0, dt=0.02,
             differentiable=True,
             checkpoint_path=_PLANT_CHECKPOINT)
-        acc = torch.tensor(1.0, requires_grad=True)
-        car.step(delta=0.0, acc=acc)
+        torque = torch.tensor(800.0, requires_grad=True)
+        car.step(delta=0.0, torque_wheel=torque)
         car.v.backward()
-        assert acc.grad is not None
-        assert acc.grad.item() != 0.0
+        assert torque.grad is not None
+        assert torque.grad.item() != 0.0
 
     def test_mlp_weights_frozen(self):
         """MLP 参数不应有梯度。"""
@@ -199,8 +200,8 @@ class TestHybridDynamicVehicleWithCheckpoint:
             checkpoint_path=_PLANT_CHECKPOINT)
 
         for _ in range(100):
-            car_base.step(delta=0.02, acc=0.0)
-            car_hybrid.step(delta=0.02, acc=0.0)
+            car_base.step(delta=0.02, torque_wheel=0.0)
+            car_hybrid.step(delta=0.02, torque_wheel=0.0)
 
         # 两者轨迹应有差异（MLP 修正生效）
         diff_x = abs(car_base.x.item() - car_hybrid.x.item())

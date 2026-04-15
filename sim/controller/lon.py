@@ -67,6 +67,20 @@ class LonController(nn.Module):
         self.iir_acc = IIR(alpha=lon['iir_alpha'])
         self.station_error_fnl_prev = 0.0
 
+        # 扭矩输出层常数（对齐 C++ CalFinalTorque，跳过坡度和传动比）
+        # 全部作为 buffer，不参与梯度
+        lon_torque = cfg.get('lon_torque', {})
+        for key, default in [
+            ('veh_mass', 9300.0), ('coef_cd', 0.6),
+            ('coef_rolling', 0.013), ('coef_delta', 1.05),
+            ('air_density', 1.2041), ('gravity', 9.81),
+            ('frontal_area', 9.7), ('wheel_rolling_radius', 0.5),
+            ('accel_to_torque_kp', 1000.0), ('accel_deadzone', -0.05),
+        ]:
+            self.register_buffer(
+                f'torque_{key}',
+                torch.tensor(float(lon_torque.get(key, default))))
+
     def reset_state(self):
         """重置控制器内部状态。"""
         self.station_pid.reset()
@@ -370,3 +384,86 @@ class LonController(nn.Module):
 
         acc_out = self.iir_acc.update(acc_limited)
         return acc_out
+
+    def compute_torque_wheel(self, acc_cmd, speed_mps, a_actual):
+        """加速度指令 → 车轮总扭矩 (N·m)。
+
+        公式对齐 C++ lon_controller.cc CalFinalTorque（L749-811），
+        跳过坡度补偿（F_slope=0）和传动比/效率（到车轮扭矩即止）。
+
+        Args:
+            acc_cmd: 控制器输出的加速度指令 (m/s²)
+            speed_mps: 当前车速 (m/s)
+            a_actual: 实际加速度 (m/s²)，由 sim_loop 差分得到
+
+        Returns:
+            T_wheel: 车轮总扭矩 (N·m)，后驱下游需要分半
+        """
+        if self.differentiable:
+            return self._compute_torque_differentiable(
+                acc_cmd, speed_mps, a_actual)
+        else:
+            return self._compute_torque_v1(acc_cmd, speed_mps, a_actual)
+
+    def _compute_torque_v1(self, acc_cmd, speed_mps, a_actual):
+        """V1 兼容路径：float 运算，对照 C++ 行为。"""
+        if isinstance(acc_cmd, torch.Tensor):
+            a_cmd = float(acc_cmd.item())
+        else:
+            a_cmd = float(acc_cmd)
+        if isinstance(speed_mps, torch.Tensor):
+            v = float(speed_mps.item())
+        else:
+            v = float(speed_mps)
+        if isinstance(a_actual, torch.Tensor):
+            a_act = float(a_actual.item())
+        else:
+            a_act = float(a_actual)
+
+        m = self.torque_veh_mass.item()
+        g = self.torque_gravity.item()
+        r = self.torque_wheel_rolling_radius.item()
+        deadzone = self.torque_accel_deadzone.item()
+
+        F_air = (0.5 * self.torque_coef_cd.item()
+                 * self.torque_air_density.item()
+                 * self.torque_frontal_area.item() * v * v)
+        F_rolling = self.torque_coef_rolling.item() * m * g
+        F_inertia = self.torque_coef_delta.item() * m * a_cmd
+        F_resist = F_air + F_rolling + F_inertia
+
+        F_P = self.torque_accel_to_torque_kp.item() * (a_cmd - a_act)
+
+        T_raw = (F_resist + F_P) * r
+
+        if a_cmd > deadzone:
+            return T_raw
+        else:
+            return 0.0
+
+    def _compute_torque_differentiable(self, acc_cmd, speed_mps, a_actual):
+        """可微路径：全程 tensor，mask.detach() 处理死区。"""
+        if not isinstance(acc_cmd, torch.Tensor):
+            acc_cmd = torch.tensor(float(acc_cmd))
+        if not isinstance(speed_mps, torch.Tensor):
+            speed_mps = torch.tensor(float(speed_mps))
+        if not isinstance(a_actual, torch.Tensor):
+            a_actual = torch.tensor(float(a_actual))
+
+        m = self.torque_veh_mass
+        g = self.torque_gravity
+        r = self.torque_wheel_rolling_radius
+
+        F_air = (0.5 * self.torque_coef_cd * self.torque_air_density
+                 * self.torque_frontal_area * speed_mps * speed_mps)
+        F_rolling = self.torque_coef_rolling * m * g
+        F_inertia = self.torque_coef_delta * m * acc_cmd
+        F_resist = F_air + F_rolling + F_inertia
+
+        F_P = self.torque_accel_to_torque_kp * (acc_cmd - a_actual)
+
+        T_raw = (F_resist + F_P) * r
+
+        # 死区：硬 mask，detach 使门控不进入梯度图
+        mask = (acc_cmd > self.torque_accel_deadzone).float().detach()
+        return mask * T_raw

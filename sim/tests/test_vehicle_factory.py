@@ -32,11 +32,11 @@ class TestVehicleFactory:
         assert isinstance(car, DynamicVehicle)
 
     def test_dynamic_has_correct_interface(self):
-        """dynamic 模型暴露与 kinematic 一致的接口。"""
+        """dynamic 模型暴露 step + 状态属性（签名差异：kinematic 吃 acc，dynamic 吃 torque_wheel）。"""
         cfg = load_config()
         cfg['vehicle']['model_type'] = 'dynamic'
         car = create_vehicle(cfg, x=0, y=0, yaw=0, v=5.0, dt=0.02)
-        car.step(delta=0.0, acc=0.0)
+        car.step(delta=0.0, torque_wheel=0.0)
         assert hasattr(car, 'x')
         assert hasattr(car, 'speed_kph')
         assert hasattr(car, 'yaw_deg')

@@ -210,3 +210,18 @@ lon:
     - [20, 1.35]
     - [30, 1.2]
     - [50, 1.0]
+
+# 纵向扭矩输出层（acc_cmd → T_wheel）
+# 公式对齐 C++ lon_controller.cc CalFinalTorque，跳过坡度和传动比
+# 全部为物理常数，不参与梯度优化
+lon_torque:
+  veh_mass: 9300.0          # 车辆质量 (kg)，C++ 默认卡车值
+  coef_cd: 0.6              # 风阻系数，来自 control.conf --coef_cd
+  coef_rolling: 0.013       # 滚阻系数，来自 control.conf --coef_rolling
+  coef_delta: 1.05          # 旋转惯量修正，来自 control.conf --coef_delta
+  air_density: 1.2041       # 空气密度 (kg/m³)，C++ 硬编码
+  gravity: 9.81             # 重力加速度 (m/s²)
+  frontal_area: 9.7         # 迎风面积 (m²)
+  wheel_rolling_radius: 0.5 # 车轮滚动半径 (m)
+  accel_to_torque_kp: 1000  # 加速度闭环 P 增益 (N/(m/s²))，来自 control.conf
+  accel_deadzone: -0.05     # 扭矩/制动死区阈值 (m/s²)，kAccelerationDeadZone

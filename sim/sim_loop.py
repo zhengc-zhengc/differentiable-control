@@ -90,6 +90,10 @@ def run_simulation(trajectory: list[TrajectoryPoint],
     n_steps = int(traj_duration / dt)
     prev_steer = torch.tensor(0.0) if differentiable else 0.0
 
+    # kinematic 走旧加速度路径，其他走新扭矩路径
+    use_torque_layer = (model_type != 'kinematic')
+    v_prev = init_speed  # 用于差分得到 a_actual（扭矩路径需要）
+
     for step in range(n_steps):
         t = step * dt
 
@@ -133,18 +137,37 @@ def run_simulation(trajectory: list[TrajectoryPoint],
                 ctrl_enable=True,
                 ctrl_first_active=(step == 0), dt=dt)
 
-            history.append({
-                't': t,
-                'x': car.x, 'y': car.y, 'yaw': car.yaw, 'v': car.v,
-                'steer': steer_out, 'steer_fb': steer_fb, 'steer_ff': steer_ff,
-                'acc': acc_cmd,
-                'lateral_error': lateral_error, 'heading_error': heading_error,
-                'ref_x': ref_pt.x, 'ref_y': ref_pt.y,
-            })
-
-            # 车辆更新
+            # 车辆更新：kinematic 吃 acc，动力学/混合吃车轮扭矩
             delta_front = steer_out / steer_ratio * DEG2RAD
-            car.step(delta=delta_front, acc=acc_cmd)
+            if use_torque_layer:
+                # a_actual 从上一步速度差分，v_prev 已 detach（或首帧为常数）
+                a_actual = (car.v - v_prev) / dt
+                torque_wheel = lon_ctrl.compute_torque_wheel(
+                    acc_cmd, car.v, a_actual)
+                history.append({
+                    't': t,
+                    'x': car.x, 'y': car.y, 'yaw': car.yaw, 'v': car.v,
+                    'steer': steer_out, 'steer_fb': steer_fb,
+                    'steer_ff': steer_ff,
+                    'acc': acc_cmd, 'torque_wheel': torque_wheel,
+                    'lateral_error': lateral_error,
+                    'heading_error': heading_error,
+                    'ref_x': ref_pt.x, 'ref_y': ref_pt.y,
+                })
+                v_prev = car.v.detach()
+                car.step(delta=delta_front, torque_wheel=torque_wheel)
+            else:
+                history.append({
+                    't': t,
+                    'x': car.x, 'y': car.y, 'yaw': car.yaw, 'v': car.v,
+                    'steer': steer_out, 'steer_fb': steer_fb,
+                    'steer_ff': steer_ff,
+                    'acc': acc_cmd,
+                    'lateral_error': lateral_error,
+                    'heading_error': heading_error,
+                    'ref_x': ref_pt.x, 'ref_y': ref_pt.y,
+                })
+                car.step(delta=delta_front, acc=acc_cmd)
             prev_steer = steer_out
 
         else:
@@ -189,17 +212,33 @@ def run_simulation(trajectory: list[TrajectoryPoint],
                 ctrl_enable=True,
                 ctrl_first_active=(step == 0), dt=dt)
 
-            history.append({
-                't': t, 'x': car_x, 'y': car_y, 'yaw': car_yaw,
-                'v': car_v, 'steer': steer_out, 'steer_fb': steer_fb,
-                'steer_ff': steer_ff, 'acc': acc_cmd,
-                'lateral_error': lateral_error, 'heading_error': heading_error,
-                'ref_x': ref_pt.x, 'ref_y': ref_pt.y,
-            })
-
-            # 车辆更新 — step 接受 tensor 或 float
+            # 车辆更新：kinematic 吃 acc，动力学/混合吃车轮扭矩
             delta_front = steer_out / steer_ratio * DEG2RAD
-            car.step(delta=delta_front, acc=acc_cmd)
+            if use_torque_layer:
+                a_actual = (car_v - v_prev) / dt
+                torque_wheel = lon_ctrl.compute_torque_wheel(
+                    acc_cmd, car_v, a_actual)
+                history.append({
+                    't': t, 'x': car_x, 'y': car_y, 'yaw': car_yaw,
+                    'v': car_v, 'steer': steer_out, 'steer_fb': steer_fb,
+                    'steer_ff': steer_ff,
+                    'acc': acc_cmd, 'torque_wheel': torque_wheel,
+                    'lateral_error': lateral_error,
+                    'heading_error': heading_error,
+                    'ref_x': ref_pt.x, 'ref_y': ref_pt.y,
+                })
+                v_prev = car_v
+                car.step(delta=delta_front, torque_wheel=torque_wheel)
+            else:
+                history.append({
+                    't': t, 'x': car_x, 'y': car_y, 'yaw': car_yaw,
+                    'v': car_v, 'steer': steer_out, 'steer_fb': steer_fb,
+                    'steer_ff': steer_ff, 'acc': acc_cmd,
+                    'lateral_error': lateral_error,
+                    'heading_error': heading_error,
+                    'ref_x': ref_pt.x, 'ref_y': ref_pt.y,
+                })
+                car.step(delta=delta_front, acc=acc_cmd)
             prev_steer = steer_out
 
     return history
