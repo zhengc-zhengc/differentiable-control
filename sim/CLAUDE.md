@@ -96,7 +96,7 @@ python optim/post_training.py --config configs/tuned/xxx.yaml --plant dynamic  #
 | `--w-lat/head/speed` | 10/8/3 | loss 权重（横向/航向/速度） |
 | `--w-steer-rate/acc-rate` | 0.05/0.01 | 平滑度正则权重 |
 
-## 与 controller_spec.md 的差异
+## 与 controller_spec_v2.md 的差异
 
 - **符号约定**：spec 用 CW+（顺时针正），实现用 CCW+（逆时针正）。`lat_truck.py` Steps 4/5/7 的符号与 spec 相反，三处翻转自洽，最终输出数学等价
 - **横向控制器**：spec §2.5 Steps 1-10 全部实现，无遗漏
@@ -139,8 +139,7 @@ python optim/post_training.py --config configs/tuned/xxx.yaml --plant dynamic  #
 
 ## 参考文档
 
-- `docs/controller_spec.md` — 控制器完整规格（v1）
-- `docs/controller_spec_v2.md` — 控制器规格 v2（对 v1 的校对修正，含纵向扭矩模型/坡度估计）
+- `docs/controller_spec_v2.md` — 控制器完整规格（含纵向扭矩模型/坡度估计，v1 已废弃）
 - `docs/tunable_params_analysis.md` — 可调参数分析
 - `docs/plans/2026-03-02-differentiable-tuning-v2-design.md` — V2 设计
 - `docs/plans/2026-04-15-torque-output-layer-design.md` — 扭矩输出层设计

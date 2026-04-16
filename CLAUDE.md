@@ -8,7 +8,7 @@
 
 目标项目是自动驾驶的**控制模块**，50Hz 控制循环，横向→纵向串行执行。已复现横向（LatControllerTruck，重卡）和纵向（LonController，含扭矩输出层），电拖横向（LatController）未复现。
 
-> 控制器算法细节与可微实现见 `sim/CLAUDE.md`；完整规格见 `docs/controller_spec.md`（v1）/ `docs/controller_spec_v2.md`（校对修正版）；参数分析见 `docs/tunable_params_analysis.md`
+> 控制器算法细节与可微实现见 `sim/CLAUDE.md`；完整规格见 `docs/controller_spec_v2.md`；参数分析见 `docs/tunable_params_analysis.md`
 
 ## Environment Setup
 
