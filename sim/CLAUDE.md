@@ -21,10 +21,12 @@ sim/
 ├── compare_results.py     # [deprecated, 已被 post_training.py 取代] 旧版 4 场景对比
 ├── health_check.py        # 一键体检（测试 + 基线性能 + 梯度健康）
 ├── model/
-│   ├── vehicle.py         # BicycleModel — 运动学模型 (x,y,yaw,v)，dt=0.02s
-│   ├── dynamic_vehicle.py # DynamicVehicle — 6-DOF 动力学模型适配器，接口与 BicycleModel 一致
-│   ├── hybrid_dynamic_vehicle.py # HybridDynamicVehicle — 机理模型+MLP 残差修正（plant 仓库集成）
-│   ├── vehicle_factory.py # create_vehicle() — 根据 cfg 创建 kinematic/dynamic/hybrid_dynamic 模型
+│   ├── vehicle.py         # BicycleModel — 运动学模型 (x,y,yaw,v)，step(delta, acc)
+│   ├── dynamic_vehicle.py # DynamicVehicle — 6-DOF 动力学适配器，step(delta, torque_wheel)
+│   ├── hybrid_dynamic_vehicle.py # HybridDynamicVehicle — 机理模型+MLP 残差修正，step(delta, torque_wheel)
+│   ├── generic_hybrid_vehicle.py # GenericHybridVehicle — checkpoint 驱动的可插拔被控对象
+│   ├── dynamic_vehicle_v2.py     # VehicleDynamicsV2 — GenericHybrid 的 base 动力学
+│   ├── vehicle_factory.py # create_vehicle() — 根据 cfg 创建 kinematic/dynamic/hybrid_dynamic/hybrid_v2 模型
 │   └── trajectory.py      # 轨迹生成（8 标准类型×6 速度段 + park_route）、变速剖面、expand_trajectories() + TrajectoryAnalyzer
 ├── controller/
 │   ├── lat_truck.py       # LatControllerTruck (nn.Module, 可微:T2-T4/T6, 固定:kLh/T1/T5/T7/T8)
