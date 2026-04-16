@@ -7,6 +7,7 @@ from model.dynamic_vehicle import DynamicVehicle
 from model.hybrid_dynamic_vehicle import HybridDynamicVehicle
 from model.generic_hybrid_vehicle import GenericHybridVehicle
 from model.dynamic_vehicle_v2 import VehicleDynamicsV2
+from model.truck_trailer_vehicle import TruckTrailerVehicle
 
 # base 动力学模型注册表（hybrid_v2 模式下通过 vehicle.base_model 选择）
 _BASE_MODEL_REGISTRY = {
@@ -58,6 +59,16 @@ def create_vehicle(cfg, x=0.0, y=0.0, yaw=0.0, v=0.0,
             dt=dt, differentiable=differentiable,
             checkpoint_path=checkpoint or None)
 
+    elif model_type == 'truck_trailer':
+        tt_params = cfg['truck_trailer_vehicle']
+        checkpoint = _resolve_checkpoint_path(
+            tt_params.get('checkpoint_path', ''))
+        return TruckTrailerVehicle(
+            params=tt_params, x=x, y=y, yaw=yaw, v=v,
+            dt=dt, differentiable=differentiable,
+            checkpoint_path=checkpoint or None,
+            trailer_mass_kg=tt_params.get('default_trailer_mass_kg', None))
+
     elif model_type == 'hybrid_v2':
         veh_cfg = cfg['vehicle']
         base_model_name = veh_cfg.get('base_model', 'dynamic_v2')
@@ -79,4 +90,5 @@ def create_vehicle(cfg, x=0.0, y=0.0, yaw=0.0, v=0.0,
     else:
         raise ValueError(
             f"未知 vehicle.model_type: '{model_type}'，"
-            f"支持: 'kinematic', 'dynamic', 'hybrid_dynamic', 'hybrid_v2'")
+            f"支持: 'kinematic', 'dynamic', 'hybrid_dynamic', 'hybrid_v2', "
+            f"'truck_trailer'")

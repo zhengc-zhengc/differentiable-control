@@ -436,7 +436,8 @@ if __name__ == '__main__':
     parser.add_argument('--snapshot-interval', type=int, default=10,
                         help='参数快照打印间隔（epoch 数）')
     parser.add_argument('--plant', type=str, default=None,
-                        choices=['kinematic', 'dynamic', 'hybrid_dynamic', 'hybrid_v2'],
+                        choices=['kinematic', 'dynamic', 'hybrid_dynamic',
+                                 'hybrid_v2', 'truck_trailer'],
                         help='被控对象类型（覆盖 YAML 配置）')
     parser.add_argument('--config', type=str, default=None,
                         help='初始参数配置路径，用于 warm-start（从上次调参结果继续）')

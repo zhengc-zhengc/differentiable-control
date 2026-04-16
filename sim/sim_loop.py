@@ -59,6 +59,10 @@ def run_simulation(trajectory: list[TrajectoryPoint],
         v2p = cfg[params_key]
         wheelbase = v2p['lf'] + v2p['lr']
         steer_ratio = v2p['steer_ratio']
+    elif model_type == 'truck_trailer':
+        tt = cfg['truck_trailer_vehicle']
+        wheelbase = tt['L_t']
+        steer_ratio = tt['steering_ratio']
     else:
         wheelbase = veh['wheelbase']
         steer_ratio = veh['steer_ratio']

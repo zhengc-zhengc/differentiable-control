@@ -9,6 +9,7 @@
 - `kinematic`：运动学自行车模型（默认，训练快）
 - `dynamic`：6-DOF 动力学模型（RK4 积分）
 - `hybrid_dynamic`：机理模型(Euler) + MLP 残差修正（逼近 CarSim 高保真仿真，需 plant 仓库 checkpoint）
+- `truck_trailer`：牵引车+挂车双体动力学（12D 状态 + RK4 + 可选 MLP 残差，源码来自外部仓库 `../truckdynamicmodel`）
 
 ## 模块结构
 
@@ -25,7 +26,8 @@ sim/
 │   ├── hybrid_dynamic_vehicle.py # HybridDynamicVehicle — 机理模型+MLP 残差修正，step(delta, torque_wheel)
 │   ├── generic_hybrid_vehicle.py # GenericHybridVehicle — checkpoint 驱动的可插拔被控对象
 │   ├── dynamic_vehicle_v2.py     # VehicleDynamicsV2 — GenericHybrid 的 base 动力学
-│   ├── vehicle_factory.py # create_vehicle() — 根据 cfg 创建 kinematic/dynamic/hybrid_dynamic/hybrid_v2 模型
+│   ├── truck_trailer_vehicle.py  # TruckTrailerVehicle — 牵引车+挂车双体（外部仓库），step(delta, torque_wheel)
+│   ├── vehicle_factory.py # create_vehicle() — 根据 cfg 创建 kinematic/dynamic/hybrid_dynamic/hybrid_v2/truck_trailer 模型
 │   └── trajectory.py      # 轨迹生成（8 标准类型×6 速度段 + park_route）、变速剖面、expand_trajectories() + TrajectoryAnalyzer
 ├── controller/
 │   ├── lat_truck.py       # LatControllerTruck (nn.Module, 可微:T2-T4/T6, 固定:kLh/T1/T5/T7/T8)
@@ -178,6 +180,17 @@ python optim/post_training.py --config configs/tuned/xxx.yaml --plant dynamic  #
 - **Checkpoint 路径**：`configs/checkpoints/best_error_model_from_carsim.pth`（相对于 sim/）
 - **MLP 输入**：[state(6), delta_sw(1), T_rl(1), T_rr(1), dt(1)] = 10D，归一化后输入
 - **MLP 输出**：3D [Δvx, Δvy, Δr] → 旋转到世界系 → ×dt 得位置修正 → 拼接为 6D
+
+## truck_trailer 模型关键约束
+
+- **源码来自外部仓库** `../truckdynamicmodel/truck_trailer_residual_modular/`，通过 sys.path 导入；不拷贝代码
+- **状态 12D**：牵引车质心 6D + 挂车质心 6D；对外暴露**牵引车后轴** x/y/yaw/v（控制器约定）
+- **质心↔后轴偏移**：b_t = L_t − a_t = 0.675 m（适配器 4 个 property 各做一次坐标转换）
+- **Base 用 RK4 积分**（和 hybrid_dynamic 用 Euler 不同；MLP 训练时 base 也是 RK4）
+- **挂车质量 yaml 可配**：`default_trailer_mass_kg`，默认 15004 kg；< 1.0 kg 自动进入无挂车模式
+- **MLP 输入 18D**：[trailer_mass, vx_t, vy_t, r_t, speed_t, vx_s, vy_s, r_s, speed_s, articulation, sin/cos articulation, 5×control, dt]
+- **MLP 输出 6D 运动残差** [Δvx_t, Δvy_t, Δr_t, Δvx_s, Δvy_s, Δr_s]，重建为 12D 状态修正
+- **跟踪性能预期**：当前控制器参数针对 2440 kg 乘用车调校，直接用在 24 吨卡车+挂车上跟不动，需要专门调参
 
 ## 备注
 

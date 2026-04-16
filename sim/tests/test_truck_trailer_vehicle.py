@@ -1,0 +1,141 @@
+# sim/tests/test_truck_trailer_vehicle.py
+"""牵引车-挂车双体动力学模型测试。"""
+import math
+import os
+import sys
+
+import pytest
+import torch
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
+from model.truck_trailer_vehicle import TruckTrailerVehicle
+
+
+# 与 truckdynamicmodel BASE_MODEL_PARAMS 一致
+TT_PARAMS = {
+    'm_t': 9300.0, 'Iz_t': 48639.0, 'L_t': 4.475, 'a_t': 3.8,
+    'm_s_base': 15004.0, 'Iz_s_base': 96659.0, 'L_s': 8.0, 'c_s': 4.0,
+    'Cf': 80000.0, 'Cr': 80000.0, 'Cs': 80000.0,
+    'wheel_radius': 0.5, 'track_width': 1.8, 'steering_ratio': 16.39,
+    'rho': 1.225, 'CdA_t': 5.82, 'CdA_s': 6.50, 'rolling_coeff': 0.006,
+    'hitch_x': -0.331, 'hitch_y': 0.002, 'min_speed_mps': 0.5,
+}
+
+# checkpoint 在外部仓库
+_CHECKPOINT = os.path.normpath(os.path.join(
+    os.path.dirname(__file__), '..', '..', '..',
+    'truckdynamicmodel', 'truck_trailer_residual_modular',
+    'best_truck_trailer_error_model.pth'))
+_HAS_CHECKPOINT = os.path.exists(_CHECKPOINT)
+
+
+class TestTruckTrailerVehicleNoCheckpoint:
+    """无 checkpoint：纯 base 物理模型。"""
+
+    def test_interface(self):
+        car = TruckTrailerVehicle(TT_PARAMS, x=1.0, y=2.0, yaw=0.1, v=5.0,
+                                  dt=0.02)
+        assert isinstance(car.x, torch.Tensor)
+        assert isinstance(car.y, torch.Tensor)
+        assert isinstance(car.yaw, torch.Tensor)
+        assert isinstance(car.v, torch.Tensor)
+        assert hasattr(car, 'speed_kph')
+        assert hasattr(car, 'yaw_deg')
+        assert hasattr(car, 'step')
+        assert hasattr(car, 'detach_state')
+        assert hasattr(car, 'trailer_state')
+
+    def test_rear_axle_init_consistent(self):
+        """初始化传后轴坐标，反向取 x/y 应能取回（容许 dt=0 误差）。"""
+        car = TruckTrailerVehicle(TT_PARAMS, x=10.0, y=20.0, yaw=0.5, v=0.0,
+                                  dt=0.02)
+        assert car.x.item() == pytest.approx(10.0, abs=1e-4)
+        assert car.y.item() == pytest.approx(20.0, abs=1e-4)
+        assert car.yaw.item() == pytest.approx(0.5, abs=1e-6)
+
+    def test_straight_line(self):
+        """零转角+零扭矩，直行：y≈0、yaw≈0，x 前进但因阻力衰减。"""
+        car = TruckTrailerVehicle(TT_PARAMS, x=0, y=0, yaw=0, v=10.0, dt=0.02)
+        for _ in range(500):
+            car.step(delta=0.0, torque_wheel=0.0)
+        assert car.x.item() > 30.0
+        assert abs(car.y.item()) < 1.0
+        assert abs(car.yaw.item()) < 0.01
+
+    def test_acceleration(self):
+        """正车轮扭矩 → 速度增大。"""
+        car = TruckTrailerVehicle(TT_PARAMS, x=0, y=0, yaw=0, v=2.0, dt=0.02)
+        v0 = car.v.item()
+        # 9300+15004=24304 kg, a≈0.5 m/s² ~ T_wheel = m·a·R = 24304·0.5·0.5 ≈ 6076 N·m
+        for _ in range(50):
+            car.step(delta=0.0, torque_wheel=6000.0)
+        assert car.v.item() > v0
+
+    def test_steering_causes_lateral(self):
+        """方向盘转角 → y 偏移。"""
+        car = TruckTrailerVehicle(TT_PARAMS, x=0, y=0, yaw=0, v=8.0, dt=0.02)
+        delta_front = 0.05  # 前轮转角 (rad)
+        for _ in range(150):
+            car.step(delta=delta_front, torque_wheel=0.0)
+        assert abs(car.y.item()) > 0.2
+
+    def test_no_trailer_mode(self):
+        """trailer_mass < 1.0 应进入无挂车模式（不崩溃）。"""
+        car = TruckTrailerVehicle(TT_PARAMS, x=0, y=0, yaw=0, v=10.0, dt=0.02,
+                                  trailer_mass_kg=0.0)
+        for _ in range(50):
+            car.step(delta=0.0, torque_wheel=0.0)
+        assert car.x.item() > 0
+
+    def test_detach_state(self):
+        car = TruckTrailerVehicle(TT_PARAMS, x=0, y=0, yaw=0, v=5.0, dt=0.02,
+                                  differentiable=True)
+        torque = torch.tensor(800.0, requires_grad=True)
+        car.step(delta=0.0, torque_wheel=torque)
+        car.detach_state()
+        assert not car.x.requires_grad
+        assert not car.v.requires_grad
+
+    def test_gradient_flows(self):
+        """differentiable 模式下梯度应能回传到 torque_wheel。"""
+        car = TruckTrailerVehicle(TT_PARAMS, x=0, y=0, yaw=0, v=5.0, dt=0.02,
+                                  differentiable=True)
+        torque = torch.tensor(2000.0, requires_grad=True)
+        car.step(delta=0.0, torque_wheel=torque)
+        car.v.backward()
+        assert torque.grad is not None
+        assert torque.grad.item() != 0.0
+
+
+@pytest.mark.skipif(not _HAS_CHECKPOINT,
+                    reason="truckdynamicmodel checkpoint 不存在")
+class TestTruckTrailerVehicleWithCheckpoint:
+    """带 MLP 残差 checkpoint。"""
+
+    def test_load_checkpoint(self):
+        car = TruckTrailerVehicle(TT_PARAMS, x=0, y=0, yaw=0, v=10.0, dt=0.02,
+                                  checkpoint_path=_CHECKPOINT)
+        assert car._mlp is not None
+
+    def test_mlp_correction_changes_trajectory(self):
+        """带 MLP 与不带 MLP 的轨迹应有差异。"""
+        car_base = TruckTrailerVehicle(TT_PARAMS, x=0, y=0, yaw=0, v=10.0,
+                                       dt=0.02)
+        car_hybrid = TruckTrailerVehicle(TT_PARAMS, x=0, y=0, yaw=0, v=10.0,
+                                         dt=0.02, checkpoint_path=_CHECKPOINT)
+        for _ in range(100):
+            car_base.step(delta=0.02, torque_wheel=0.0)
+            car_hybrid.step(delta=0.02, torque_wheel=0.0)
+        diff = (abs(car_base.x.item() - car_hybrid.x.item())
+                + abs(car_base.y.item() - car_hybrid.y.item()))
+        assert diff > 0.001
+
+    def test_gradient_flows_with_mlp(self):
+        car = TruckTrailerVehicle(TT_PARAMS, x=0, y=0, yaw=0, v=5.0, dt=0.02,
+                                  differentiable=True,
+                                  checkpoint_path=_CHECKPOINT)
+        torque = torch.tensor(2000.0, requires_grad=True)
+        car.step(delta=0.0, torque_wheel=torque)
+        car.v.backward()
+        assert torque.grad is not None

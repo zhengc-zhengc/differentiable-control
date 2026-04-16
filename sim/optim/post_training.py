@@ -801,7 +801,8 @@ if __name__ == '__main__':
                         help='轨迹类型名（自动展开到全速度段 + park_route）。'
                              '默认全量验证 (8×6+1=49)')
     parser.add_argument('--plant', default=None,
-                        choices=['kinematic', 'dynamic', 'hybrid_dynamic', 'hybrid_v2'],
+                        choices=['kinematic', 'dynamic', 'hybrid_dynamic',
+                                 'hybrid_v2', 'truck_trailer'],
                         help='被控对象类型，默认使用配置中的值')
     parser.add_argument('--output-dir', default=None,
                         help='输出目录，默认 results/validation/{plant}/{timestamp}/')
