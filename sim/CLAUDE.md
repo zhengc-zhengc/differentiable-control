@@ -18,7 +18,6 @@ sim/
 ├── config.py              # YAML 加载/保存，table_from_config → (Tensor, Tensor)
 ├── sim_loop.py            # 50Hz 闭环仿真（lat→lon→vehicle step）
 ├── run_demo.py            # 可视化 Demo（--save --no-show --config）
-├── compare_results.py     # [deprecated, 已被 post_training.py 取代] 旧版 4 场景对比
 ├── health_check.py        # 一键体检（测试 + 基线性能 + 梯度健康）
 ├── model/
 │   ├── vehicle.py         # BicycleModel — 运动学模型 (x,y,yaw,v)，step(delta, acc)
