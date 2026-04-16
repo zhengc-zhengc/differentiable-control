@@ -48,7 +48,7 @@ sim/
 
 ## 数据流
 
-**仿真**：`trajectory` 生成参考轨迹 → `sim_loop` 每步调用 `lat_ctrl.compute()` → `lon_ctrl.compute()` → `vehicle.step()` → 记录 history
+**仿真**：`trajectory` 生成参考轨迹 → `sim_loop` 每步调用 `lat_ctrl.compute()` → `lon_ctrl.compute()` → kinematic 直接 `vehicle.step(acc=...)`；dynamic/hybrid 追加 `lon_ctrl.compute_torque_wheel()` 后 `vehicle.step(torque_wheel=...)` → 记录 history
 
 **训练**：`DiffControllerParams` 封装两个控制器（nn.Module） → `sim_loop(differentiable=True, tbptt_k=K)` 构建计算图（每 K 步 detach 状态截断梯度链） → `tracking_loss` 汇总误差 → per-trajectory loss 归一化（除以 epoch-1 baseline） → `backward()` → Adam + CosineAnnealingLR 更新 → 参数投影（非负约束） → `save_tuned_config` 导出 YAML
 
@@ -98,7 +98,7 @@ python optim/post_training.py --config configs/tuned/xxx.yaml --plant dynamic  #
 
 - **符号约定**：spec 用 CW+（顺时针正），实现用 CCW+（逆时针正）。`lat_truck.py` Steps 4/5/7 的符号与 spec 相反，三处翻转自洽，最终输出数学等价
 - **横向控制器**：spec §2.5 Steps 1-10 全部实现，无遗漏
-- **纵向控制器**：spec §4.5 Steps 1-6 + IIR 滤波全部实现；Steps 7-9（GearControl / CalFinalTorque / 输出分配）有意跳过，直接输出加速度 (m/s²) 而非扭矩/刹车/档位
+- **纵向控制器**：spec §4.5 Steps 1-6 + IIR 滤波全部实现。Step 8 CalFinalTorque 部分实现（`compute_torque_wheel`：风阻/滚阻/惯性力/P补偿 → 车轮扭矩，跳过坡度估计和传动比/效率）。Steps 7/9（GearControl / 输出分配）跳过
 - **纵向时间坐标**：spec 用 `absolute_time`，实现用 `relative_time`（仿真中等价）；速度误差用 1.0s 预瞄点（更具前瞻性）
 
 ## 控制器参数分类
@@ -133,12 +133,15 @@ python optim/post_training.py --config configs/tuned/xxx.yaml --plant dynamic  #
 | 纵向 | L4_y (acc_down_rate) | 安全/舒适约束 |
 | 纵向 | L5_y (acc_rate_gain) | 安全约束辅助 |
 | 横向 | rate_limit_fb/ff/total | 硬编码安全约束 |
+| 纵向 | lon_torque 段 10 项（veh_mass/coef_cd/coef_rolling 等）| 物理常数（对齐 C++ CalFinalTorque） |
 
 ## 参考文档
 
-- `docs/controller_spec.md` — 控制器完整规格
+- `docs/controller_spec.md` — 控制器完整规格（v1）
+- `docs/controller_spec_v2.md` — 控制器规格 v2（对 v1 的校对修正，含纵向扭矩模型/坡度估计）
 - `docs/tunable_params_analysis.md` — 可调参数分析
 - `docs/plans/2026-03-02-differentiable-tuning-v2-design.md` — V2 设计
+- `docs/plans/2026-04-15-torque-output-layer-design.md` — 扭矩输出层设计
 
 ## 训练规范
 
