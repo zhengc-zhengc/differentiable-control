@@ -22,11 +22,10 @@ TT_PARAMS = {
     'hitch_x': -0.331, 'hitch_y': 0.002, 'min_speed_mps': 0.5,
 }
 
-# checkpoint 在外部仓库
+# 本地 checkpoint
 _CHECKPOINT = os.path.normpath(os.path.join(
-    os.path.dirname(__file__), '..', '..', '..',
-    'truckdynamicmodel', 'truck_trailer_residual_modular',
-    'best_truck_trailer_error_model.pth'))
+    os.path.dirname(__file__), '..', 'configs', 'checkpoints',
+    'truck_trailer_error_model.pth'))
 _HAS_CHECKPOINT = os.path.exists(_CHECKPOINT)
 
 

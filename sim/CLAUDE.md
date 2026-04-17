@@ -10,7 +10,7 @@
 - `dynamic`：6-DOF 动力学模型（RK4 积分）
 - `hybrid_dynamic`：机理模型(Euler) + MLP 残差修正（逼近 CarSim 高保真仿真，需 plant 仓库 checkpoint）
 - `hybrid_v2`：可插拔混合模型——base 动力学（当前注册 `dynamic_v2`）+ MLP 残差，通过 `cfg['vehicle']['base_model']` 选择
-- `truck_trailer`：牵引车+挂车双体动力学（12D 状态 + RK4 + 可选 MLP 残差，源码从外部仓库 `../truckdynamicmodel` 直接 import）
+- `truck_trailer`：牵引车+挂车双体动力学（12D 状态 + RK4 + 可选 MLP 残差，本地化在 `model/truck_trailer_dynamics.py`，无外部依赖）
 
 ## 模块结构
 
@@ -27,7 +27,8 @@ sim/
 │   ├── hybrid_dynamic_vehicle.py # HybridDynamicVehicle — 机理模型+MLP 残差修正，step(delta, torque_wheel)
 │   ├── generic_hybrid_vehicle.py # GenericHybridVehicle — checkpoint 驱动的可插拔被控对象
 │   ├── dynamic_vehicle_v2.py     # VehicleDynamicsV2 — GenericHybrid 的 base 动力学
-│   ├── truck_trailer_vehicle.py  # TruckTrailerVehicle — 牵引车+挂车双体（外部仓库），step(delta, torque_wheel)
+│   ├── truck_trailer_vehicle.py  # TruckTrailerVehicle — 牵引车+挂车双体适配器，step(delta, torque_wheel)
+│   ├── truck_trailer_dynamics.py # TruckTrailerNominalDynamics + MLPErrorModel（上游 truckdynamicmodel 的本地拷贝）
 │   ├── vehicle_factory.py # create_vehicle() — 根据 cfg 创建 kinematic/dynamic/hybrid_dynamic/hybrid_v2/truck_trailer 模型
 │   └── trajectory.py      # 轨迹生成（8 标准类型×6 速度段 + park_route）、变速剖面、expand_trajectories() + TrajectoryAnalyzer
 ├── controller/
@@ -184,7 +185,7 @@ python optim/post_training.py --config configs/tuned/xxx.yaml --plant dynamic  #
 
 ## truck_trailer 模型关键约束
 
-- **源码来自外部仓库** `../truckdynamicmodel/truck_trailer_residual_modular/`，通过 sys.path 导入；不拷贝代码
+- **底层动力学已本地化**在 `sim/model/truck_trailer_dynamics.py`（来自上游 `mutespeaker/truckdynamicmodel` 的拷贝）；checkpoint 也在 `sim/configs/checkpoints/truck_trailer_error_model.pth`；无任何外部仓库依赖
 - **Checkpoint 路径**：`configs/checkpoints/truck_trailer_error_model.pth`（从外部仓库复制到内部，便于独立分发，相对于 sim/）
 - **状态 12D**：牵引车质心 6D + 挂车质心 6D；对外暴露**牵引车后轴** x/y/yaw/v（控制器约定）
 - **质心↔后轴偏移**：b_t = L_t − a_t = 0.675 m（适配器 4 个 property 各做一次坐标转换）
