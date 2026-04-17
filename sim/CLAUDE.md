@@ -9,7 +9,8 @@
 - `kinematic`：运动学自行车模型（默认，训练快）
 - `dynamic`：6-DOF 动力学模型（RK4 积分）
 - `hybrid_dynamic`：机理模型(Euler) + MLP 残差修正（逼近 CarSim 高保真仿真，需 plant 仓库 checkpoint）
-- `truck_trailer`：牵引车+挂车双体动力学（12D 状态 + RK4 + 可选 MLP 残差，源码来自外部仓库 `../truckdynamicmodel`）
+- `hybrid_v2`：可插拔混合模型——base 动力学（当前注册 `dynamic_v2`）+ MLP 残差，通过 `cfg['vehicle']['base_model']` 选择
+- `truck_trailer`：牵引车+挂车双体动力学（12D 状态 + RK4 + 可选 MLP 残差，源码从外部仓库 `../truckdynamicmodel` 直接 import）
 
 ## 模块结构
 
@@ -184,10 +185,12 @@ python optim/post_training.py --config configs/tuned/xxx.yaml --plant dynamic  #
 ## truck_trailer 模型关键约束
 
 - **源码来自外部仓库** `../truckdynamicmodel/truck_trailer_residual_modular/`，通过 sys.path 导入；不拷贝代码
+- **Checkpoint 路径**：`configs/checkpoints/truck_trailer_error_model.pth`（从外部仓库复制到内部，便于独立分发，相对于 sim/）
 - **状态 12D**：牵引车质心 6D + 挂车质心 6D；对外暴露**牵引车后轴** x/y/yaw/v（控制器约定）
 - **质心↔后轴偏移**：b_t = L_t − a_t = 0.675 m（适配器 4 个 property 各做一次坐标转换）
 - **Base 用 RK4 积分**（和 hybrid_dynamic 用 Euler 不同；MLP 训练时 base 也是 RK4）
 - **挂车质量 yaml 可配**：`default_trailer_mass_kg`，默认 15004 kg；< 1.0 kg 自动进入无挂车模式
+- **底层车轮假设**：外部 base model 的控制量是 `[方向盘角, T_fl, T_fr, T_rl, T_rr]` = 4 轮，其中前轮扭矩始终为 0（等效 4×2 单后桥驱动）；适配器把纵向控制器给的总扭矩 `torque_wheel` 平分到左右后轮
 - **MLP 输入 18D**：[trailer_mass, vx_t, vy_t, r_t, speed_t, vx_s, vy_s, r_s, speed_s, articulation, sin/cos articulation, 5×control, dt]
 - **MLP 输出 6D 运动残差** [Δvx_t, Δvy_t, Δr_t, Δvx_s, Δvy_s, Δr_s]，重建为 12D 状态修正
 - **跟踪性能预期**：当前控制器参数针对 2440 kg 乘用车调校，直接用在 24 吨卡车+挂车上跟不动，需要专门调参

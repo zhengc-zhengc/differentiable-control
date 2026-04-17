@@ -92,7 +92,7 @@ truck_trailer_vehicle:
   # 运行时挂车质量（可改为 0 切到无挂车模式，阈值 1.0 kg）
   default_trailer_mass_kg: 15004.0
   # MLP 残差 checkpoint（相对 sim/ 目录）
-  checkpoint_path: ../../truckdynamicmodel/truck_trailer_residual_modular/best_truck_trailer_error_model.pth
+  checkpoint_path: configs/checkpoints/truck_trailer_error_model.pth
 
 simulation:
   dt: 0.02

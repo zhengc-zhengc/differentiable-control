@@ -43,3 +43,10 @@ uv venv && source .venv/Scripts/activate && uv pip install opencv-python torch
 - 图表标题、坐标轴标签、图例使用**中文**
 - 每个子图都要有**图例**
 - 结果图保存到 `sim/results/`，纳入 git
+
+## 沟通风格
+
+- 解释机制时用**自然语言直接描述物理/数学原理**，尽量少用代码黑话（变量名、类名、函数名、PyTorch 术语堆砌）
+- 能用一句"把总扭矩平分到两个后轮"说清楚，就不要只贴 `torque_rear = torque_wheel / 2.0`
+- 先讲"这件事在做什么、为什么这么做"，再在必要时引用代码位置佐证
+- 回复避免冗余总结与套话，直奔结论
