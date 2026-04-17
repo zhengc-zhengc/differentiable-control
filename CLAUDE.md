@@ -4,6 +4,8 @@
 1. **代码提取**（`analysis/`、`output/`、`tools/`）：从屏幕录像中提取自动驾驶控制模块的 C++ 代码结构
 2. **可微控制**（`sim/`）：将提取的控制器用 PyTorch 复现（nn.Module），基于自行车模型进行可微调参
 
+> **新控制器可微复现的标准流程见 [`docs/controller_reproduction_workflow.md`](docs/controller_reproduction_workflow.md)**——从截图到 tuned YAML 的 5 阶段工作流 + 踩坑 catalog。
+
 ## Target Code Architecture（控制模块架构概要）
 
 目标项目是自动驾驶的**控制模块**，50Hz 控制循环，横向→纵向串行执行。已复现横向（LatControllerTruck，重卡）和纵向（LonController，含扭矩输出层），电拖横向（LatController）未复现。
