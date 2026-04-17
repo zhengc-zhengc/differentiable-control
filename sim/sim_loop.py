@@ -7,7 +7,7 @@ import torch
 from common import normalize_angle, TrajectoryPoint
 from config import load_config
 from model.trajectory import TrajectoryAnalyzer
-from model.vehicle_factory import create_vehicle
+from model.vehicle_factory import create_vehicle, resolve_vehicle_geometry
 from controller.lat_truck import LatControllerTruck
 from controller.lon import LonController
 
@@ -46,26 +46,7 @@ def run_simulation(trajectory: list[TrajectoryPoint],
 
     veh = cfg['vehicle']
     model_type = veh.get('model_type', 'kinematic')
-    if model_type == 'dynamic':
-        dyn = cfg['dynamic_vehicle']
-        wheelbase = dyn['lf'] + dyn['lr']
-        steer_ratio = dyn['steer_ratio']
-    elif model_type == 'hybrid_dynamic':
-        hyb = cfg['hybrid_dynamic_vehicle']
-        wheelbase = hyb['lf'] + hyb['lr']
-        steer_ratio = hyb['steer_ratio']
-    elif model_type == 'hybrid_v2':
-        params_key = cfg['vehicle'].get('params_section', 'dynamic_v2_vehicle')
-        v2p = cfg[params_key]
-        wheelbase = v2p['lf'] + v2p['lr']
-        steer_ratio = v2p['steer_ratio']
-    elif model_type == 'truck_trailer':
-        tt = cfg['truck_trailer_vehicle']
-        wheelbase = tt['L_t']
-        steer_ratio = tt['steering_ratio']
-    else:
-        wheelbase = veh['wheelbase']
-        steer_ratio = veh['steer_ratio']
+    wheelbase, steer_ratio = resolve_vehicle_geometry(cfg)
     dt = cfg['simulation']['dt']
 
     analyzer = TrajectoryAnalyzer(trajectory)

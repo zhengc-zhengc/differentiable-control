@@ -10,6 +10,7 @@ from common import (lookup1d, rate_limit, clamp, sign, normalize_angle,
                     _straight_through_clamp)
 from config import table_from_config
 from model.trajectory import TrajectoryAnalyzer
+from model.vehicle_factory import resolve_vehicle_geometry
 
 DEG2RAD = math.pi / 180.0
 RAD2DEG = 180.0 / math.pi
@@ -26,17 +27,10 @@ class LatControllerTruck(nn.Module):
 
     def __init__(self, cfg: dict, differentiable: bool = False):
         super().__init__()
-        veh = cfg['vehicle']
         lat = cfg['lat_truck']
 
-        model_type = veh.get('model_type', 'kinematic')
-        if model_type == 'dynamic':
-            dyn = cfg['dynamic_vehicle']
-            self.wheelbase = dyn['lf'] + dyn['lr']
-            self.steer_ratio = dyn['steer_ratio']
-        else:
-            self.wheelbase = veh['wheelbase']
-            self.steer_ratio = veh['steer_ratio']
+        # 解析 plant 几何（所有 plant 类型集中在 resolve_vehicle_geometry 处理）
+        self.wheelbase, self.steer_ratio = resolve_vehicle_geometry(cfg)
         self.differentiable = differentiable
 
         # 固定物理参数（不参与梯度优化）

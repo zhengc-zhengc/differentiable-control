@@ -15,6 +15,30 @@ _BASE_MODEL_REGISTRY = {
 }
 
 
+def resolve_vehicle_geometry(cfg):
+    """根据 cfg['vehicle']['model_type'] 解析 (wheelbase, steer_ratio)。
+
+    所有读 plant 几何的地方（sim_loop、lat_truck 等）都应走这里，
+    避免新增 plant 类型时遗漏更新。
+    """
+    veh = cfg['vehicle']
+    model_type = veh.get('model_type', 'kinematic')
+    if model_type == 'dynamic':
+        dyn = cfg['dynamic_vehicle']
+        return dyn['lf'] + dyn['lr'], dyn['steer_ratio']
+    if model_type == 'hybrid_dynamic':
+        hyb = cfg['hybrid_dynamic_vehicle']
+        return hyb['lf'] + hyb['lr'], hyb['steer_ratio']
+    if model_type == 'hybrid_v2':
+        params_key = veh.get('params_section', 'dynamic_v2_vehicle')
+        v2p = cfg[params_key]
+        return v2p['lf'] + v2p['lr'], v2p['steer_ratio']
+    if model_type == 'truck_trailer':
+        tt = cfg['truck_trailer_vehicle']
+        return tt['L_t'], tt['steering_ratio']
+    return veh['wheelbase'], veh['steer_ratio']
+
+
 def _resolve_checkpoint_path(rel_path):
     """将 checkpoint 相对路径解析为绝对路径（相对于 sim/ 目录）。"""
     if not rel_path or os.path.isabs(rel_path):
