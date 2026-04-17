@@ -114,78 +114,101 @@
 └── requirements.txt                    # 依赖：torch, numpy, matplotlib, pyyaml, pytest
 ```
 
-## 环境搭建
+## 快速开始（从零到训练）
+
+默认推荐被控对象 `truck_trailer`（牵引车+挂车双体，与真实 C++ 控制器目标一致）。整套流程依次跑下来约 2 小时，产物自动入 `sim/results/training/`。
+
+### 第 1 步：环境搭建（一次性，约 5 分钟）
 
 ```bash
 git clone https://github.com/zhengc-zhengc/differentiable-control.git
 cd differentiable-control
-
-uv venv && source .venv/Scripts/activate   # Windows (Git Bash)
-# source .venv/bin/activate                # Linux/Mac
+uv venv
+# Windows PowerShell:    .\.venv\Scripts\Activate.ps1
+# Windows Git Bash:      source .venv/Scripts/activate
+# Linux/Mac:             source .venv/bin/activate
 uv pip install -r requirements.txt
 ```
 
-## 快速开始
+### 第 2 步：跑测试确认环境 OK（约 5 分钟）
 
 ```bash
 cd sim
-
-# 1. 运行测试
 python -m pytest tests/ -q
+```
 
-# 2. 可视化 Demo（推荐 truck_trailer：牵引车+挂车双体）
+预期：`200+ passed`。如有 FAILED 先解决环境问题再往后走。
+
+### 第 3 步：跑可视化 Demo 看基线效果（约 1-2 分钟）
+
+```bash
 python run_demo.py --plant truck_trailer --save --no-show
+```
 
-# 3. 训练（可微调参）
-python optim/train.py --plant truck_trailer --epochs 6
+产物：`sim/results/baseline/truck_trailer/*.png`，8 张场景图展示**未调参**的控制器跟踪效果（作为对比基线）。
 
-# 4. 独立验证
+### 第 4 步：跑可微调参训练
+
+**⚠️ Windows PowerShell 必加 `-u` 参数**，否则看不到实时进度（Python stdout 管道缓冲）：
+
+```powershell
+# PowerShell（推荐长跑配置，带日志文件）
+python -u optim/train.py --epochs 6 --plant truck_trailer 2>&1 | Tee-Object -FilePath "training_log_$(Get-Date -Format 'yyyyMMdd_HHmmss').txt"
+```
+
+```bash
+# Linux/Mac/Git Bash
+python optim/train.py --epochs 6 --plant truck_trailer
+```
+
+**时间预估**：truck_trailer 单步计算量是运动学模型的 20×，6 epoch 全量训练约 **2-4 小时**。想先快速验证流程：加 `--trajectories lane_change --sim-length 60`，1-2 分钟跑完。
+
+### 第 5 步：查看结果
+
+训练完成后**自动跑验证 + 出图**，产物在 `sim/results/training/truck_trailer/{时间戳}/`：
+
+| 文件 | 看什么 |
+|---|---|
+| `loss_curve.png` | 训练 loss 下降曲线 |
+| `comparison_*.png` | 49 场景 baseline vs tuned 轨迹/误差对比 |
+| `parameter_changes.png` | 每个可微参数训练前后的变化热力图 |
+| `training_summary.png` | 全场景 lat_rmse/head_rmse 汇总仪表板 |
+| `experiment_log.yaml` | 完整实验日志（超参、最终参数、各场景指标）|
+
+调好的参数存在 `sim/configs/tuned/tuned_{commit}_{时间戳}.yaml`，可以再做独立验证：
+
+```bash
 python optim/post_training.py --config configs/tuned/xxx.yaml --plant truck_trailer
 ```
 
-## 两种运行模式
-
-### 1. 非可微仿真（测试/基线评估）
-
-控制器行为与原始 C++ 实现一致（`differentiable=False`），用于评估和对比。
+## 常见场景命令
 
 ```bash
 cd sim
 
-# 可视化 Demo
-python run_demo.py --plant truck_trailer --save --no-show
-
-# 加载调参结果对比
+# 加载调参结果，看调完后的跟踪效果
 python run_demo.py --plant truck_trailer --config configs/tuned/xxx.yaml --save --no-show
 
-# 一键体检
+# 一键体检：跑测试 + 基线性能 + 梯度健康
 python health_check.py
-```
 
-### 2. 可微调参训练
-
-构建可微计算图，通过 BPTT 优化控制器参数（`differentiable=True`）。每条轨迹算完立即 backward 释放计算图（per-traj backward），内存占用稳定不随 epoch 增长。
-
-```bash
-cd sim
-
-# 默认全量训练：8 种轨迹类型 × 6 速度段 = 48 条轨迹
-python optim/train.py --plant truck_trailer --epochs 6
-
-# 指定轨迹类型（自动展开到全部 6 个速度段）
+# 指定轨迹类型训练（自动展开到 6 速度段）
 python optim/train.py --plant truck_trailer --trajectories lane_change clothoid_decel --epochs 10
 
-# warm-start：从上次调参结果继续训练
+# warm-start：基于上次调参继续训练
 python optim/train.py --plant truck_trailer --config configs/tuned/xxx.yaml --epochs 6
+
+# 只跑独立验证（不训练）
+python optim/post_training.py --config configs/tuned/xxx.yaml --plant truck_trailer
 ```
 
-训练完成后自动生成：loss 曲线、分轨迹 loss 分项、baseline vs tuned 对比图（49 场景）、参数变化热力图、实验日志。所有产物保存到 `results/training/{plant}/{timestamp}/`。
+**双路径说明**：训练用 `differentiable=True`（平滑近似 + 可导），验证用 `differentiable=False`（与原始 C++ 硬限幅行为一致）。训练脚本已封好，`run_demo.py / post_training.py` 也默认走 V1 硬限幅路径。
 
 ## 训练 CLI 参数
 
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
-| `--plant` | kinematic | 被控对象（见下方「车辆模型」） |
+| `--plant` | 读 yaml（默认 kinematic）| 被控对象；推荐 `truck_trailer`（见下方「车辆模型」） |
 | `--epochs` | 100 | 训练轮数（推荐 6 快速迭代） |
 | `--trajectories` | 全部 8 种 | 轨迹类型名，空格分隔，自动展开到 6 速度段 |
 | `--config` | None | 初始参数配置路径（warm-start） |
@@ -208,7 +231,7 @@ python optim/train.py --plant truck_trailer --config configs/tuned/xxx.yaml --ep
 
 ```bash
 # --plant 指定被控对象，系统自动选择 default.yaml 中对应的参数段
-python optim/train.py --plant hybrid_v2 --epochs 6
+python optim/train.py --plant truck_trailer --epochs 6
 ```
 
 ### 可用模型
@@ -229,7 +252,7 @@ python optim/train.py --plant hybrid_v2 --epochs 6
 
 ### hybrid_v2 配置详解
 
-`hybrid_v2` 是推荐的高保真被控对象，由 **base 动力学 + 可选 MLP 残差修正** 组成。使用 `--plant hybrid_v2` 时，系统读取 `default.yaml` 中以下配置：
+`hybrid_v2` 是 robovan 的 base 动力学 + MLP 残差通用框架（checkpoint 驱动、无需改代码即可替换 MLP）。使用 `--plant hybrid_v2` 时，系统读取 `default.yaml` 中以下配置：
 
 ```yaml
 # ---- sim/configs/default.yaml 中的相关配置 ----
