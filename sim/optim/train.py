@@ -228,8 +228,12 @@ def train(trajectories=None, n_epochs=100, lr=5e-2, lr_tables=5e-2,
     for epoch in range(n_epochs):
         t_epoch = _time.time()
         optimizer.zero_grad()
-        epoch_loss = torch.tensor(0.0)
+        # Per-traj backward：每条轨迹算完立即反传释放计算图，
+        # 避免 48 条轨迹的图同时驻留内存导致 OOM。
+        # 数学等价：∇(Σ wᵢ·Lᵢ) = Σ ∇(wᵢ·Lᵢ)，梯度自动累加到 .grad
+        epoch_loss_val = 0.0  # 标量累加，仅用于打印/记录
         traj_details = {}
+        n_trajs = len(traj_list)
 
         for traj_key, traj_gen in traj_list:
             traj = traj_gen()
@@ -261,7 +265,12 @@ def train(trajectories=None, n_epochs=100, lr=5e-2, lr_tables=5e-2,
                 baseline_traj_losses[traj_key] = max(loss.detach().item(), 1e-6)
             raw_baseline = baseline_traj_losses.get(traj_key, 1.0)
             norm_factor = max(raw_baseline ** norm_alpha, norm_floor)
-            epoch_loss = epoch_loss + loss / norm_factor
+            # 一次性除以 norm_factor 和 n_trajs（等价原方案 epoch_loss / N）
+            weighted = loss / norm_factor / n_trajs
+
+            # 立即反传：梯度累加到 .grad，weighted 离开作用域后计算图被回收
+            weighted.backward()
+            epoch_loss_val += weighted.detach().item()
 
             traj_details[traj_key] = details
 
@@ -274,14 +283,14 @@ def train(trajectories=None, n_epochs=100, lr=5e-2, lr_tables=5e-2,
                 print(f"  归一化下限: median_baseline={median_baseline:.4f}, "
                       f"norm_floor={norm_floor:.4f} (alpha={norm_alpha})")
 
-        epoch_loss = epoch_loss / len(traj_list)
-
-        # L2 正则化：惩罚参数偏离初始值，防止过拟合
+        # L2 正则化：单独反传，梯度累加到 .grad
         l2_reg = torch.tensor(0.0)
         for name, p in params.named_parameters():
             init_p = initial_params[name]
             l2_reg = l2_reg + ((p - init_p) ** 2).sum()
-        epoch_loss = epoch_loss + 0.01 * l2_reg
+        l2_loss = 0.01 * l2_reg
+        l2_loss.backward()
+        epoch_loss_val += l2_loss.detach().item()
 
         # 从 traj_details 计算各轨迹平均（兼容现有打印）
         epoch_details = {}
@@ -289,8 +298,6 @@ def train(trajectories=None, n_epochs=100, lr=5e-2, lr_tables=5e-2,
             all_keys = list(next(iter(traj_details.values())).keys())
             for k in all_keys:
                 epoch_details[k] = sum(td[k] for td in traj_details.values()) / len(traj_details)
-
-        epoch_loss.backward()
 
         # 梯度已由 hooks 清理 NaN/Inf，此处统计异常数量
         nan_count = 0
@@ -320,12 +327,12 @@ def train(trajectories=None, n_epochs=100, lr=5e-2, lr_tables=5e-2,
 
         scheduler.step()
 
-        losses.append(epoch_loss.item())
+        losses.append(epoch_loss_val)
         dt = _time.time() - t_epoch
 
         epoch_record = {
             'epoch': epoch + 1,
-            'loss': epoch_loss.item(),
+            'loss': epoch_loss_val,
             'grad_norm': grad_norm,
             'nan_count': int(nan_count),
             'dt': dt,
@@ -336,7 +343,7 @@ def train(trajectories=None, n_epochs=100, lr=5e-2, lr_tables=5e-2,
 
         if verbose:
             nan_warn = f" [!NaN grads:{int(nan_count)}]" if nan_count > 0 else ""
-            print(f"[{epoch+1:3d}/{n_epochs}] loss={epoch_loss.item():8.4f} | "
+            print(f"[{epoch+1:3d}/{n_epochs}] loss={epoch_loss_val:8.4f} | "
                   f"lat_rmse={epoch_details['lat_rmse']:.4f}m "
                   f"head_rmse={epoch_details['head_rmse']:.4f}rad "
                   f"spd_rmse={epoch_details['speed_rmse']:.4f}m/s | "
