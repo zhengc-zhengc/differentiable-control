@@ -233,32 +233,31 @@ class TruckTrailerNominalDynamics(nn.Module):
 
 
 # ===== MLP 残差网络（来自 model_structure.py）=====
+# 结构：input → [Linear → (LayerNorm) → Tanh → Dropout] × hidden_layers → Linear → output
+# 向后兼容默认 hidden_dim=128, hidden_layers=4（老 checkpoint）；
+# 新 checkpoint 带 mlp_hidden_dim / mlp_hidden_layers 时走配置值（如 64/3）。
 
 class MLPErrorModel(nn.Module):
     def __init__(self, input_dim: int, output_dim: int, dropout_p: float = 0.08,
-                 use_layer_norm: bool = MLP_USE_LAYER_NORM) -> None:
+                 use_layer_norm: bool = MLP_USE_LAYER_NORM,
+                 hidden_dim: int = 128, hidden_layers: int = 4) -> None:
         super().__init__()
         safe_dropout = float(np.clip(dropout_p, 0.0, 0.5))
         self.use_layer_norm = bool(use_layer_norm)
-        self.network = nn.Sequential(
-            nn.Linear(input_dim, 128),
-            self._build_norm(128),
-            nn.Tanh(),
-            nn.Dropout(safe_dropout),
-            nn.Linear(128, 128),
-            self._build_norm(128),
-            nn.Tanh(),
-            nn.Dropout(safe_dropout),
-            nn.Linear(128, 128),
-            self._build_norm(128),
-            nn.Tanh(),
-            nn.Dropout(safe_dropout),
-            nn.Linear(128, 128),
-            self._build_norm(128),
-            nn.Tanh(),
-            nn.Dropout(safe_dropout),
-            nn.Linear(128, output_dim),
-        )
+        self.hidden_dim = int(hidden_dim)
+        self.hidden_layers = int(hidden_layers)
+
+        layers: list[nn.Module] = []
+        prev_dim = input_dim
+        for _ in range(self.hidden_layers):
+            layers.append(nn.Linear(prev_dim, self.hidden_dim))
+            layers.append(self._build_norm(self.hidden_dim))
+            layers.append(nn.Tanh())
+            layers.append(nn.Dropout(safe_dropout))
+            prev_dim = self.hidden_dim
+        layers.append(nn.Linear(prev_dim, output_dim))
+        self.network = nn.Sequential(*layers)
+
         output_layer = self.network[-1]
         nn.init.zeros_(output_layer.weight)
         nn.init.zeros_(output_layer.bias)

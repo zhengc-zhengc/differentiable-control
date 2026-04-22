@@ -1,0 +1,335 @@
+vehicle:
+  model_type: kinematic
+  wheelbase: 3.5
+  steer_ratio: 17.5
+  mass: 2440.0
+  wheel_rolling_radius: 0.505
+  windward_area: 8.0
+  transmission_efficiency: 0.85
+  transmission_ratio_D: 14.02
+dynamic_vehicle:
+  mass: 2440.0
+  Iz: 9564.8
+  lf: 1.354
+  lr: 1.446
+  wheel_radius: 0.329
+  drag_coeff: 0.558
+  frontal_area: 5.903
+  air_density: 1.225
+  rolling_coeff: 0.0065
+  corner_stiff_f: 80000.0
+  corner_stiff_r: 80000.0
+  tire_friction_mu: 0.85
+  track_width: 1.725
+  steer_ratio: 16.39
+hybrid_dynamic_vehicle:
+  mass: 2440.0
+  Iz: 9564.8
+  lf: 1.354
+  lr: 1.446
+  wheel_radius: 0.329
+  drag_coeff: 0.558
+  frontal_area: 5.903
+  air_density: 1.206
+  rolling_coeff: 0.0065
+  corner_stiff_f: 56000.0
+  corner_stiff_r: 56000.0
+  tire_friction_mu: 0.85
+  track_width: 1.725
+  steer_ratio: 16.39
+  reverse_sign_speed_mps: 0.5
+  checkpoint_path: configs/checkpoints/best_error_model_from_carsim.pth
+dynamic_v2_vehicle:
+  mass: 2440.0
+  Iz: 9564.8
+  lf: 1.354
+  lr: 1.446
+  wheel_radius: 0.329
+  drag_coeff: 0.558
+  frontal_area: 5.903
+  air_density: 1.206
+  rolling_coeff: 0.0065
+  corner_stiff_f: 56000.0
+  corner_stiff_r: 56000.0
+  tire_friction_mu: 0.85
+  track_width: 1.725
+  steer_ratio: 16.39
+  reverse_sign_speed_mps: 0.5
+truck_trailer_vehicle:
+  m_t: 9300.0
+  Iz_t: 48639.0
+  L_t: 4.475
+  a_t: 3.8
+  m_s_base: 15004.0
+  Iz_s_base: 96659.0
+  L_s: 8.0
+  c_s: 4.0
+  Cf: 80000.0
+  Cr: 80000.0
+  Cs: 80000.0
+  wheel_radius: 0.5
+  track_width: 1.8
+  steering_ratio: 16.39
+  rho: 1.225
+  CdA_t: 5.82
+  CdA_s: 6.5
+  rolling_coeff: 0.006
+  hitch_x: -0.331
+  hitch_y: 0.002
+  min_speed_mps: 0.5
+  default_trailer_mass_kg: 0.0
+  checkpoint_path: configs/checkpoints/best_truck_trailer_error_model.pth
+simulation:
+  dt: 0.02
+lat_truck:
+  kLh: 0.0
+  rate_limit_fb: 120.0
+  rate_limit_ff: 165.0
+  rate_limit_total: 300.0
+  min_prev_dist: 5.0
+  min_reach_dis: 3.0
+  min_speed_prot: 0.1
+  T1_max_theta_deg:
+  - - 0.0
+    - 3.859999895095825
+  - - 10.0
+    - 3.859999895095825
+  - - 20.0
+    - 3.859999895095825
+  - - 30.0
+    - 3.859999895095825
+  - - 40.0
+    - 3.859999895095825
+  - - 50.0
+    - 3.859999895095825
+  - - 60.0
+    - 3.859999895095825
+  T2_prev_time_dist:
+  - - 0.0
+    - 1.5150938034057617
+  - - 10.0
+    - 1.3954596519470215
+  - - 20.0
+    - 1.395505666732788
+  - - 30.0
+    - 1.3949379920959473
+  - - 40.0
+    - 1.3949400186538696
+  - - 50.0
+    - 1.395272970199585
+  - - 60.0
+    - 1.3952711820602417
+  T3_reach_time_theta:
+  - - 0.0
+    - 1.0922778844833374
+  - - 10.0
+    - 0.9956005215644836
+  - - 20.0
+    - 0.9955068230628967
+  - - 30.0
+    - 0.9949302077293396
+  - - 40.0
+    - 0.994901716709137
+  - - 50.0
+    - 0.9949991703033447
+  - - 60.0
+    - 0.9950094819068909
+  T4_T_dt:
+  - - 0.0
+    - 0.0
+  - - 10.0
+    - 0.0
+  - - 20.0
+    - 0.19529791176319122
+  - - 30.0
+    - 0.19488976895809174
+  - - 40.0
+    - 0.19489233195781708
+  - - 50.0
+    - 0.19500383734703064
+  - - 60.0
+    - 0.19499139487743378
+  T5_near_point_time:
+  - - 0.0
+    - 0.10000000149011612
+  - - 10.0
+    - 0.10000000149011612
+  - - 20.0
+    - 0.10000000149011612
+  - - 30.0
+    - 0.10000000149011612
+  - - 40.0
+    - 0.10000000149011612
+  - - 50.0
+    - 0.10000000149011612
+  - - 60.0
+    - 0.10000000149011612
+  T6_far_point_time:
+  - - 0.0
+    - 0.9563041925430298
+  - - 10.0
+    - 0.8956903219223022
+  - - 20.0
+    - 0.8949694037437439
+  - - 30.0
+    - 0.8949558734893799
+  - - 40.0
+    - 0.8955027461051941
+  - - 50.0
+    - 0.8977868556976318
+  - - 60.0
+    - 0.89797443151474
+  T7_max_steer_angle:
+  - - 0.0
+    - 1100.0
+  - - 10.0
+    - 1100.0
+  - - 20.0
+    - 1100.0
+  - - 30.0
+    - 500.0
+  - - 40.0
+    - 500.0
+  - - 50.0
+    - 500.0
+  - - 60.0
+    - 500.0
+  T8_slip_param:
+  - - 0.0
+    - 1.0
+  - - 10.0
+    - 1.0
+  - - 20.0
+    - 1.0
+  - - 30.0
+    - 1.0
+  - - 40.0
+    - 1.0
+  - - 50.0
+    - 1.0
+  - - 60.0
+    - 1.0
+  - - 70.0
+    - 1.0
+  - - 120.0
+    - 1.0
+lon:
+  station_kp: 0.14649587869644165
+  station_ki: 0.0
+  station_integrator_enable: false
+  station_sat: 0.3
+  low_speed_kp: 0.44930270314216614
+  low_speed_ki: 0.0
+  high_speed_kp: 0.4379028379917145
+  high_speed_ki: 0.03236835449934006
+  speed_pid_sat: 0.3
+  switch_speed: 2.9912984371185303
+  preview_window: 5.0
+  preview_window_speed: 50.0
+  acc_use_preview_a: 1.0
+  station_error_limit: 8.0
+  speed_input_limit: 5.0
+  acc_standstill_down_rate: -0.005
+  iir_alpha: 0.15
+  L1_acc_up_lim:
+  - - 0.0
+    - 1.600000023841858
+  - - 10.0
+    - 1.5
+  - - 20.0
+    - 1.399999976158142
+  - - 30.0
+    - 1.2999999523162842
+  - - 40.0
+    - 1.2000000476837158
+  L2_acc_low_lim:
+  - - 0.0
+    - -0.10000000149011612
+  - - 1.0
+    - -0.5
+  - - 2.0
+    - -1.5
+  - - 4.0
+    - -2.0
+  - - 12.0
+    - -3.0
+  - - 25.0
+    - -3.5
+  L3_acc_up_rate:
+  - - -0.5
+    - 0.04500000178813934
+  - - -0.25
+    - 0.03999999910593033
+  - - -0.10000000149011612
+    - 0.03500000014901161
+  - - 0.10000000149011612
+    - 0.03500000014901161
+  - - 0.25
+    - 0.03999999910593033
+  - - 0.5
+    - 0.04500000178813934
+  L4_acc_down_rate:
+  - - -1.0
+    - -0.029999999329447746
+  - - -0.5
+    - -0.029999999329447746
+  - - -0.30000001192092896
+    - -0.02500000037252903
+  - - -0.20000000298023224
+    - -0.019999999552965164
+  - - -0.10000000149011612
+    - -0.019999999552965164
+  - - 0.10000000149011612
+    - -0.019999999552965164
+  - - 0.20000000298023224
+    - -0.02500000037252903
+  - - 0.5
+    - -0.029999999329447746
+  - - 1.0
+    - -0.029999999329447746
+  L5_rate_gain:
+  - - 0.0
+    - 1.5
+  - - 10.0
+    - 1.5
+  - - 20.0
+    - 1.350000023841858
+  - - 30.0
+    - 1.2000000476837158
+  - - 50.0
+    - 1.0
+lon_torque:
+  veh_mass: 9300.0
+  coef_cd: 0.6
+  coef_rolling: 0.013
+  coef_delta: 1.05
+  air_density: 1.2041
+  gravity: 9.81
+  frontal_area: 9.7
+  wheel_rolling_radius: 0.5
+  accel_to_torque_kp: 1000
+  accel_deadzone: -0.05
+_meta:
+  commit: 3b6520a
+  timestamp: '20260422_132634'
+  final_loss: 1.8090182999148965
+  initial_loss: 2.310710608959198
+  epochs: 3
+  trajectory_types:
+  - lane_change
+  trajectory_count: 6
+  speed_bands_kph:
+  - 5
+  - 18
+  - 25
+  - 35
+  - 45
+  - 55
+  lr: 0.05
+  lr_tables: 0.05
+  tbptt_k: 150
+  grad_clip: 10.0
+  w_lat: 10.0
+  w_head: 8.0
+  w_speed: 3.0
+  total_time_s: 597.6

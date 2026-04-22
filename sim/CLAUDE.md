@@ -185,16 +185,25 @@ python optim/post_training.py --config configs/tuned/xxx.yaml --plant dynamic  #
 
 ## truck_trailer 模型关键约束
 
-- **底层动力学已本地化**在 `sim/model/truck_trailer_dynamics.py`（来自上游 `mutespeaker/truckdynamicmodel` 的拷贝）；checkpoint 也在 `sim/configs/checkpoints/truck_trailer_error_model.pth`；无任何外部仓库依赖
-- **Checkpoint 路径**：`configs/checkpoints/truck_trailer_error_model.pth`（从外部仓库复制到内部，便于独立分发，相对于 sim/）
+- **底层动力学已本地化**在 `sim/model/truck_trailer_dynamics.py`（来自上游 `mutespeaker/truckdynamicmodel` 的拷贝）；checkpoint 也在 `sim/configs/checkpoints/`；无任何外部仓库依赖
 - **状态 12D**：牵引车质心 6D + 挂车质心 6D；对外暴露**牵引车后轴** x/y/yaw/v（控制器约定）
 - **质心↔后轴偏移**：b_t = L_t − a_t = 0.675 m（适配器 4 个 property 各做一次坐标转换）
 - **Base 用 RK4 积分**（和 hybrid_dynamic 用 Euler 不同；MLP 训练时 base 也是 RK4）
-- **挂车质量 yaml 可配**：`default_trailer_mass_kg`，默认 15004 kg；< 1.0 kg 自动进入无挂车模式
+- **挂车质量 yaml 可配**：`default_trailer_mass_kg`，默认 0 kg（无挂车）；< 1.0 kg 自动进入无挂车模式（底层强制 `挂车态=牵引车态`）；当前 MLP checkpoint 输入特征里有显式 `has_trailer` 标志，可直接切换
 - **底层车轮假设**：外部 base model 的控制量是 `[方向盘角, T_fl, T_fr, T_rl, T_rr]` = 4 轮，其中前轮扭矩始终为 0（等效 4×2 单后桥驱动）；适配器把纵向控制器给的总扭矩 `torque_wheel` 平分到左右后轮
-- **MLP 输入 18D**：[trailer_mass, vx_t, vy_t, r_t, speed_t, vx_s, vy_s, r_s, speed_s, articulation, sin/cos articulation, 5×control, dt]
-- **MLP 输出 6D 运动残差** [Δvx_t, Δvy_t, Δr_t, Δvx_s, Δvy_s, Δr_s]，重建为 12D 状态修正
-- **跟踪性能预期**：当前控制器参数针对 2440 kg 乘用车调校，直接用在 24 吨卡车+挂车上跟不动，需要专门调参
+
+### MLP checkpoint 兼容双版本
+
+| 版本 | Checkpoint | 输入 | 输出 | 隐层 | 归一化/裁剪依据 |
+|------|-----------|------|------|------|-----------------|
+| v1 | `truck_trailer_error_model.pth` | 18D（含 speed_t/s、articulation/sin/cos、5 轮扭矩、dt） | 6D（速度残差） | 128×4 | `loss_motion_error_scale` |
+| v2 | `best_truck_trailer_error_model.pth`（默认） | 14D（`trailer_mass`、`has_trailer`、6 速度分量、`rel_x/y`、sin/cos(铰接角)、`steer_sw_rad`、`rear_drive_torque_sum`） | 9D（6 速度残差 + 3 相对位姿残差） | 64×3 | `loss_output_scale` |
+
+- **`MLPErrorModel`** 支持可配 `hidden_dim`/`hidden_layers`（默认 128/4 向后兼容）；权重始终 `requires_grad_(False)`
+- **适配器自动识别版本**：按 checkpoint 里 `model_input_dim`/`model_output_dim` 分发到 `build_mlp_input_feature_tensor` / `build_mlp_input_feature_tensor_v2`，状态修正用 `derive_full_error_from_motion_error_torch[_v2]`
+- **v2 的 9D → 12D 状态修正**：前 6 速度残差走 v1 逻辑（积分成位姿 delta + 速度 delta）；末 3 是牵引车 body frame 下的相对位姿残差，旋转到世界系后叠加到挂车位姿 delta
+- **无挂车时的 MLP 修正重新 mask**：`trailer_mass <= 1.0` 时，MLP 修正后强制挂车态回贴牵引车态，保持 base forward 的不变量
+- **跟踪性能预期**：当前控制器参数针对 2440 kg 乘用车调校，直接用在卡车（无挂车或带 15 吨挂车）上跟不动，需要专门调参
 
 ## 备注
 
