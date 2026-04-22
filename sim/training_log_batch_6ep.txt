@@ -1,0 +1,332 @@
+批量训练轨迹: 8 类型 × 6 速度段 = 48 条 (batch 维 B=48)
+  速度段: [5, 18, 25, 35, 45, 55] kph
+  归一化下限: median_baseline=69.2668, norm_floor=8.3227 (alpha=0.5)
+[  1/6] loss= 10.0737 | lat_rmse=3.4063m head_rmse=0.0681rad spd_rmse=0.5643m/s | grad_norm=0.84 dt=219.4s B=48
+    lane_change_5kph              : lat=0.5103 head=0.0998 spd=0.4534 | L_lat=2.604 L_head=0.080 L_spd=0.617
+    lane_change_18kph             : lat=0.4940 head=0.0311 spd=0.1546 | L_lat=2.441 L_head=0.008 L_spd=0.072
+    lane_change_25kph             : lat=0.5660 head=0.0381 spd=0.0488 | L_lat=3.204 L_head=0.012 L_spd=0.007
+    lane_change_35kph             : lat=0.6010 head=0.0340 spd=0.0894 | L_lat=3.612 L_head=0.009 L_spd=0.024
+    lane_change_45kph             : lat=0.7261 head=0.0292 spd=0.1316 | L_lat=5.272 L_head=0.007 L_spd=0.052
+    lane_change_55kph             : lat=1.3950 head=0.0259 spd=0.1749 | L_lat=19.461 L_head=0.005 L_spd=0.092
+    double_lc_5kph                : lat=0.6332 head=0.0852 spd=0.4257 | L_lat=4.009 L_head=0.058 L_spd=0.544
+    double_lc_18kph               : lat=0.5438 head=0.0308 spd=0.1917 | L_lat=2.957 L_head=0.008 L_spd=0.110
+    double_lc_25kph               : lat=0.7702 head=0.0440 spd=0.1211 | L_lat=5.932 L_head=0.015 L_spd=0.044
+    double_lc_35kph               : lat=0.8296 head=0.0384 spd=0.1214 | L_lat=6.882 L_head=0.012 L_spd=0.044
+    double_lc_45kph               : lat=0.9279 head=0.0349 spd=0.1681 | L_lat=8.609 L_head=0.010 L_spd=0.085
+    double_lc_55kph               : lat=1.2226 head=0.0352 spd=0.1929 | L_lat=14.948 L_head=0.010 L_spd=0.112
+    clothoid_left_5kph            : lat=2.0040 head=0.0314 spd=0.2369 | L_lat=40.161 L_head=0.008 L_spd=0.168
+    clothoid_left_18kph           : lat=4.3043 head=0.0460 spd=0.3422 | L_lat=185.268 L_head=0.017 L_spd=0.351
+    clothoid_left_25kph           : lat=6.4373 head=0.0736 spd=0.4430 | L_lat=414.390 L_head=0.043 L_spd=0.589
+    clothoid_left_35kph           : lat=8.7111 head=0.1080 spd=0.3221 | L_lat=758.840 L_head=0.093 L_spd=0.311
+    clothoid_left_45kph           : lat=7.9389 head=0.0898 spd=0.4809 | L_lat=630.267 L_head=0.065 L_spd=0.694
+    clothoid_left_55kph           : lat=5.2289 head=0.0658 spd=0.5131 | L_lat=273.418 L_head=0.035 L_spd=0.790
+    clothoid_right_5kph           : lat=1.0810 head=0.0446 spd=0.1490 | L_lat=11.685 L_head=0.016 L_spd=0.067
+    clothoid_right_18kph          : lat=3.0240 head=0.0332 spd=0.4690 | L_lat=91.443 L_head=0.009 L_spd=0.660
+    clothoid_right_25kph          : lat=5.5912 head=0.0688 spd=0.5203 | L_lat=312.612 L_head=0.038 L_spd=0.812
+    clothoid_right_35kph          : lat=9.1027 head=0.1165 spd=0.4167 | L_lat=828.586 L_head=0.109 L_spd=0.521
+    clothoid_right_45kph          : lat=10.6997 head=0.1285 spd=0.3706 | L_lat=1144.834 L_head=0.132 L_spd=0.412
+    clothoid_right_55kph          : lat=8.0935 head=0.1316 spd=0.2275 | L_lat=655.051 L_head=0.139 L_spd=0.155
+    s_curve_5kph                  : lat=0.8564 head=0.0991 spd=0.3803 | L_lat=7.334 L_head=0.079 L_spd=0.434
+    s_curve_18kph                 : lat=1.7886 head=0.0750 spd=0.2366 | L_lat=31.990 L_head=0.045 L_spd=0.168
+    s_curve_25kph                 : lat=2.6218 head=0.1161 spd=0.3250 | L_lat=68.740 L_head=0.108 L_spd=0.317
+    s_curve_35kph                 : lat=3.4430 head=0.1434 spd=0.3358 | L_lat=118.540 L_head=0.165 L_spd=0.338
+    s_curve_45kph                 : lat=2.9541 head=0.1239 spd=0.4208 | L_lat=87.269 L_head=0.123 L_spd=0.531
+    s_curve_55kph                 : lat=3.7383 head=0.1302 spd=0.4378 | L_lat=139.749 L_head=0.136 L_spd=0.575
+    combined_decel_5kph           : lat=1.2973 head=0.0336 spd=0.3215 | L_lat=16.831 L_head=0.009 L_spd=0.310
+    combined_decel_18kph          : lat=3.1803 head=0.0426 spd=0.3367 | L_lat=101.142 L_head=0.015 L_spd=0.340
+    combined_decel_25kph          : lat=5.0617 head=0.0637 spd=0.4526 | L_lat=256.208 L_head=0.032 L_spd=0.615
+    combined_decel_35kph          : lat=7.2813 head=0.0869 spd=0.6183 | L_lat=530.167 L_head=0.060 L_spd=1.147
+    combined_decel_45kph          : lat=9.1257 head=0.1040 spd=1.2510 | L_lat=832.792 L_head=0.086 L_spd=4.695
+    combined_decel_55kph          : lat=7.3186 head=0.0784 spd=1.7237 | L_lat=535.612 L_head=0.049 L_spd=8.914
+    clothoid_decel_5kph           : lat=1.8212 head=0.0339 spd=0.2888 | L_lat=33.168 L_head=0.009 L_spd=0.250
+    clothoid_decel_18kph          : lat=2.9793 head=0.0449 spd=0.3605 | L_lat=88.765 L_head=0.016 L_spd=0.390
+    clothoid_decel_25kph          : lat=4.6278 head=0.0670 spd=0.4917 | L_lat=214.165 L_head=0.036 L_spd=0.725
+    clothoid_decel_35kph          : lat=6.5285 head=0.0950 spd=0.8938 | L_lat=426.213 L_head=0.072 L_spd=2.396
+    clothoid_decel_45kph          : lat=7.3677 head=0.1007 spd=1.6373 | L_lat=542.829 L_head=0.081 L_spd=8.043
+    clothoid_decel_55kph          : lat=5.5866 head=0.1062 spd=1.2348 | L_lat=312.099 L_head=0.090 L_spd=4.574
+    lc_accel_5kph                 : lat=0.4895 head=0.0971 spd=0.4376 | L_lat=2.396 L_head=0.075 L_spd=0.574
+    lc_accel_18kph                : lat=0.5172 head=0.0313 spd=1.0390 | L_lat=2.675 L_head=0.008 L_spd=3.239
+    lc_accel_25kph                : lat=0.6425 head=0.0413 spd=1.6281 | L_lat=4.128 L_head=0.014 L_spd=7.952
+    lc_accel_35kph                : lat=0.6378 head=0.0350 spd=1.8569 | L_lat=4.068 L_head=0.010 L_spd=10.345
+    lc_accel_45kph                : lat=0.8364 head=0.0296 spd=1.8445 | L_lat=6.995 L_head=0.007 L_spd=10.206
+    lc_accel_55kph                : lat=1.3632 head=0.0251 spd=1.7703 | L_lat=18.583 L_head=0.005 L_spd=9.401
+[  2/6] loss=  8.8891 | lat_rmse=3.1999m head_rmse=0.0647rad spd_rmse=0.5786m/s | grad_norm=0.81 dt=311.1s B=48
+    lane_change_5kph              : lat=0.4960 head=0.0962 spd=0.4034 | L_lat=2.461 L_head=0.074 L_spd=0.488
+    lane_change_18kph             : lat=0.4603 head=0.0305 spd=0.1876 | L_lat=2.118 L_head=0.007 L_spd=0.106
+    lane_change_25kph             : lat=0.5676 head=0.0376 spd=0.0683 | L_lat=3.222 L_head=0.011 L_spd=0.014
+    lane_change_35kph             : lat=0.6048 head=0.0331 spd=0.1023 | L_lat=3.658 L_head=0.009 L_spd=0.031
+    lane_change_45kph             : lat=0.6754 head=0.0289 spd=0.1650 | L_lat=4.562 L_head=0.007 L_spd=0.082
+    lane_change_55kph             : lat=1.2309 head=0.0262 spd=0.2285 | L_lat=15.152 L_head=0.006 L_spd=0.157
+    double_lc_5kph                : lat=0.6557 head=0.0826 spd=0.3729 | L_lat=4.299 L_head=0.055 L_spd=0.417
+    double_lc_18kph               : lat=0.4766 head=0.0294 spd=0.2215 | L_lat=2.272 L_head=0.007 L_spd=0.147
+    double_lc_25kph               : lat=0.7495 head=0.0430 spd=0.1351 | L_lat=5.617 L_head=0.015 L_spd=0.055
+    double_lc_35kph               : lat=0.7929 head=0.0374 spd=0.1230 | L_lat=6.287 L_head=0.011 L_spd=0.045
+    double_lc_45kph               : lat=0.8698 head=0.0329 spd=0.1751 | L_lat=7.565 L_head=0.009 L_spd=0.092
+    double_lc_55kph               : lat=1.1589 head=0.0360 spd=0.2136 | L_lat=13.430 L_head=0.010 L_spd=0.137
+    clothoid_left_5kph            : lat=1.9557 head=0.0327 spd=0.2394 | L_lat=38.247 L_head=0.009 L_spd=0.172
+    clothoid_left_18kph           : lat=3.9080 head=0.0402 spd=0.3050 | L_lat=152.728 L_head=0.013 L_spd=0.279
+    clothoid_left_25kph           : lat=5.8897 head=0.0653 spd=0.3212 | L_lat=346.888 L_head=0.034 L_spd=0.310
+    clothoid_left_35kph           : lat=8.1099 head=0.0985 spd=0.3941 | L_lat=657.700 L_head=0.078 L_spd=0.466
+    clothoid_left_45kph           : lat=7.5778 head=0.0847 spd=0.6783 | L_lat=574.228 L_head=0.057 L_spd=1.380
+    clothoid_left_55kph           : lat=4.9423 head=0.0587 spd=0.6700 | L_lat=244.265 L_head=0.028 L_spd=1.347
+    clothoid_right_5kph           : lat=1.0923 head=0.0451 spd=0.1507 | L_lat=11.931 L_head=0.016 L_spd=0.068
+    clothoid_right_18kph          : lat=2.5591 head=0.0263 spd=0.4593 | L_lat=65.488 L_head=0.006 L_spd=0.633
+    clothoid_right_25kph          : lat=4.9859 head=0.0605 spd=0.4932 | L_lat=248.591 L_head=0.029 L_spd=0.730
+    clothoid_right_35kph          : lat=8.5565 head=0.1096 spd=0.3706 | L_lat=732.132 L_head=0.096 L_spd=0.412
+    clothoid_right_45kph          : lat=10.1827 head=0.1210 spd=0.3166 | L_lat=1036.878 L_head=0.117 L_spd=0.301
+    clothoid_right_55kph          : lat=7.8500 head=0.1250 spd=0.2438 | L_lat=616.230 L_head=0.125 L_spd=0.178
+    s_curve_5kph                  : lat=0.8361 head=0.1010 spd=0.3479 | L_lat=6.991 L_head=0.082 L_spd=0.363
+    s_curve_18kph                 : lat=1.6950 head=0.0709 spd=0.3051 | L_lat=28.730 L_head=0.040 L_spd=0.279
+    s_curve_25kph                 : lat=2.5102 head=0.1114 spd=0.4218 | L_lat=63.012 L_head=0.099 L_spd=0.534
+    s_curve_35kph                 : lat=3.3637 head=0.1405 spd=0.4517 | L_lat=113.143 L_head=0.158 L_spd=0.612
+    s_curve_45kph                 : lat=2.9146 head=0.1223 spd=0.5304 | L_lat=84.951 L_head=0.120 L_spd=0.844
+    s_curve_55kph                 : lat=3.6053 head=0.1278 spd=0.5408 | L_lat=129.979 L_head=0.131 L_spd=0.877
+    combined_decel_5kph           : lat=1.2665 head=0.0347 spd=0.3155 | L_lat=16.039 L_head=0.010 L_spd=0.299
+    combined_decel_18kph          : lat=2.9320 head=0.0378 spd=0.3068 | L_lat=85.966 L_head=0.011 L_spd=0.282
+    combined_decel_25kph          : lat=4.6610 head=0.0572 spd=0.3971 | L_lat=217.250 L_head=0.026 L_spd=0.473
+    combined_decel_35kph          : lat=6.7974 head=0.0804 spd=0.7127 | L_lat=462.053 L_head=0.052 L_spd=1.524
+    combined_decel_45kph          : lat=8.4999 head=0.0963 spd=1.4382 | L_lat=722.484 L_head=0.074 L_spd=6.206
+    combined_decel_55kph          : lat=6.9153 head=0.0753 spd=1.9612 | L_lat=478.213 L_head=0.045 L_spd=11.539
+    clothoid_decel_5kph           : lat=1.7471 head=0.0345 spd=0.2809 | L_lat=30.525 L_head=0.010 L_spd=0.237
+    clothoid_decel_18kph          : lat=2.7193 head=0.0389 spd=0.3445 | L_lat=73.947 L_head=0.012 L_spd=0.356
+    clothoid_decel_25kph          : lat=4.2127 head=0.0590 spd=0.4712 | L_lat=177.467 L_head=0.028 L_spd=0.666
+    clothoid_decel_35kph          : lat=6.0598 head=0.0872 spd=0.9615 | L_lat=367.215 L_head=0.061 L_spd=2.774
+    clothoid_decel_45kph          : lat=6.9089 head=0.0935 spd=1.7583 | L_lat=477.335 L_head=0.070 L_spd=9.275
+    clothoid_decel_55kph          : lat=5.4873 head=0.1031 spd=1.2766 | L_lat=301.105 L_head=0.085 L_spd=4.889
+    lc_accel_5kph                 : lat=0.4809 head=0.0926 spd=0.3835 | L_lat=2.313 L_head=0.069 L_spd=0.441
+    lc_accel_18kph                : lat=0.4772 head=0.0313 spd=0.9964 | L_lat=2.277 L_head=0.008 L_spd=2.979
+    lc_accel_25kph                : lat=0.6280 head=0.0410 spd=1.5840 | L_lat=3.944 L_head=0.013 L_spd=7.527
+    lc_accel_35kph                : lat=0.6269 head=0.0342 spd=1.7311 | L_lat=3.930 L_head=0.009 L_spd=8.990
+    lc_accel_45kph                : lat=0.7280 head=0.0300 spd=1.6669 | L_lat=5.300 L_head=0.007 L_spd=8.336
+    lc_accel_55kph                : lat=1.1736 head=0.0254 spd=1.5519 | L_lat=13.773 L_head=0.005 L_spd=7.225
+[  3/6] loss=  7.8623 | lat_rmse=3.0013m head_rmse=0.0620rad spd_rmse=0.6368m/s | grad_norm=0.79 dt=407.5s B=48
+    lane_change_5kph              : lat=0.4370 head=0.0930 spd=0.4372 | L_lat=1.910 L_head=0.069 L_spd=0.574
+    lane_change_18kph             : lat=0.4254 head=0.0301 spd=0.2200 | L_lat=1.810 L_head=0.007 L_spd=0.145
+    lane_change_25kph             : lat=0.5670 head=0.0374 spd=0.0917 | L_lat=3.214 L_head=0.011 L_spd=0.025
+    lane_change_35kph             : lat=0.5999 head=0.0320 spd=0.1165 | L_lat=3.599 L_head=0.008 L_spd=0.041
+    lane_change_45kph             : lat=0.6437 head=0.0280 spd=0.2003 | L_lat=4.143 L_head=0.006 L_spd=0.120
+    lane_change_55kph             : lat=1.0840 head=0.0268 spd=0.2822 | L_lat=11.750 L_head=0.006 L_spd=0.239
+    double_lc_5kph                : lat=0.6367 head=0.0802 spd=0.4185 | L_lat=4.053 L_head=0.051 L_spd=0.525
+    double_lc_18kph               : lat=0.4293 head=0.0288 spd=0.2291 | L_lat=1.843 L_head=0.007 L_spd=0.157
+    double_lc_25kph               : lat=0.7298 head=0.0421 spd=0.1601 | L_lat=5.326 L_head=0.014 L_spd=0.077
+    double_lc_35kph               : lat=0.7341 head=0.0357 spd=0.1242 | L_lat=5.389 L_head=0.010 L_spd=0.046
+    double_lc_45kph               : lat=0.8097 head=0.0304 spd=0.1824 | L_lat=6.556 L_head=0.007 L_spd=0.100
+    double_lc_55kph               : lat=1.0962 head=0.0359 spd=0.2346 | L_lat=12.016 L_head=0.010 L_spd=0.165
+    clothoid_left_5kph            : lat=1.8347 head=0.0387 spd=0.3015 | L_lat=33.661 L_head=0.012 L_spd=0.273
+    clothoid_left_18kph           : lat=3.5567 head=0.0352 spd=0.2674 | L_lat=126.503 L_head=0.010 L_spd=0.214
+    clothoid_left_25kph           : lat=5.3862 head=0.0576 spd=0.3238 | L_lat=290.108 L_head=0.027 L_spd=0.314
+    clothoid_left_35kph           : lat=7.5481 head=0.0894 spd=0.5873 | L_lat=569.735 L_head=0.064 L_spd=1.035
+    clothoid_left_45kph           : lat=7.2051 head=0.0790 spd=0.9283 | L_lat=519.137 L_head=0.050 L_spd=2.585
+    clothoid_left_55kph           : lat=4.6769 head=0.0524 spd=0.8502 | L_lat=218.734 L_head=0.022 L_spd=2.168
+    clothoid_right_5kph           : lat=1.1357 head=0.0488 spd=0.1947 | L_lat=12.899 L_head=0.019 L_spd=0.114
+    clothoid_right_18kph          : lat=2.1410 head=0.0199 spd=0.5131 | L_lat=45.840 L_head=0.003 L_spd=0.790
+    clothoid_right_25kph          : lat=4.4228 head=0.0522 spd=0.6880 | L_lat=195.609 L_head=0.022 L_spd=1.420
+    clothoid_right_35kph          : lat=8.0144 head=0.1023 spd=0.5304 | L_lat=642.313 L_head=0.084 L_spd=0.844
+    clothoid_right_45kph          : lat=9.7287 head=0.1141 spd=0.4283 | L_lat=946.468 L_head=0.104 L_spd=0.550
+    clothoid_right_55kph          : lat=7.6092 head=0.1186 spd=0.3149 | L_lat=578.998 L_head=0.113 L_spd=0.298
+    s_curve_5kph                  : lat=0.7782 head=0.1081 spd=0.3947 | L_lat=6.056 L_head=0.093 L_spd=0.467
+    s_curve_18kph                 : lat=1.5984 head=0.0670 spd=0.4007 | L_lat=25.550 L_head=0.036 L_spd=0.482
+    s_curve_25kph                 : lat=2.3988 head=0.1064 spd=0.5460 | L_lat=57.543 L_head=0.091 L_spd=0.894
+    s_curve_35kph                 : lat=3.2777 head=0.1370 spd=0.6002 | L_lat=107.435 L_head=0.150 L_spd=1.081
+    s_curve_45kph                 : lat=2.8649 head=0.1202 spd=0.6771 | L_lat=82.074 L_head=0.116 L_spd=1.375
+    s_curve_55kph                 : lat=3.4888 head=0.1250 spd=0.6760 | L_lat=121.714 L_head=0.125 L_spd=1.371
+    combined_decel_5kph           : lat=1.1335 head=0.0415 spd=0.3865 | L_lat=12.848 L_head=0.014 L_spd=0.448
+    combined_decel_18kph          : lat=2.7226 head=0.0337 spd=0.3142 | L_lat=74.125 L_head=0.009 L_spd=0.296
+    combined_decel_25kph          : lat=4.3073 head=0.0514 spd=0.4600 | L_lat=185.525 L_head=0.021 L_spd=0.635
+    combined_decel_35kph          : lat=6.3235 head=0.0737 spd=0.8717 | L_lat=399.866 L_head=0.043 L_spd=2.280
+    combined_decel_45kph          : lat=7.9538 head=0.0891 spd=1.6159 | L_lat=632.625 L_head=0.064 L_spd=7.833
+    combined_decel_55kph          : lat=6.5760 head=0.0713 spd=2.1618 | L_lat=432.433 L_head=0.041 L_spd=14.021
+    clothoid_decel_5kph           : lat=1.5911 head=0.0402 spd=0.3322 | L_lat=25.317 L_head=0.013 L_spd=0.331
+    clothoid_decel_18kph          : lat=2.4916 head=0.0338 spd=0.3585 | L_lat=62.082 L_head=0.009 L_spd=0.386
+    clothoid_decel_25kph          : lat=3.8366 head=0.0517 spd=0.5405 | L_lat=147.193 L_head=0.021 L_spd=0.876
+    clothoid_decel_35kph          : lat=5.6227 head=0.0796 spd=1.0579 | L_lat=316.148 L_head=0.051 L_spd=3.357
+    clothoid_decel_45kph          : lat=6.5159 head=0.0871 spd=1.8647 | L_lat=424.576 L_head=0.061 L_spd=10.432
+    clothoid_decel_55kph          : lat=5.3525 head=0.0993 spd=1.3122 | L_lat=286.488 L_head=0.079 L_spd=5.166
+    lc_accel_5kph                 : lat=0.4347 head=0.0906 spd=0.3903 | L_lat=1.890 L_head=0.066 L_spd=0.457
+    lc_accel_18kph                : lat=0.4420 head=0.0309 spd=1.0006 | L_lat=1.954 L_head=0.008 L_spd=3.004
+    lc_accel_25kph                : lat=0.6224 head=0.0408 spd=1.5402 | L_lat=3.873 L_head=0.013 L_spd=7.117
+    lc_accel_35kph                : lat=0.6201 head=0.0333 spd=1.5998 | L_lat=3.845 L_head=0.009 L_spd=7.678
+    lc_accel_45kph                : lat=0.6513 head=0.0299 spd=1.4947 | L_lat=4.242 L_head=0.007 L_spd=6.703
+    lc_accel_55kph                : lat=1.0045 head=0.0259 spd=1.3462 | L_lat=10.090 L_head=0.005 L_spd=5.437
+
+  --- 参数快照 (epoch 3) ---
+  T2_y                          : max_delta=0.135908 mean=1.3846 [1.364, 1.504]
+  T3_y                          : max_delta=0.135933 mean=0.9860 [0.964, 1.116]
+  T4_y                          : max_delta=0.135919 mean=0.1175 [0.000, 0.165]
+  T6_y                          : max_delta=0.134936 mean=0.8851 [0.865, 0.991]
+  station_kp                    : 0.2500 -> 0.1167 (-0.133316, -53.3%)
+  station_ki                    : 0.0000 -> 0.0000 (+0.000000, +0.0%)
+  low_speed_kp                  : 0.3500 -> 0.3581 (+0.008135, +2.3%)
+  low_speed_ki                  : 0.0100 -> 0.0000 (-0.010000, -100.0%)
+  high_speed_kp                 : 0.3400 -> 0.2052 (-0.134836, -39.7%)
+  high_speed_ki                 : 0.0100 -> 0.0000 (-0.010000, -100.0%)
+  switch_speed                  : 3.0000 -> 3.0106 (+0.010605, +0.4%)
+
+[  4/6] loss=  7.0260 | lat_rmse=2.8163m head_rmse=0.0597rad spd_rmse=0.7119m/s | grad_norm=0.78 dt=464.3s B=48
+    lane_change_5kph              : lat=0.3077 head=0.0647 spd=0.4407 | L_lat=0.947 L_head=0.033 L_spd=0.583
+    lane_change_18kph             : lat=0.3975 head=0.0300 spd=0.2457 | L_lat=1.580 L_head=0.007 L_spd=0.181
+    lane_change_25kph             : lat=0.5642 head=0.0374 spd=0.1150 | L_lat=3.184 L_head=0.011 L_spd=0.040
+    lane_change_35kph             : lat=0.5881 head=0.0309 spd=0.1314 | L_lat=3.458 L_head=0.008 L_spd=0.052
+    lane_change_45kph             : lat=0.6239 head=0.0270 spd=0.2340 | L_lat=3.892 L_head=0.006 L_spd=0.164
+    lane_change_55kph             : lat=0.9731 head=0.0273 spd=0.3296 | L_lat=9.469 L_head=0.006 L_spd=0.326
+    double_lc_5kph                : lat=0.4963 head=0.0670 spd=0.4890 | L_lat=2.463 L_head=0.036 L_spd=0.717
+    double_lc_18kph               : lat=0.3983 head=0.0288 spd=0.2217 | L_lat=1.587 L_head=0.007 L_spd=0.148
+    double_lc_25kph               : lat=0.7101 head=0.0414 spd=0.1970 | L_lat=5.042 L_head=0.014 L_spd=0.116
+    double_lc_35kph               : lat=0.6701 head=0.0339 spd=0.1274 | L_lat=4.491 L_head=0.009 L_spd=0.049
+    double_lc_45kph               : lat=0.7511 head=0.0285 spd=0.1997 | L_lat=5.641 L_head=0.006 L_spd=0.120
+    double_lc_55kph               : lat=1.0413 head=0.0350 spd=0.2670 | L_lat=10.844 L_head=0.010 L_spd=0.214
+    clothoid_left_5kph            : lat=1.5175 head=0.0513 spd=0.4242 | L_lat=23.027 L_head=0.021 L_spd=0.540
+    clothoid_left_18kph           : lat=3.2911 head=0.0313 spd=0.2619 | L_lat=108.316 L_head=0.008 L_spd=0.206
+    clothoid_left_25kph           : lat=4.9805 head=0.0512 spd=0.4296 | L_lat=248.054 L_head=0.021 L_spd=0.554
+    clothoid_left_35kph           : lat=7.0855 head=0.0818 spd=0.7745 | L_lat=502.039 L_head=0.053 L_spd=1.800
+    clothoid_left_45kph           : lat=6.8673 head=0.0735 spd=1.1525 | L_lat=471.597 L_head=0.043 L_spd=3.985
+    clothoid_left_55kph           : lat=4.4563 head=0.0477 spd=1.0115 | L_lat=198.587 L_head=0.018 L_spd=3.069
+    clothoid_right_5kph           : lat=1.0611 head=0.0698 spd=0.2978 | L_lat=11.260 L_head=0.039 L_spd=0.266
+    clothoid_right_18kph          : lat=1.8421 head=0.0158 spd=0.6810 | L_lat=33.933 L_head=0.002 L_spd=1.391
+    clothoid_right_25kph          : lat=3.9601 head=0.0449 spd=0.9243 | L_lat=156.826 L_head=0.016 L_spd=2.563
+    clothoid_right_35kph          : lat=7.5211 head=0.0951 spd=0.7327 | L_lat=565.676 L_head=0.072 L_spd=1.611
+    clothoid_right_45kph          : lat=9.3279 head=0.1082 spd=0.5779 | L_lat=870.092 L_head=0.094 L_spd=1.002
+    clothoid_right_55kph          : lat=7.4064 head=0.1132 spd=0.3940 | L_lat=548.550 L_head=0.103 L_spd=0.466
+    s_curve_5kph                  : lat=0.6723 head=0.1156 spd=0.4500 | L_lat=4.520 L_head=0.107 L_spd=0.608
+    s_curve_18kph                 : lat=1.5134 head=0.0637 spd=0.5021 | L_lat=22.903 L_head=0.032 L_spd=0.756
+    s_curve_25kph                 : lat=2.2913 head=0.1016 spd=0.6719 | L_lat=52.499 L_head=0.083 L_spd=1.354
+    s_curve_35kph                 : lat=3.2054 head=0.1338 spd=0.7474 | L_lat=102.748 L_head=0.143 L_spd=1.676
+    s_curve_45kph                 : lat=2.8199 head=0.1181 spd=0.8327 | L_lat=79.521 L_head=0.112 L_spd=2.080
+    s_curve_55kph                 : lat=3.3861 head=0.1225 spd=0.8233 | L_lat=114.657 L_head=0.120 L_spd=2.033
+    combined_decel_5kph           : lat=0.8958 head=0.0550 spd=0.5347 | L_lat=8.025 L_head=0.024 L_spd=0.858
+    combined_decel_18kph          : lat=2.5581 head=0.0305 spd=0.3553 | L_lat=65.440 L_head=0.007 L_spd=0.379
+    combined_decel_25kph          : lat=4.0148 head=0.0467 spd=0.5767 | L_lat=161.185 L_head=0.017 L_spd=0.998
+    combined_decel_35kph          : lat=5.9379 head=0.0680 spd=1.0221 | L_lat=352.583 L_head=0.037 L_spd=3.134
+    combined_decel_45kph          : lat=7.5510 head=0.0833 spd=1.7554 | L_lat=570.177 L_head=0.056 L_spd=9.245
+    combined_decel_55kph          : lat=6.2968 head=0.0676 spd=2.3023 | L_lat=396.502 L_head=0.037 L_spd=15.902
+    clothoid_decel_5kph           : lat=1.2384 head=0.0537 spd=0.4812 | L_lat=15.335 L_head=0.023 L_spd=0.695
+    clothoid_decel_18kph          : lat=2.3259 head=0.0301 spd=0.3995 | L_lat=54.100 L_head=0.007 L_spd=0.479
+    clothoid_decel_25kph          : lat=3.5472 head=0.0462 spd=0.6556 | L_lat=125.823 L_head=0.017 L_spd=1.289
+    clothoid_decel_35kph          : lat=5.2666 head=0.0734 spd=1.1478 | L_lat=277.369 L_head=0.043 L_spd=3.952
+    clothoid_decel_45kph          : lat=6.2009 head=0.0820 spd=1.9401 | L_lat=384.508 L_head=0.054 L_spd=11.292
+    clothoid_decel_55kph          : lat=5.1534 head=0.0944 spd=1.3398 | L_lat=265.576 L_head=0.071 L_spd=5.385
+    lc_accel_5kph                 : lat=0.3450 head=0.0855 spd=0.4261 | L_lat=1.190 L_head=0.058 L_spd=0.545
+    lc_accel_18kph                : lat=0.4186 head=0.0308 spd=1.0554 | L_lat=1.752 L_head=0.008 L_spd=3.341
+    lc_accel_25kph                : lat=0.6202 head=0.0407 spd=1.4688 | L_lat=3.847 L_head=0.013 L_spd=6.472
+    lc_accel_35kph                : lat=0.6047 head=0.0322 spd=1.4869 | L_lat=3.656 L_head=0.008 L_spd=6.633
+    lc_accel_45kph                : lat=0.6041 head=0.0291 spd=1.3528 | L_lat=3.649 L_head=0.007 L_spd=5.490
+    lc_accel_55kph                : lat=0.8769 head=0.0264 spd=1.1838 | L_lat=7.689 L_head=0.006 L_spd=4.204
+[  5/6] loss=  6.4755 | lat_rmse=2.6912m head_rmse=0.0599rad spd_rmse=0.7761m/s | grad_norm=0.77 dt=431.4s B=48
+    lane_change_5kph              : lat=0.4415 head=0.0806 spd=0.4752 | L_lat=1.949 L_head=0.052 L_spd=0.677
+    lane_change_18kph             : lat=0.3773 head=0.0298 spd=0.2554 | L_lat=1.424 L_head=0.007 L_spd=0.196
+    lane_change_25kph             : lat=0.5618 head=0.0376 spd=0.1357 | L_lat=3.156 L_head=0.011 L_spd=0.055
+    lane_change_35kph             : lat=0.5715 head=0.0301 spd=0.1434 | L_lat=3.267 L_head=0.007 L_spd=0.062
+    lane_change_45kph             : lat=0.6112 head=0.0262 spd=0.2598 | L_lat=3.735 L_head=0.005 L_spd=0.202
+    lane_change_55kph             : lat=0.9045 head=0.0276 spd=0.3630 | L_lat=8.181 L_head=0.006 L_spd=0.395
+    double_lc_5kph                : lat=0.7457 head=0.0930 spd=0.5195 | L_lat=5.561 L_head=0.069 L_spd=0.810
+    double_lc_18kph               : lat=0.3838 head=0.0292 spd=0.2246 | L_lat=1.473 L_head=0.007 L_spd=0.151
+    double_lc_25kph               : lat=0.6993 head=0.0411 spd=0.2363 | L_lat=4.890 L_head=0.014 L_spd=0.168
+    double_lc_35kph               : lat=0.6172 head=0.0325 spd=0.1327 | L_lat=3.809 L_head=0.008 L_spd=0.053
+    double_lc_45kph               : lat=0.7032 head=0.0271 spd=0.2231 | L_lat=4.945 L_head=0.006 L_spd=0.149
+    double_lc_55kph               : lat=1.0016 head=0.0336 spd=0.3037 | L_lat=10.031 L_head=0.009 L_spd=0.277
+    clothoid_left_5kph            : lat=1.0957 head=0.0728 spd=0.6338 | L_lat=12.007 L_head=0.042 L_spd=1.205
+    clothoid_left_18kph           : lat=3.1185 head=0.0289 spd=0.2807 | L_lat=97.249 L_head=0.007 L_spd=0.236
+    clothoid_left_25kph           : lat=4.6980 head=0.0467 spd=0.5292 | L_lat=220.711 L_head=0.017 L_spd=0.840
+    clothoid_left_35kph           : lat=6.7530 head=0.0762 spd=0.9103 | L_lat=456.037 L_head=0.047 L_spd=2.486
+    clothoid_left_45kph           : lat=6.6142 head=0.0692 spd=1.3142 | L_lat=437.474 L_head=0.038 L_spd=5.181
+    clothoid_left_55kph           : lat=4.2999 head=0.0447 spd=1.1282 | L_lat=184.894 L_head=0.016 L_spd=3.819
+    clothoid_right_5kph           : lat=0.8920 head=0.0872 spd=0.4611 | L_lat=7.956 L_head=0.061 L_spd=0.638
+    clothoid_right_18kph          : lat=1.6616 head=0.0139 spd=0.8150 | L_lat=27.611 L_head=0.002 L_spd=1.993
+    clothoid_right_25kph          : lat=3.6371 head=0.0396 spd=1.1046 | L_lat=132.282 L_head=0.013 L_spd=3.660
+    clothoid_right_35kph          : lat=7.1543 head=0.0896 spd=0.8894 | L_lat=511.838 L_head=0.064 L_spd=2.373
+    clothoid_right_45kph          : lat=9.0388 head=0.1039 spd=0.6927 | L_lat=817.003 L_head=0.086 L_spd=1.439
+    clothoid_right_55kph          : lat=7.2427 head=0.1091 spd=0.4539 | L_lat=524.570 L_head=0.095 L_spd=0.618
+    s_curve_5kph                  : lat=0.5929 head=0.1151 spd=0.4862 | L_lat=3.515 L_head=0.106 L_spd=0.709
+    s_curve_18kph                 : lat=1.4513 head=0.0615 spd=0.5800 | L_lat=21.061 L_head=0.030 L_spd=1.009
+    s_curve_25kph                 : lat=2.2042 head=0.0974 spd=0.7693 | L_lat=48.585 L_head=0.076 L_spd=1.775
+    s_curve_35kph                 : lat=3.1497 head=0.1309 spd=0.8667 | L_lat=99.209 L_head=0.137 L_spd=2.254
+    s_curve_45kph                 : lat=2.7931 head=0.1166 spd=0.9570 | L_lat=78.016 L_head=0.109 L_spd=2.748
+    s_curve_55kph                 : lat=3.3120 head=0.1205 spd=0.9474 | L_lat=109.690 L_head=0.116 L_spd=2.693
+    combined_decel_5kph           : lat=0.7645 head=0.0718 spd=0.6351 | L_lat=5.844 L_head=0.041 L_spd=1.210
+    combined_decel_18kph          : lat=2.4439 head=0.0288 spd=0.3987 | L_lat=59.728 L_head=0.007 L_spd=0.477
+    combined_decel_25kph          : lat=3.8120 head=0.0434 spd=0.6748 | L_lat=145.310 L_head=0.015 L_spd=1.366
+    combined_decel_35kph          : lat=5.6711 head=0.0639 spd=1.1344 | L_lat=321.611 L_head=0.033 L_spd=3.861
+    combined_decel_45kph          : lat=7.2616 head=0.0791 spd=1.8461 | L_lat=527.307 L_head=0.050 L_spd=10.224
+    combined_decel_55kph          : lat=6.1200 head=0.0647 spd=2.3890 | L_lat=374.547 L_head=0.033 L_spd=17.121
+    clothoid_decel_5kph           : lat=0.9703 head=0.0741 spd=0.6397 | L_lat=9.415 L_head=0.044 L_spd=1.228
+    clothoid_decel_18kph          : lat=2.2212 head=0.0278 spd=0.4398 | L_lat=49.336 L_head=0.006 L_spd=0.580
+    clothoid_decel_25kph          : lat=3.3562 head=0.0426 spd=0.7521 | L_lat=112.643 L_head=0.015 L_spd=1.697
+    clothoid_decel_35kph          : lat=5.0106 head=0.0689 spd=1.2199 | L_lat=251.065 L_head=0.038 L_spd=4.465
+    clothoid_decel_45kph          : lat=5.9802 head=0.0783 spd=1.9832 | L_lat=357.628 L_head=0.049 L_spd=11.799
+    clothoid_decel_55kph          : lat=4.9648 head=0.0900 spd=1.3597 | L_lat=246.492 L_head=0.065 L_spd=5.546
+    lc_accel_5kph                 : lat=0.2882 head=0.0725 spd=0.4403 | L_lat=0.830 L_head=0.042 L_spd=0.582
+    lc_accel_18kph                : lat=0.4030 head=0.0304 spd=1.0994 | L_lat=1.624 L_head=0.007 L_spd=3.626
+    lc_accel_25kph                : lat=0.6199 head=0.0407 spd=1.4093 | L_lat=3.842 L_head=0.013 L_spd=5.958
+    lc_accel_35kph                : lat=0.5873 head=0.0311 spd=1.4074 | L_lat=3.449 L_head=0.008 L_spd=5.943
+    lc_accel_45kph                : lat=0.5773 head=0.0282 spd=1.2559 | L_lat=3.333 L_head=0.006 L_spd=4.731
+    lc_accel_55kph                : lat=0.7970 head=0.0267 spd=1.0767 | L_lat=6.353 L_head=0.006 L_spd=3.478
+[  6/6] loss=  6.1797 | lat_rmse=2.6249m head_rmse=0.0600rad spd_rmse=0.8073m/s | grad_norm=0.76 dt=428.3s B=48
+    lane_change_5kph              : lat=0.5283 head=0.0981 spd=0.5890 | L_lat=2.791 L_head=0.077 L_spd=1.041
+    lane_change_18kph             : lat=0.3653 head=0.0297 spd=0.2597 | L_lat=1.334 L_head=0.007 L_spd=0.202
+    lane_change_25kph             : lat=0.5609 head=0.0377 spd=0.1504 | L_lat=3.146 L_head=0.011 L_spd=0.068
+    lane_change_35kph             : lat=0.5648 head=0.0298 spd=0.1511 | L_lat=3.190 L_head=0.007 L_spd=0.069
+    lane_change_45kph             : lat=0.6018 head=0.0257 spd=0.2756 | L_lat=3.621 L_head=0.005 L_spd=0.228
+    lane_change_55kph             : lat=0.8682 head=0.0277 spd=0.3827 | L_lat=7.538 L_head=0.006 L_spd=0.439
+    double_lc_5kph                : lat=0.8665 head=0.1101 spd=0.6364 | L_lat=7.509 L_head=0.097 L_spd=1.215
+    double_lc_18kph               : lat=0.3738 head=0.0293 spd=0.2318 | L_lat=1.397 L_head=0.007 L_spd=0.161
+    double_lc_25kph               : lat=0.6920 head=0.0410 spd=0.2651 | L_lat=4.789 L_head=0.013 L_spd=0.211
+    double_lc_35kph               : lat=0.5920 head=0.0318 spd=0.1374 | L_lat=3.505 L_head=0.008 L_spd=0.057
+    double_lc_45kph               : lat=0.6751 head=0.0264 spd=0.2415 | L_lat=4.558 L_head=0.006 L_spd=0.175
+    double_lc_55kph               : lat=0.9769 head=0.0326 spd=0.3309 | L_lat=9.542 L_head=0.009 L_spd=0.328
+    clothoid_left_5kph            : lat=1.0157 head=0.0868 spd=0.6192 | L_lat=10.316 L_head=0.060 L_spd=1.150
+    clothoid_left_18kph           : lat=3.0152 head=0.0276 spd=0.2988 | L_lat=90.913 L_head=0.006 L_spd=0.268
+    clothoid_left_25kph           : lat=4.5350 head=0.0441 spd=0.5905 | L_lat=205.666 L_head=0.016 L_spd=1.046
+    clothoid_left_35kph           : lat=6.5598 head=0.0730 spd=0.9890 | L_lat=430.304 L_head=0.043 L_spd=2.934
+    clothoid_left_45kph           : lat=6.4611 head=0.0665 spd=1.4085 | L_lat=417.453 L_head=0.035 L_spd=5.951
+    clothoid_left_55kph           : lat=4.2057 head=0.0430 spd=1.1967 | L_lat=176.877 L_head=0.015 L_spd=4.296
+    clothoid_right_5kph           : lat=0.8118 head=0.0965 spd=0.5425 | L_lat=6.590 L_head=0.075 L_spd=0.883
+    clothoid_right_18kph          : lat=1.5686 head=0.0133 spd=0.8874 | L_lat=24.604 L_head=0.001 L_spd=2.362
+    clothoid_right_25kph          : lat=3.4514 head=0.0365 spd=1.2106 | L_lat=119.123 L_head=0.011 L_spd=4.396
+    clothoid_right_35kph          : lat=6.9371 head=0.0862 spd=0.9828 | L_lat=481.228 L_head=0.059 L_spd=2.898
+    clothoid_right_45kph          : lat=8.8640 head=0.1013 spd=0.7602 | L_lat=785.705 L_head=0.082 L_spd=1.734
+    clothoid_right_55kph          : lat=7.1414 head=0.1067 spd=0.4889 | L_lat=509.995 L_head=0.091 L_spd=0.717
+    s_curve_5kph                  : lat=0.5604 head=0.1129 spd=0.4956 | L_lat=3.140 L_head=0.102 L_spd=0.737
+    s_curve_18kph                 : lat=1.4112 head=0.0601 spd=0.6265 | L_lat=19.914 L_head=0.029 L_spd=1.178
+    s_curve_25kph                 : lat=2.1385 head=0.0943 spd=0.8304 | L_lat=45.734 L_head=0.071 L_spd=2.069
+    s_curve_35kph                 : lat=3.0991 head=0.1290 spd=0.9377 | L_lat=96.045 L_head=0.133 L_spd=2.638
+    s_curve_45kph                 : lat=2.7610 head=0.1157 spd=1.0357 | L_lat=76.231 L_head=0.107 L_spd=3.218
+    s_curve_55kph                 : lat=3.2710 head=0.1191 spd=1.0161 | L_lat=106.994 L_head=0.113 L_spd=3.097
+    combined_decel_5kph           : lat=0.7647 head=0.0817 spd=0.6210 | L_lat=5.848 L_head=0.053 L_spd=1.157
+    combined_decel_18kph          : lat=2.3820 head=0.0278 spd=0.4274 | L_lat=56.739 L_head=0.006 L_spd=0.548
+    combined_decel_25kph          : lat=3.6916 head=0.0416 spd=0.7343 | L_lat=136.277 L_head=0.014 L_spd=1.617
+    combined_decel_35kph          : lat=5.5166 head=0.0617 spd=1.2046 | L_lat=304.327 L_head=0.030 L_spd=4.353
+    combined_decel_45kph          : lat=7.1060 head=0.0768 spd=1.8954 | L_lat=504.949 L_head=0.047 L_spd=10.778
+    combined_decel_55kph          : lat=5.9942 head=0.0632 spd=2.4322 | L_lat=359.299 L_head=0.032 L_spd=17.747
+    clothoid_decel_5kph           : lat=0.9135 head=0.0872 spd=0.6217 | L_lat=8.345 L_head=0.061 L_spd=1.159
+    clothoid_decel_18kph          : lat=2.1519 head=0.0266 spd=0.4665 | L_lat=46.308 L_head=0.006 L_spd=0.653
+    clothoid_decel_25kph          : lat=3.2483 head=0.0407 spd=0.8108 | L_lat=105.513 L_head=0.013 L_spd=1.972
+    clothoid_decel_35kph          : lat=4.8589 head=0.0661 spd=1.2676 | L_lat=236.086 L_head=0.035 L_spd=4.820
+    clothoid_decel_45kph          : lat=5.8509 head=0.0763 spd=2.0051 | L_lat=342.326 L_head=0.047 L_spd=12.061
+    clothoid_decel_55kph          : lat=4.8418 head=0.0872 spd=1.3698 | L_lat=234.429 L_head=0.061 L_spd=5.629
+    lc_accel_5kph                 : lat=0.2886 head=0.0552 spd=0.2645 | L_lat=0.833 L_head=0.024 L_spd=0.210
+    lc_accel_18kph                : lat=0.3936 head=0.0301 spd=1.1107 | L_lat=1.549 L_head=0.007 L_spd=3.701
+    lc_accel_25kph                : lat=0.6230 head=0.0408 spd=1.3672 | L_lat=3.881 L_head=0.013 L_spd=5.607
+    lc_accel_35kph                : lat=0.5799 head=0.0306 spd=1.3625 | L_lat=3.363 L_head=0.007 L_spd=5.569
+    lc_accel_45kph                : lat=0.5629 head=0.0276 spd=1.2002 | L_lat=3.169 L_head=0.006 L_spd=4.321
+    lc_accel_55kph                : lat=0.7549 head=0.0268 spd=1.0186 | L_lat=5.698 L_head=0.006 L_spd=3.113
+
+  --- 参数快照 (epoch 6) ---
+  T2_y                          : max_delta=0.188003 mean=1.3380 [1.312, 1.484]
+  T3_y                          : max_delta=0.188120 mean=0.9432 [0.912, 1.125]
+  T4_y                          : max_delta=0.188074 mean=0.0807 [0.000, 0.115]
+  T6_y                          : max_delta=0.185463 mean=0.8473 [0.815, 1.007]
+  station_kp                    : 0.2500 -> 0.0707 (-0.179275, -71.7%)
+  station_ki                    : 0.0000 -> 0.0000 (+0.000000, +0.0%)
+  low_speed_kp                  : 0.3500 -> 0.3771 (+0.027143, +7.8%)
+  low_speed_ki                  : 0.0100 -> 0.0120 (+0.002027, +20.3%)
+  high_speed_kp                 : 0.3400 -> 0.1557 (-0.184270, -54.2%)
+  high_speed_ki                 : 0.0100 -> 0.0000 (-0.010000, -100.0%)
+  switch_speed                  : 3.0000 -> 3.0157 (+0.015718, +0.5%)
+
+
+训练完成! 总耗时: 2262.2s
+  初始 loss: 10.0737 → 最终 loss: 6.1797 (Δ=-3.8939, -38.7%)
+参数已保存: E:\AI_project\differentiable_control\get_src\.worktrees\batch-training\sim\optim\..\configs\tuned\tuned_36aa000_20260422_204123.yaml
+
+最终 loss: 6.179727
+保存路径: E:\AI_project\differentiable_control\get_src\.worktrees\batch-training\sim\optim\..\configs\tuned\tuned_36aa000_20260422_204123.yaml
