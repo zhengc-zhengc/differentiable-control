@@ -155,8 +155,8 @@ def get_scenario_keys(trajectory_types=None):
 
 
 def run_comparison(tuned_config_path, output_dir, verbose=True, plant=None,
-                   trajectory_types=None):
-    """用 V1 路径（float）跑 baseline vs tuned 对比，生成对比图 + 返回指标。
+                   trajectory_types=None, use_batched=False):
+    """用 V1 路径跑 baseline vs tuned 对比，生成对比图 + 返回指标。
 
     Args:
         tuned_config_path: 调参后的配置文件路径
@@ -164,6 +164,9 @@ def run_comparison(tuned_config_path, output_dir, verbose=True, plant=None,
         verbose: 是否打印指标表格
         plant: 被控对象类型 ('kinematic'/'dynamic')，None 使用配置默认值
         trajectory_types: 轨迹类型名列表，None 则使用全部（8×6 + park_route = 49）
+        use_batched: True 时用 `run_simulation_batch(hard_mode=True)` 并行一次
+                     跑完所有 49 场景（仅 truck_trailer plant），总耗时 ~6 min；
+                     False 走 scalar per-scene 循环，~10 min。数值精度等价。
 
     Returns:
         comparison_metrics: {scenario_key: {baseline, tuned, delta_lat_pct, delta_head_pct}}
@@ -183,45 +186,128 @@ def run_comparison(tuned_config_path, output_dir, verbose=True, plant=None,
 
     if verbose:
         n_total = len(eval_scenarios)
+        mode = '并行 batched' if use_batched else '串行 per-scene'
+        print(f"V1 对比模式: {mode}")
         header = f"{'场景':<35} {'':>8} {'lat_rmse(m)':>12} {'head_rmse(rad)':>14} {'lat_max(m)':>10}"
         print(header)
         print('-' * len(header))
 
     comparison_metrics = {}
 
-    for idx, (key, name, traj_gen) in enumerate(eval_scenarios):
-        traj = traj_gen()
-        init_v = traj[0].v
-        scenario_labels[key] = name
-        if verbose:
-            print(f"  [{idx+1}/{len(eval_scenarios)}] {name}...", end='', flush=True)
-        h_base = run_simulation(traj, init_speed=init_v, cfg=cfg_base)
-        h_tuned = run_simulation(traj, init_speed=init_v, cfg=cfg_tuned)
-        m_base = _calc_metrics(h_base)
-        m_tuned = _calc_metrics(h_tuned)
+    # Batched 路径：一次性把 49 条轨迹喂给 run_simulation_batch，两次（baseline/tuned）
+    if use_batched:
+        if cfg_base['vehicle'].get('model_type') != 'truck_trailer':
+            raise RuntimeError("use_batched=True 仅支持 truck_trailer plant")
+        from optim.train_batch import run_simulation_batch  # 延迟导入避免循环
 
-        all_base.append((key, name, traj, h_base, m_base, init_v))
-        all_tuned.append((key, name, traj, h_tuned, m_tuned, init_v))
-
-        d_lat = ((m_tuned['lat_rmse'] - m_base['lat_rmse']) / m_base['lat_rmse'] * 100
-                 if m_base['lat_rmse'] > 1e-8 else 0.0)
-        d_head = ((m_tuned['head_rmse'] - m_base['head_rmse']) / m_base['head_rmse'] * 100
-                  if m_base['head_rmse'] > 1e-8 else 0.0)
-
-        comparison_metrics[key] = {
-            'baseline': m_base,
-            'tuned': m_tuned,
-            'delta_lat_pct': round(d_lat, 2),
-            'delta_head_pct': round(d_head, 2),
-        }
+        trajs = [gen() for _key, _lbl, gen in eval_scenarios]
+        init_vs = [float(t[0].v) for t in trajs]
+        dt = cfg_base['simulation']['dt']
 
         if verbose:
-            sign_lat = '+' if d_lat > 0 else ''
-            sign_head = '+' if d_head > 0 else ''
-            print(f" lat: {m_base['lat_rmse']:.4f}→{m_tuned['lat_rmse']:.4f} "
-                  f"({sign_lat}{d_lat:.1f}%) "
-                  f"head: {m_base['head_rmse']:.4f}→{m_tuned['head_rmse']:.4f} "
-                  f"({sign_head}{d_head:.1f}%)")
+            import time as _time
+            t0 = _time.time()
+        hist_base = run_simulation_batch(trajs, cfg=cfg_base, tbptt_k=0,
+                                          hard_mode=True)
+        hist_tuned = run_simulation_batch(trajs, cfg=cfg_tuned, tbptt_k=0,
+                                           hard_mode=True)
+        if verbose:
+            print(f"  [batched] baseline + tuned 仿真完成，"
+                  f"共 {_time.time() - t0:.1f}s\n")
+
+        # 拆回 per-scenario list[dict]（与 scalar run_simulation 输出格式一致）
+        mask = hist_base['valid_mask']
+        for idx, ((key, name, _gen), traj, init_v) in enumerate(
+                zip(eval_scenarios, trajs, init_vs)):
+            scenario_labels[key] = name
+            n_valid = int(mask[idx].sum().item())
+            h_base = [
+                {'t': t_i * dt,
+                 'x': float(hist_base['x'][idx, t_i]),
+                 'y': float(hist_base['y'][idx, t_i]),
+                 'yaw': float(hist_base['yaw'][idx, t_i]),
+                 'v': float(hist_base['v'][idx, t_i]),
+                 'steer': float(hist_base['steer'][idx, t_i]),
+                 'steer_fb': float(hist_base['steer_fb'][idx, t_i]),
+                 'steer_ff': float(hist_base['steer_ff'][idx, t_i]),
+                 'acc': float(hist_base['acc'][idx, t_i]),
+                 'lateral_error': float(hist_base['lateral_error'][idx, t_i]),
+                 'heading_error': float(hist_base['heading_error'][idx, t_i]),
+                 'ref_x': float(hist_base['ref_x'][idx, t_i]),
+                 'ref_y': float(hist_base['ref_y'][idx, t_i])}
+                for t_i in range(n_valid)]
+            h_tuned = [
+                {'t': t_i * dt,
+                 'x': float(hist_tuned['x'][idx, t_i]),
+                 'y': float(hist_tuned['y'][idx, t_i]),
+                 'yaw': float(hist_tuned['yaw'][idx, t_i]),
+                 'v': float(hist_tuned['v'][idx, t_i]),
+                 'steer': float(hist_tuned['steer'][idx, t_i]),
+                 'steer_fb': float(hist_tuned['steer_fb'][idx, t_i]),
+                 'steer_ff': float(hist_tuned['steer_ff'][idx, t_i]),
+                 'acc': float(hist_tuned['acc'][idx, t_i]),
+                 'lateral_error': float(hist_tuned['lateral_error'][idx, t_i]),
+                 'heading_error': float(hist_tuned['heading_error'][idx, t_i]),
+                 'ref_x': float(hist_tuned['ref_x'][idx, t_i]),
+                 'ref_y': float(hist_tuned['ref_y'][idx, t_i])}
+                for t_i in range(n_valid)]
+            m_base = _calc_metrics(h_base)
+            m_tuned = _calc_metrics(h_tuned)
+            all_base.append((key, name, traj, h_base, m_base, init_v))
+            all_tuned.append((key, name, traj, h_tuned, m_tuned, init_v))
+
+            d_lat = ((m_tuned['lat_rmse'] - m_base['lat_rmse'])
+                     / m_base['lat_rmse'] * 100 if m_base['lat_rmse'] > 1e-8 else 0.0)
+            d_head = ((m_tuned['head_rmse'] - m_base['head_rmse'])
+                      / m_base['head_rmse'] * 100 if m_base['head_rmse'] > 1e-8 else 0.0)
+            comparison_metrics[key] = {
+                'baseline': m_base, 'tuned': m_tuned,
+                'delta_lat_pct': round(d_lat, 2),
+                'delta_head_pct': round(d_head, 2),
+            }
+            if verbose:
+                sign_lat = '+' if d_lat > 0 else ''
+                sign_head = '+' if d_head > 0 else ''
+                print(f"  [{idx+1}/{len(eval_scenarios)}] {name}... "
+                      f"lat: {m_base['lat_rmse']:.4f}→{m_tuned['lat_rmse']:.4f} "
+                      f"({sign_lat}{d_lat:.1f}%) "
+                      f"head: {m_base['head_rmse']:.4f}→{m_tuned['head_rmse']:.4f} "
+                      f"({sign_head}{d_head:.1f}%)")
+    else:
+        # 原始串行路径
+        for idx, (key, name, traj_gen) in enumerate(eval_scenarios):
+            traj = traj_gen()
+            init_v = traj[0].v
+            scenario_labels[key] = name
+            if verbose:
+                print(f"  [{idx+1}/{len(eval_scenarios)}] {name}...", end='', flush=True)
+            h_base = run_simulation(traj, init_speed=init_v, cfg=cfg_base)
+            h_tuned = run_simulation(traj, init_speed=init_v, cfg=cfg_tuned)
+            m_base = _calc_metrics(h_base)
+            m_tuned = _calc_metrics(h_tuned)
+
+            all_base.append((key, name, traj, h_base, m_base, init_v))
+            all_tuned.append((key, name, traj, h_tuned, m_tuned, init_v))
+
+            d_lat = ((m_tuned['lat_rmse'] - m_base['lat_rmse']) / m_base['lat_rmse'] * 100
+                     if m_base['lat_rmse'] > 1e-8 else 0.0)
+            d_head = ((m_tuned['head_rmse'] - m_base['head_rmse']) / m_base['head_rmse'] * 100
+                      if m_base['head_rmse'] > 1e-8 else 0.0)
+
+            comparison_metrics[key] = {
+                'baseline': m_base,
+                'tuned': m_tuned,
+                'delta_lat_pct': round(d_lat, 2),
+                'delta_head_pct': round(d_head, 2),
+            }
+
+            if verbose:
+                sign_lat = '+' if d_lat > 0 else ''
+                sign_head = '+' if d_head > 0 else ''
+                print(f" lat: {m_base['lat_rmse']:.4f}→{m_tuned['lat_rmse']:.4f} "
+                      f"({sign_lat}{d_lat:.1f}%) "
+                      f"head: {m_base['head_rmse']:.4f}→{m_tuned['head_rmse']:.4f} "
+                      f"({sign_head}{d_head:.1f}%)")
 
     # 5 种对比图
     _plot_comparison_grid(all_base, all_tuned, output_dir,
@@ -658,7 +744,7 @@ def plot_parameter_changes(train_result, output_dir):
 
 
 def run_validation(tuned_config_path, output_dir=None, verbose=True,
-                    plant=None, trajectory_types=None):
+                    plant=None, trajectory_types=None, use_batched=False):
     """独立验证入口：仅跑 V1 对比 + 生成对比图，不需要 train_result。
 
     Args:
@@ -667,6 +753,7 @@ def run_validation(tuned_config_path, output_dir=None, verbose=True,
         verbose: 是否打印进度
         plant: 被控对象类型，None 使用配置默认值
         trajectory_types: 轨迹类型名列表，None 则全量验证
+        use_batched: True 走并行 batched（仅 truck_trailer），False 走 scalar per-scene
 
     Returns:
         output_dir: 产物保存目录路径
@@ -692,7 +779,7 @@ def run_validation(tuned_config_path, output_dir=None, verbose=True,
 
     comparison_metrics, scenario_labels = run_comparison(
         tuned_config_path, output_dir, verbose=verbose, plant=plant,
-        trajectory_types=trajectory_types)
+        trajectory_types=trajectory_types, use_batched=use_batched)
 
     # 复制 tuned config 到产物目录
     shutil.copy2(tuned_config_path,
@@ -719,7 +806,7 @@ def run_validation(tuned_config_path, output_dir=None, verbose=True,
 
 
 def run_post_training(train_result, hyperparams, verbose=True, plant=None,
-                      trajectory_types=None):
+                      trajectory_types=None, use_batched=False):
     """训练后一站式自动化入口。
 
     Args:
@@ -759,7 +846,7 @@ def run_post_training(train_result, hyperparams, verbose=True, plant=None,
         print(f"\n  --- V1 路径验证（baseline vs tuned）---")
     comparison_metrics, scenario_labels = run_comparison(
         train_result['saved_path'], output_dir, verbose=verbose, plant=plant,
-        trajectory_types=trajectory_types)
+        trajectory_types=trajectory_types, use_batched=use_batched)
 
     # 4. 训练摘要仪表板
     p = plot_training_summary(train_result, comparison_metrics, hyperparams, output_dir,
@@ -806,7 +893,10 @@ if __name__ == '__main__':
                         help='被控对象类型，默认使用配置中的值')
     parser.add_argument('--output-dir', default=None,
                         help='输出目录，默认 results/validation/{plant}/{timestamp}/')
+    parser.add_argument('--batched', action='store_true',
+                        help='用并行批量路径跑 V1（仅 truck_trailer），~6 min vs scalar ~10 min')
     args = parser.parse_args()
 
     run_validation(args.config, output_dir=args.output_dir, plant=args.plant,
-                   trajectory_types=args.trajectories)
+                   trajectory_types=args.trajectories,
+                   use_batched=args.batched)

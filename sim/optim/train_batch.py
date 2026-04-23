@@ -1390,6 +1390,8 @@ if __name__ == '__main__':
     parser.add_argument('--w-acc-rate', type=float, default=0.01)
     parser.add_argument('--no-post-training', action='store_true',
                         help='训练完不跑 post_training 自动化')
+    parser.add_argument('--scalar-validation', action='store_true',
+                        help='post_training 的 V1 验证走 scalar per-scene 路径（默认并行 batched）')
     args = parser.parse_args()
 
     result = train_batch(
@@ -1405,7 +1407,8 @@ if __name__ == '__main__':
     print(f"保存路径: {result['saved_path']}")
 
     if not args.no_post_training:
-        # post_training 沿用 scalar 的 49 场景 V1 验证（truck_trailer plant）
+        # post_training 默认走 batched V1（49 场景并行 hard_mode），~6 min；
+        # --scalar-validation 退回 scalar per-scene 路径 ~10 min（回归调试用）
         cfg = load_config(args.config)
         apply_plant_override(cfg, 'truck_trailer')
         scalar_params = _build_scalar_params_for_post_training(
@@ -1421,4 +1424,5 @@ if __name__ == '__main__':
             'batched': True,
         }
         run_post_training(result, hyperparams, plant='truck_trailer',
-                          trajectory_types=args.trajectories)
+                          trajectory_types=args.trajectories,
+                          use_batched=not args.scalar_validation)
