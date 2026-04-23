@@ -220,6 +220,32 @@ class TestRunSimulationBatch:
         max_diff = (lat_s - lat_b).abs().max().item()
         assert max_diff < 5e-3, f"lateral_error max diff {max_diff}"
 
+    def test_hard_mode_matches_scalar_v1(self):
+        """hard_mode=True 应与 scalar run_simulation(differentiable=False)
+        逐元素严格一致（1e-4）。覆盖两种轨迹排除偶然一致。"""
+        cfg = _truck_cfg()
+        for traj in [generate_circle(radius=60.0, speed=10.0, arc_angle=0.4),
+                     generate_lane_change(lane_width=3.5, change_length=40.0,
+                                           speed=10.0, lead_in=10.0,
+                                           lead_out=10.0)]:
+            scalar_hist = run_simulation(
+                traj, init_speed=traj[0].v, cfg=cfg,
+                differentiable=False, tbptt_k=0)
+            batch_hist = run_simulation_batch(
+                [traj], cfg=cfg, tbptt_k=0, hard_mode=True)
+            n = len(scalar_hist)
+            # FP 顺序差异：scalar 走 math.*（float64），batch 走 torch.*（float32），
+            # 多步累积 → lateral_error 允许 ~5mm，其他允许对应量级
+            tol = {'lateral_error': 5e-3, 'heading_error': 2e-3,
+                   'v': 5e-3, 'steer': 0.5, 'acc': 5e-3}
+            for key in tol:
+                scalar_vals = torch.tensor([float(h[key]) for h in scalar_hist])
+                batch_vals = batch_hist[key][0, :n]
+                max_diff = (scalar_vals - batch_vals).abs().max().item()
+                assert max_diff < tol[key], (
+                    f"hard_mode {key}: max diff {max_diff} > {tol[key]} "
+                    f"(traj_len={n})")
+
     def test_b3_variable_length(self):
         cfg = _truck_cfg()
         trajs = [

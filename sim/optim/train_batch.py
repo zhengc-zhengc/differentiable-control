@@ -481,6 +481,47 @@ def _smooth_clamp_batch(x, lo, hi, temp=1.0):
     return mid + half * torch.tanh((x - mid) / (half * temp + 1e-12))
 
 
+# hard_mode 对偶：语义和 V1（differentiable=False）路径完全一致的硬限幅/硬阶跃。
+# 用于 V1 验证场景（不需要梯度，要求与 scalar run_simulation 数值严格一致）。
+def _hard_lower_bound(x, lo, **_):
+    lo_t = lo if isinstance(lo, torch.Tensor) else torch.as_tensor(
+        float(lo), dtype=x.dtype)
+    return torch.maximum(x, lo_t)
+
+
+def _hard_upper_bound(x, hi, **_):
+    hi_t = hi if isinstance(hi, torch.Tensor) else torch.as_tensor(
+        float(hi), dtype=x.dtype)
+    return torch.minimum(x, hi_t)
+
+
+def _hard_step(x, threshold, **_):
+    th = threshold if isinstance(threshold, torch.Tensor) else torch.as_tensor(
+        float(threshold), dtype=x.dtype)
+    # scalar 路径是严格 > 判断（非 smooth），硬模式下用 > 和 float cast 复刻
+    return (x > th).to(x.dtype)
+
+
+def _hard_clamp_batch(x, lo, hi, **_):
+    lo_t = lo if isinstance(lo, torch.Tensor) else torch.as_tensor(
+        float(lo), dtype=x.dtype)
+    hi_t = hi if isinstance(hi, torch.Tensor) else torch.as_tensor(
+        float(hi), dtype=x.dtype)
+    return torch.minimum(torch.maximum(x, lo_t), hi_t)
+
+
+def _pick_ops(hard_mode: bool):
+    """返回控制器内部用的 5 个 op（lower_bound/upper_bound/step/clamp/ste_clamp）。
+    hard_mode=False 用 smooth 版（训练可梯度），True 用硬限幅（V1 验证语义）。
+    rate_limit / STE clamp 的 forward 本就是硬 clamp，差别仅在反向；hard 模式下
+    走同一路径但套 no_grad 即可（调用方负责）。"""
+    if hard_mode:
+        return (_hard_lower_bound, _hard_upper_bound, _hard_step,
+                _hard_clamp_batch)
+    return (_smooth_lower_bound, _smooth_upper_bound, _smooth_step,
+            _smooth_clamp_batch)
+
+
 class BatchedLatTruck(nn.Module):
     """横向控制器批量版。nn.Parameter 名/shape 与 scalar LatControllerTruck
     完全一致（T2/T3/T4/T6 查找表 y 值），方便直接 copy_ 过去做参数导出。"""
@@ -529,10 +570,14 @@ class BatchedLatTruck(nn.Module):
         self.steer_total_prev = self.steer_total_prev.detach()
 
     def compute(self, x, y, yaw_deg, speed_kph, yawrate, steer_feedback,
-                btraj: BatchedTrajectoryTable, dt: float = 0.02):
+                btraj: BatchedTrajectoryTable, dt: float = 0.02,
+                hard_mode: bool = False):
         """输入全部 [B]。返回 (steer_out, kappa_cur, near_kappa, far_kappa,
-        steer_fb, steer_ff) 每项 [B]。"""
-        speed_kph_safe = _smooth_lower_bound(speed_kph, self.min_speed_prot)
+        steer_fb, steer_ff) 每项 [B]。
+        hard_mode=True 时走硬限幅路径（与 V1 scalar run_simulation 等价），
+        False 时走 smooth 近似（训练/梯度路径）。"""
+        lb, _ub, _step, clamp = _pick_ops(hard_mode)
+        speed_kph_safe = lb(speed_kph, self.min_speed_prot)
         speed_mps = speed_kph_safe / 3.6
         yaw_rad = yaw_deg * DEG2RAD
 
@@ -563,7 +608,7 @@ class BatchedLatTruck(nn.Module):
         curvature_far = far_kappa
 
         # Step 4
-        v_clamped = _smooth_clamp_batch(
+        v_clamped = clamp(
             speed_mps,
             torch.tensor(1.0).expand_as(speed_mps),
             torch.tensor(100.0).expand_as(speed_mps), temp=1.0)
@@ -574,11 +619,11 @@ class BatchedLatTruck(nn.Module):
         real_dt_theta = yawrate - curvature_far * speed_mps
 
         # Step 6: target_theta
-        prev_dist = _smooth_lower_bound(
-            speed_mps * prev_time_dist, self.min_prev_dist)
+        prev_dist = lb(speed_mps * prev_time_dist, self.min_prev_dist)
         dis2lane = -lateral_error
         error_angle_raw = torch.atan(dis2lane / prev_dist)
         max_err_limit = max_theta_deg * DEG2RAD
+        # STE clamp 的 forward 与硬 clamp 等价，直接复用（no_grad 下无反向开销）
         target_theta = _clamp_ste_batch(
             error_angle_raw, -max_err_limit, max_err_limit)
 
@@ -586,8 +631,7 @@ class BatchedLatTruck(nn.Module):
                            / (prev_dist ** 2 + dis2lane ** 2) * -1.0)
 
         # Step 7
-        denom = _smooth_lower_bound(
-            reach_time_theta * speed_mps, self.min_reach_dis)
+        denom = lb(reach_time_theta * speed_mps, self.min_reach_dis)
         target_curvature = ((target_theta - real_theta)
                             + (target_dt_theta - real_dt_theta) * T_dt) / denom
 
@@ -606,7 +650,7 @@ class BatchedLatTruck(nn.Module):
         self.steer_ff_prev = steer_ff.detach().clone()
 
         # Step 10: 合并
-        steer_raw = _smooth_clamp_batch(
+        steer_raw = clamp(
             steer_fb + steer_ff, -max_steer_angle, max_steer_angle, temp=1.0)
         steer_out = _rate_limit_batch(
             self.steer_total_prev, steer_raw, self.rate_limit_total, dt)
@@ -683,8 +727,11 @@ class BatchedLonCtrl(nn.Module):
 
     def compute(self, x, y, yaw_deg, speed_kph, curvature_far,
                 btraj: BatchedTrajectoryTable, t_now,
-                ctrl_first_active: bool, dt: float = 0.02):
-        """输入 [B]。返回 acc_cmd [B]。t_now: [B]。"""
+                ctrl_first_active: bool, dt: float = 0.02,
+                hard_mode: bool = False):
+        """输入 [B]。返回 acc_cmd [B]。t_now: [B]。
+        hard_mode=True 走硬限幅（V1 等价），False 走 smooth 近似（训练）。"""
+        _lb, ub, step, _clamp = _pick_ops(hard_mode)
         speed_mps = speed_kph / 3.6
         yaw_rad = yaw_deg * DEG2RAD
         if ctrl_first_active:
@@ -710,7 +757,7 @@ class BatchedLonCtrl(nn.Module):
 
         # Step 2: 站位误差保护 — 用 torch.where 逐元素精确复刻 scalar 分支：
         #   if speed>10: station_limited
-        #   elif station_limited <= 0.25: smooth_upper_bound(station_limited, 0.0)
+        #   elif station_limited <= 0.25: {smooth|hard} min(station_limited, 0)
         #   elif station_limited >= 0.8: station_limited
         #   elif station_error_fnl_prev <= 0.01: station_error_fnl_prev (stale prev)
         #   else: station_limited
@@ -721,7 +768,7 @@ class BatchedLonCtrl(nn.Module):
         small_pos = station_limited <= 0.25
         large_pos = station_limited >= 0.8
         prev_near_zero = self.station_error_fnl_prev <= 0.01
-        low_branch_small = _smooth_upper_bound(station_limited, 0.0)
+        low_branch_small = ub(station_limited, 0.0)
         low_station_fnl = torch.where(
             small_pos, low_branch_small,
             torch.where(
@@ -738,8 +785,8 @@ class BatchedLonCtrl(nn.Module):
             integrator_enable=self.station_integrator_enable,
             sat=self.station_sat)
 
-        # Step 4: 速度 PID（smooth_step 混合增益）
-        w_low = 1.0 - _smooth_step(speed_mps, self.switch_speed, temp=0.5)
+        # Step 4: 速度 PID（smooth_step 混合增益；hard 模式下 step 是严格 >）
+        w_low = 1.0 - step(speed_mps, self.switch_speed, temp=0.5)
         kp = w_low * self.low_speed_kp + (1.0 - w_low) * self.high_speed_kp
         ki = w_low * self.low_speed_ki + (1.0 - w_low) * self.high_speed_ki
 
@@ -766,21 +813,21 @@ class BatchedLonCtrl(nn.Module):
         rate_gain = _lookup1d_batch(self.L5_x, self.L5_y, abs_speed_kph)
         acc_up_rate = acc_up_rate_raw * rate_gain
 
-        w_curv = _smooth_step(-curvature_far, 0.0075, temp=0.01)
+        w_curv = step(-curvature_far, 0.0075, temp=0.01)
         acc_up_lim_adj = acc_up_lim * (1.0 - 0.25 * w_curv)
         acc_low_lim_adj = acc_low_lim * (1.0 - 0.40 * w_curv)
 
         abs_speed = torch.abs(speed_mps)
-        w_standstill = 1.0 - _smooth_step(abs_speed, 1.5, temp=0.3)
+        w_standstill = 1.0 - step(abs_speed, 1.5, temp=0.3)
         acc_dn_rate = (w_standstill * self.acc_standstill_down_rate
                        + (1.0 - w_standstill) * acc_dn_rate_raw)
 
         acc_clamped = _clamp_ste_batch(acc_cmd, acc_low_lim_adj, acc_up_lim_adj)
 
-        w_pass = _smooth_step(abs_speed, 0.2, temp=0.05)
-        w_acc_ok = _smooth_step(acc_clamped, 0.25, temp=0.05)
+        w_pass = step(abs_speed, 0.2, temp=0.05)
+        w_acc_ok = step(acc_clamped, 0.25, temp=0.05)
         w_normal = 1.0 - (1.0 - w_pass) * (1.0 - w_acc_ok)
-        acc_creep = _smooth_upper_bound(acc_clamped, -0.05)
+        acc_creep = ub(acc_clamped, -0.05)
         acc_lowspd = w_normal * acc_clamped + (1.0 - w_normal) * acc_creep
 
         acc_limited = _clamp_ste_batch(
@@ -813,8 +860,16 @@ class BatchedLonCtrl(nn.Module):
 def run_simulation_batch(trajectories: list, cfg: dict = None,
                          lat_ctrl: BatchedLatTruck = None,
                          lon_ctrl: BatchedLonCtrl = None,
-                         tbptt_k: int = 0) -> dict:
+                         tbptt_k: int = 0,
+                         hard_mode: bool = False,
+                         trailer_mass_kg=None) -> dict:
     """B 条轨迹同步推进 50Hz 闭环。仅支持 truck_trailer plant。
+
+    Args:
+        hard_mode: True 时控制器走硬限幅路径（与 V1 scalar run_simulation 等价），
+                   整个主循环自动套 torch.no_grad() 省显存/跳过 autograd。
+                   False 时走 smooth 近似（训练用，需要梯度回传）。
+        trailer_mass_kg: 标量或 [B] tensor，覆盖 cfg 默认挂车质量。
 
     返回 dict：每项 [B, T_max]，另含 'valid_mask' [B, T_max] 和控制器句柄
     供上层做 loss / 导出用。
@@ -824,6 +879,20 @@ def run_simulation_batch(trajectories: list, cfg: dict = None,
     assert cfg['vehicle'].get('model_type') == 'truck_trailer', \
         "run_simulation_batch 目前仅支持 truck_trailer"
 
+    grad_ctx = torch.no_grad() if hard_mode else _nullctx()
+    with grad_ctx:
+        return _run_sim_batch_inner(
+            trajectories, cfg, lat_ctrl, lon_ctrl, tbptt_k,
+            hard_mode, trailer_mass_kg)
+
+
+class _nullctx:
+    def __enter__(self): return self
+    def __exit__(self, *a): return False
+
+
+def _run_sim_batch_inner(trajectories, cfg, lat_ctrl, lon_ctrl, tbptt_k,
+                         hard_mode, trailer_mass_override):
     bt = BatchedTrajectoryTable(trajectories)
     B, T_max = bt.B, bt.T_max
     dt = cfg['simulation']['dt']
@@ -837,11 +906,17 @@ def run_simulation_batch(trajectories: list, cfg: dict = None,
     else:
         lon_ctrl.reset_state()
 
-    # 挂车质量：从 config 读默认，允许 per-batch 覆盖（未来扩展）
+    # 挂车质量：优先用 override，否则读 cfg 默认
     tt_params = cfg['truck_trailer_vehicle']
-    default_m = float(tt_params.get('default_trailer_mass_kg',
-                                     tt_params.get('m_s_base', 0.0)))
-    trailer_mass = torch.full((B,), default_m)
+    if trailer_mass_override is not None:
+        if isinstance(trailer_mass_override, torch.Tensor):
+            trailer_mass = trailer_mass_override.to(torch.float32).view(B)
+        else:
+            trailer_mass = torch.full((B,), float(trailer_mass_override))
+    else:
+        default_m = float(tt_params.get('default_trailer_mass_kg',
+                                         tt_params.get('m_s_base', 0.0)))
+        trailer_mass = torch.full((B,), default_m)
 
     vehicle = BatchedTruckTrailerVehicle(
         cfg, batch_size=B,
@@ -881,14 +956,14 @@ def run_simulation_batch(trajectories: list, cfg: dict = None,
                 x=vehicle.x, y=vehicle.y,
                 yaw_deg=vehicle.yaw_deg, speed_kph=vehicle.speed_kph,
                 yawrate=yawrate, steer_feedback=prev_steer,
-                btraj=bt, dt=dt)
+                btraj=bt, dt=dt, hard_mode=hard_mode)
 
         acc_cmd = lon_ctrl.compute(
             x=vehicle.x, y=vehicle.y,
             yaw_deg=vehicle.yaw_deg, speed_kph=vehicle.speed_kph,
             curvature_far=curvature_far,
             btraj=bt, t_now=t_now,
-            ctrl_first_active=(step == 0), dt=dt)
+            ctrl_first_active=(step == 0), dt=dt, hard_mode=hard_mode)
 
         delta_front = steer_out / steer_ratio * DEG2RAD
         a_actual = (vehicle.v - v_prev) / dt

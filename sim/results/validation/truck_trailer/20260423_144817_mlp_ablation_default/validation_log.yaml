@@ -1,0 +1,549 @@
+label_a: 机理+MLP
+label_b: 纯机理
+n_scenarios: 49
+improved_lat: 29
+degraded_lat: 20
+avg_lat_delta_pct: 68.0
+avg_head_delta_pct: 494.83
+sim_time_a_s: 182.4
+sim_time_b_s: 177.8
+per_scenario:
+  lane_change_5kph:
+    label_a: 机理+MLP
+    label_b: 纯机理
+    a_lat_rmse: 0.49371368073223726
+    b_lat_rmse: 0.01702403842234939
+    a_head_rmse: 0.09860749240429284
+    b_head_rmse: 0.0033118181601612686
+    a_lat_max: 0.932948112487793
+    b_lat_max: 0.03730259835720062
+    delta_lat_pct: -96.55
+    delta_head_pct: -96.64
+  lane_change_18kph:
+    label_a: 机理+MLP
+    label_b: 纯机理
+    a_lat_rmse: 0.4934008100246764
+    b_lat_rmse: 0.028357631554048777
+    a_head_rmse: 0.03103224141469478
+    b_head_rmse: 0.007010383568459304
+    a_lat_max: 0.8246259689331055
+    b_lat_max: 0.054175712168216705
+    delta_lat_pct: -94.25
+    delta_head_pct: -77.41
+  lane_change_25kph:
+    label_a: 机理+MLP
+    label_b: 纯机理
+    a_lat_rmse: 0.5657817095941345
+    b_lat_rmse: 0.1293170657696212
+    a_head_rmse: 0.038077249867596516
+    b_head_rmse: 0.028245268067214137
+    a_lat_max: 0.9516293406486511
+    b_lat_max: 0.34391331672668457
+    delta_lat_pct: -77.14
+    delta_head_pct: -25.82
+  lane_change_35kph:
+    label_a: 机理+MLP
+    label_b: 纯机理
+    a_lat_rmse: 0.6007003248458594
+    b_lat_rmse: 1.203157839949145
+    a_head_rmse: 0.03402823799574563
+    b_head_rmse: 0.1271837544064864
+    a_lat_max: 1.2591843605041504
+    b_lat_max: 4.0550079345703125
+    delta_lat_pct: 100.29
+    delta_head_pct: 273.76
+  lane_change_45kph:
+    label_a: 机理+MLP
+    label_b: 纯机理
+    a_lat_rmse: 0.725875494717739
+    b_lat_rmse: 2.468326319043704
+    a_head_rmse: 0.029176640112460763
+    b_head_rmse: 0.38386874905181934
+    a_lat_max: 1.3040176630020142
+    b_lat_max: 5.213414192199707
+    delta_lat_pct: 240.05
+    delta_head_pct: 1215.67
+  lane_change_55kph:
+    label_a: 机理+MLP
+    label_b: 纯机理
+    a_lat_rmse: 1.3943913993885564
+    b_lat_rmse: 11.815628920925029
+    a_head_rmse: 0.02590991227646058
+    b_head_rmse: 0.3855251432577926
+    a_lat_max: 2.1860361099243164
+    b_lat_max: 30.64228057861328
+    delta_lat_pct: 747.37
+    delta_head_pct: 1387.94
+  double_lc_5kph:
+    label_a: 机理+MLP
+    label_b: 纯机理
+    a_lat_rmse: 0.6073884115886418
+    b_lat_rmse: 0.019428090041042637
+    a_head_rmse: 0.08402551179168241
+    b_head_rmse: 0.0037427743390898013
+    a_lat_max: 0.9892687797546387
+    b_lat_max: 0.03746883198618889
+    delta_lat_pct: -96.8
+    delta_head_pct: -95.55
+  double_lc_18kph:
+    label_a: 机理+MLP
+    label_b: 纯机理
+    a_lat_rmse: 0.5425867081927612
+    b_lat_rmse: 0.03379441609032796
+    a_head_rmse: 0.030757069723843195
+    b_head_rmse: 0.007672212703347114
+    a_lat_max: 0.9134114384651184
+    b_lat_max: 0.07441489398479462
+    delta_lat_pct: -93.77
+    delta_head_pct: -75.06
+  double_lc_25kph:
+    label_a: 机理+MLP
+    label_b: 纯机理
+    a_lat_rmse: 0.7693564843888413
+    b_lat_rmse: 0.18822948601849274
+    a_head_rmse: 0.043977638611232786
+    b_head_rmse: 0.02822611243067585
+    a_lat_max: 1.3194419145584106
+    b_lat_max: 0.43257200717926025
+    delta_lat_pct: -75.53
+    delta_head_pct: -35.82
+  double_lc_35kph:
+    label_a: 机理+MLP
+    label_b: 纯机理
+    a_lat_rmse: 0.8277280843334932
+    b_lat_rmse: 2.0536247064062407
+    a_head_rmse: 0.03831130722144835
+    b_head_rmse: 0.2333517957022523
+    a_lat_max: 1.478651523590088
+    b_lat_max: 5.085020542144775
+    delta_lat_pct: 148.1
+    delta_head_pct: 509.09
+  double_lc_45kph:
+    label_a: 机理+MLP
+    label_b: 纯机理
+    a_lat_rmse: 0.9272542041094007
+    b_lat_rmse: 10.004154169331342
+    a_head_rmse: 0.0349118370417121
+    b_head_rmse: 0.9805442880537386
+    a_lat_max: 1.595203161239624
+    b_lat_max: 21.637645721435547
+    delta_lat_pct: 978.9
+    delta_head_pct: 2708.63
+  double_lc_55kph:
+    label_a: 机理+MLP
+    label_b: 纯机理
+    a_lat_rmse: 1.222347161081232
+    b_lat_rmse: 17.986084674049543
+    a_head_rmse: 0.03515855928728605
+    b_head_rmse: 1.1080667987069392
+    a_lat_max: 2.1768996715545654
+    b_lat_max: 30.427650451660156
+    delta_lat_pct: 1371.44
+    delta_head_pct: 3051.63
+  clothoid_left_5kph:
+    label_a: 机理+MLP
+    label_b: 纯机理
+    a_lat_rmse: 1.8847449627905188
+    b_lat_rmse: 0.035391749492183426
+    a_head_rmse: 0.030432294547996515
+    b_head_rmse: 0.006007363064208552
+    a_lat_max: 3.2718353271484375
+    b_lat_max: 0.09631717205047607
+    delta_lat_pct: -98.12
+    delta_head_pct: -80.26
+  clothoid_left_18kph:
+    label_a: 机理+MLP
+    label_b: 纯机理
+    a_lat_rmse: 4.225484900738895
+    b_lat_rmse: 0.06494747460173936
+    a_head_rmse: 0.04476865874610382
+    b_head_rmse: 0.03745263441651881
+    a_lat_max: 7.287895202636719
+    b_lat_max: 0.15373829007148743
+    delta_lat_pct: -98.46
+    delta_head_pct: -16.34
+  clothoid_left_25kph:
+    label_a: 机理+MLP
+    label_b: 纯机理
+    a_lat_rmse: 6.3048252840600565
+    b_lat_rmse: 0.35604209664348585
+    a_head_rmse: 0.07143711949099883
+    b_head_rmse: 0.07017146581217686
+    a_lat_max: 11.489448547363281
+    b_lat_max: 0.6783215999603271
+    delta_lat_pct: -94.35
+    delta_head_pct: -1.77
+  clothoid_left_35kph:
+    label_a: 机理+MLP
+    label_b: 纯机理
+    a_lat_rmse: 8.328025979789759
+    b_lat_rmse: 5.175084547239979
+    a_head_rmse: 0.10167248470364712
+    b_head_rmse: 0.20728388162611164
+    a_lat_max: 15.699958801269531
+    b_lat_max: 8.698738098144531
+    delta_lat_pct: -37.86
+    delta_head_pct: 103.87
+  clothoid_left_45kph:
+    label_a: 机理+MLP
+    label_b: 纯机理
+    a_lat_rmse: 7.828542817679188
+    b_lat_rmse: 13.633770382047413
+    a_head_rmse: 0.08801616280413067
+    b_head_rmse: 1.273994045483835
+    a_lat_max: 15.0382080078125
+    b_lat_max: 26.095373153686523
+    delta_lat_pct: 74.15
+    delta_head_pct: 1347.45
+  clothoid_left_55kph:
+    label_a: 机理+MLP
+    label_b: 纯机理
+    a_lat_rmse: 5.165183509762946
+    b_lat_rmse: 9.368974576553732
+    a_head_rmse: 0.06470481079740373
+    b_head_rmse: 1.3024767317280697
+    a_lat_max: 9.96879768371582
+    b_lat_max: 21.26096534729004
+    delta_lat_pct: 81.39
+    delta_head_pct: 1912.95
+  clothoid_right_5kph:
+    label_a: 机理+MLP
+    label_b: 纯机理
+    a_lat_rmse: 0.9004236692220043
+    b_lat_rmse: 0.035391817361164014
+    a_head_rmse: 0.04117746004319056
+    b_head_rmse: 0.006007261541170923
+    a_lat_max: 1.5518417358398438
+    b_lat_max: 0.0963171124458313
+    delta_lat_pct: -96.07
+    delta_head_pct: -85.41
+  clothoid_right_18kph:
+    label_a: 机理+MLP
+    label_b: 纯机理
+    a_lat_rmse: 2.970448731555716
+    b_lat_rmse: 0.0649479985026349
+    a_head_rmse: 0.032413881542525086
+    b_head_rmse: 0.037452516360072005
+    a_lat_max: 5.401084899902344
+    b_lat_max: 0.15373829007148743
+    delta_lat_pct: -97.81
+    delta_head_pct: 15.54
+  clothoid_right_25kph:
+    label_a: 机理+MLP
+    label_b: 纯机理
+    a_lat_rmse: 5.500030803822976
+    b_lat_rmse: 0.356042150072626
+    a_head_rmse: 0.0672129604648167
+    b_head_rmse: 0.07017165836017333
+    a_lat_max: 10.361557006835938
+    b_lat_max: 0.6783227920532227
+    delta_lat_pct: -93.53
+    delta_head_pct: 4.4
+  clothoid_right_35kph:
+    label_a: 机理+MLP
+    label_b: 纯机理
+    a_lat_rmse: 8.760501145584955
+    b_lat_rmse: 5.175072515659613
+    a_head_rmse: 0.1107371363393828
+    b_head_rmse: 0.20728363352896395
+    a_lat_max: 17.11420440673828
+    b_lat_max: 8.698715209960938
+    delta_lat_pct: -40.93
+    delta_head_pct: 87.19
+  clothoid_right_45kph:
+    label_a: 机理+MLP
+    label_b: 纯机理
+    a_lat_rmse: 10.449662245494638
+    b_lat_rmse: 12.958202939071727
+    a_head_rmse: 0.12454645015926857
+    b_head_rmse: 1.2426120738188975
+    a_lat_max: 20.91967010498047
+    b_lat_max: 25.021114349365234
+    delta_lat_pct: 24.01
+    delta_head_pct: 897.71
+  clothoid_right_55kph:
+    label_a: 机理+MLP
+    label_b: 纯机理
+    a_lat_rmse: 8.006636805825291
+    b_lat_rmse: 8.520572807024404
+    a_head_rmse: 0.12983317233864927
+    b_head_rmse: 1.3100027867745456
+    a_lat_max: 16.84891128540039
+    b_lat_max: 19.9918270111084
+    delta_lat_pct: 6.42
+    delta_head_pct: 908.99
+  s_curve_5kph:
+    label_a: 机理+MLP
+    label_b: 纯机理
+    a_lat_rmse: 0.8021714889985223
+    b_lat_rmse: 0.01895251277994388
+    a_head_rmse: 0.0956916911945162
+    b_head_rmse: 0.005251367164264667
+    a_lat_max: 1.437126874923706
+    b_lat_max: 0.04703882709145546
+    delta_lat_pct: -97.64
+    delta_head_pct: -94.51
+  s_curve_18kph:
+    label_a: 机理+MLP
+    label_b: 纯机理
+    a_lat_rmse: 1.76995373209128
+    b_lat_rmse: 0.06550341019419188
+    a_head_rmse: 0.07415726533043528
+    b_head_rmse: 0.03996168708299846
+    a_lat_max: 3.392651081085205
+    b_lat_max: 0.1679379940032959
+    delta_lat_pct: -96.3
+    delta_head_pct: -46.11
+  s_curve_25kph:
+    label_a: 机理+MLP
+    label_b: 纯机理
+    a_lat_rmse: 2.5922378788830915
+    b_lat_rmse: 0.6089431750785623
+    a_head_rmse: 0.11504280006508763
+    b_head_rmse: 0.1151364952531737
+    a_lat_max: 4.953095436096191
+    b_lat_max: 1.2475398778915405
+    delta_lat_pct: -76.51
+    delta_head_pct: 0.08
+  s_curve_35kph:
+    label_a: 机理+MLP
+    label_b: 纯机理
+    a_lat_rmse: 3.392753122949954
+    b_lat_rmse: 6.301364707268317
+    a_head_rmse: 0.141379785402838
+    b_head_rmse: 0.6446135393837661
+    a_lat_max: 6.385714530944824
+    b_lat_max: 15.847223281860352
+    delta_lat_pct: 85.73
+    delta_head_pct: 355.94
+  s_curve_45kph:
+    label_a: 机理+MLP
+    label_b: 纯机理
+    a_lat_rmse: 2.9337407023509345
+    b_lat_rmse: 15.338695731670263
+    a_head_rmse: 0.12304624583503879
+    b_head_rmse: 1.2757716755592643
+    a_lat_max: 6.017636299133301
+    b_lat_max: 26.096525192260742
+    delta_lat_pct: 422.84
+    delta_head_pct: 936.82
+  s_curve_55kph:
+    label_a: 机理+MLP
+    label_b: 纯机理
+    a_lat_rmse: 3.705691199705878
+    b_lat_rmse: 11.117515239738257
+    a_head_rmse: 0.12958943928901315
+    b_head_rmse: 1.4326353892424415
+    a_lat_max: 6.648552894592285
+    b_lat_max: 20.589630126953125
+    delta_lat_pct: 200.01
+    delta_head_pct: 1005.52
+  combined_decel_5kph:
+    label_a: 机理+MLP
+    label_b: 纯机理
+    a_lat_rmse: 1.110845688313513
+    b_lat_rmse: 0.01841292000325546
+    a_head_rmse: 0.032749478365469285
+    b_head_rmse: 0.006452960546812285
+    a_lat_max: 1.7357757091522217
+    b_lat_max: 0.04651647061109543
+    delta_lat_pct: -98.34
+    delta_head_pct: -80.3
+  combined_decel_18kph:
+    label_a: 机理+MLP
+    label_b: 纯机理
+    a_lat_rmse: 3.0883453008813895
+    b_lat_rmse: 0.06257663971488214
+    a_head_rmse: 0.04077484924198334
+    b_head_rmse: 0.05309408760452334
+    a_lat_max: 5.351949691772461
+    b_lat_max: 0.1342102289199829
+    delta_lat_pct: -97.97
+    delta_head_pct: 30.21
+  combined_decel_25kph:
+    label_a: 机理+MLP
+    label_b: 纯机理
+    a_lat_rmse: 4.9134235909326565
+    b_lat_rmse: 0.5620578650619829
+    a_head_rmse: 0.06112880142829455
+    b_head_rmse: 0.09769422694171218
+    a_lat_max: 8.698860168457031
+    b_lat_max: 1.1949958801269531
+    delta_lat_pct: -88.56
+    delta_head_pct: 59.82
+  combined_decel_35kph:
+    label_a: 机理+MLP
+    label_b: 纯机理
+    a_lat_rmse: 6.787735775605188
+    b_lat_rmse: 4.338000870680091
+    a_head_rmse: 0.07955429172441987
+    b_head_rmse: 0.22391036515195958
+    a_lat_max: 12.022669792175293
+    b_lat_max: 7.837965488433838
+    delta_lat_pct: -36.09
+    delta_head_pct: 181.46
+  combined_decel_45kph:
+    label_a: 机理+MLP
+    label_b: 纯机理
+    a_lat_rmse: 8.754762446087364
+    b_lat_rmse: 9.160636987095607
+    a_head_rmse: 0.09825304207374301
+    b_head_rmse: 1.1558303610010394
+    a_lat_max: 16.402250289916992
+    b_lat_max: 21.25479507446289
+    delta_lat_pct: 4.64
+    delta_head_pct: 1076.38
+  combined_decel_55kph:
+    label_a: 机理+MLP
+    label_b: 纯机理
+    a_lat_rmse: 7.254957143457716
+    b_lat_rmse: 11.663587543439178
+    a_head_rmse: 0.07738874540439057
+    b_head_rmse: 1.2311239727325594
+    a_lat_max: 14.859118461608887
+    b_lat_max: 25.477474212646484
+    delta_lat_pct: 60.77
+    delta_head_pct: 1490.83
+  clothoid_decel_5kph:
+    label_a: 机理+MLP
+    label_b: 纯机理
+    a_lat_rmse: 1.6753146129780572
+    b_lat_rmse: 0.0513111398633874
+    a_head_rmse: 0.03271175675114106
+    b_head_rmse: 0.00870888032411461
+    a_lat_max: 3.032726287841797
+    b_lat_max: 0.14412689208984375
+    delta_lat_pct: -96.94
+    delta_head_pct: -73.38
+  clothoid_decel_18kph:
+    label_a: 机理+MLP
+    label_b: 纯机理
+    a_lat_rmse: 2.8847840069574104
+    b_lat_rmse: 0.1364906357960711
+    a_head_rmse: 0.04320141896658446
+    b_head_rmse: 0.053766090637729774
+    a_lat_max: 5.163425445556641
+    b_lat_max: 0.3310565650463104
+    delta_lat_pct: -95.27
+    delta_head_pct: 24.45
+  clothoid_decel_25kph:
+    label_a: 机理+MLP
+    label_b: 纯机理
+    a_lat_rmse: 4.492445877470641
+    b_lat_rmse: 0.388325588982192
+    a_head_rmse: 0.06490391713271136
+    b_head_rmse: 0.09283921164016357
+    a_lat_max: 8.226409912109375
+    b_lat_max: 0.8653202056884766
+    delta_lat_pct: -91.36
+    delta_head_pct: 43.04
+  clothoid_decel_35kph:
+    label_a: 机理+MLP
+    label_b: 纯机理
+    a_lat_rmse: 6.167987797147991
+    b_lat_rmse: 2.591972556766175
+    a_head_rmse: 0.09032424908092124
+    b_head_rmse: 0.19912380037850977
+    a_lat_max: 11.786155700683594
+    b_lat_max: 5.298844814300537
+    delta_lat_pct: -57.98
+    delta_head_pct: 120.45
+  clothoid_decel_45kph:
+    label_a: 机理+MLP
+    label_b: 纯机理
+    a_lat_rmse: 6.926636093421651
+    b_lat_rmse: 6.565353049049663
+    a_head_rmse: 0.09390705663526422
+    b_head_rmse: 1.3710184256641937
+    a_lat_max: 13.357948303222656
+    b_lat_max: 16.351604461669922
+    delta_lat_pct: -5.22
+    delta_head_pct: 1359.97
+  clothoid_decel_55kph:
+    label_a: 机理+MLP
+    label_b: 纯机理
+    a_lat_rmse: 5.5777368560221
+    b_lat_rmse: 10.709533162876923
+    a_head_rmse: 0.10538622251191992
+    b_head_rmse: 1.036776494359379
+    a_lat_max: 11.469402313232422
+    b_lat_max: 22.976844787597656
+    delta_lat_pct: 92.0
+    delta_head_pct: 883.79
+  lc_accel_5kph:
+    label_a: 机理+MLP
+    label_b: 纯机理
+    a_lat_rmse: 0.468350446543703
+    b_lat_rmse: 0.017151831161352337
+    a_head_rmse: 0.09580322418854031
+    b_head_rmse: 0.0033616649796263448
+    a_lat_max: 0.9391336441040039
+    b_lat_max: 0.03754439204931259
+    delta_lat_pct: -96.34
+    delta_head_pct: -96.49
+  lc_accel_18kph:
+    label_a: 机理+MLP
+    label_b: 纯机理
+    a_lat_rmse: 0.5167570073961063
+    b_lat_rmse: 0.0243260067529565
+    a_head_rmse: 0.03128477092880469
+    b_head_rmse: 0.01227262319690851
+    a_lat_max: 0.8503155708312988
+    b_lat_max: 0.05544770136475563
+    delta_lat_pct: -95.29
+    delta_head_pct: -60.77
+  lc_accel_25kph:
+    label_a: 机理+MLP
+    label_b: 纯机理
+    a_lat_rmse: 0.6418775589117977
+    b_lat_rmse: 0.749437639281485
+    a_head_rmse: 0.041237490117381946
+    b_head_rmse: 0.09756017836299406
+    a_lat_max: 1.228255271911621
+    b_lat_max: 1.8400894403457642
+    delta_lat_pct: 16.76
+    delta_head_pct: 136.58
+  lc_accel_35kph:
+    label_a: 机理+MLP
+    label_b: 纯机理
+    a_lat_rmse: 0.6375897928178833
+    b_lat_rmse: 1.5645152682901151
+    a_head_rmse: 0.03503141647755304
+    b_head_rmse: 0.22052253426619547
+    a_lat_max: 1.2247891426086426
+    b_lat_max: 5.599213600158691
+    delta_lat_pct: 145.38
+    delta_head_pct: 529.5
+  lc_accel_45kph:
+    label_a: 机理+MLP
+    label_b: 纯机理
+    a_lat_rmse: 0.8360362781368672
+    b_lat_rmse: 3.440546654838197
+    a_head_rmse: 0.02955424003004274
+    b_head_rmse: 0.36316667988611034
+    a_lat_max: 1.5500776767730713
+    b_lat_max: 7.219024658203125
+    delta_lat_pct: 311.53
+    delta_head_pct: 1128.81
+  lc_accel_55kph:
+    label_a: 机理+MLP
+    label_b: 纯机理
+    a_lat_rmse: 1.3632711409421958
+    b_lat_rmse: 10.077005612199791
+    a_head_rmse: 0.025123559021856416
+    b_head_rmse: 0.4191350384702908
+    a_lat_max: 2.1814627647399902
+    b_lat_max: 28.537158966064453
+    delta_lat_pct: 639.18
+    delta_head_pct: 1568.29
+  park_route:
+    label_a: 机理+MLP
+    label_b: 纯机理
+    a_lat_rmse: 2.0432546492538197
+    b_lat_rmse: 0.037432339084382746
+    a_head_rmse: 0.029691551796842627
+    b_head_rmse: 0.009297037253572676
+    a_lat_max: 4.555171012878418
+    b_lat_max: 0.18094564974308014
+    delta_lat_pct: -98.17
+    delta_head_pct: -68.69
