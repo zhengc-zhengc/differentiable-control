@@ -1,0 +1,497 @@
+plant: hybrid_dynamic
+n_scenarios: 49
+avg_truck_lat_rmse: 9.18544
+avg_robovan_lat_rmse: 8.11441
+avg_truck_head_rmse: 0.03747
+avg_robovan_head_rmse: 0.0366
+per_scenario:
+  lane_change_5kph:
+    name: 单换道 (5kph)
+    truck_lat_rmse: 0.15739
+    robovan_lat_rmse: 0.15693
+    delta_lat_pct: -0.29
+    truck_head_rmse: 0.0195
+    robovan_head_rmse: 0.01943
+    delta_head_pct: -0.38
+    truck_lat_max: 0.2353
+    robovan_lat_max: 0.23531
+  lane_change_18kph:
+    name: 单换道 (18kph)
+    truck_lat_rmse: 0.21217
+    robovan_lat_rmse: 0.21134
+    delta_lat_pct: -0.39
+    truck_head_rmse: 0.01609
+    robovan_head_rmse: 0.01575
+    delta_head_pct: -2.15
+    truck_lat_max: 0.37762
+    robovan_lat_max: 0.38356
+  lane_change_25kph:
+    name: 单换道 (25kph)
+    truck_lat_rmse: 0.42396
+    robovan_lat_rmse: 0.41462
+    delta_lat_pct: -2.2
+    truck_head_rmse: 0.02495
+    robovan_head_rmse: 0.02397
+    delta_head_pct: -3.92
+    truck_lat_max: 0.69312
+    robovan_lat_max: 0.6875
+  lane_change_35kph:
+    name: 单换道 (35kph)
+    truck_lat_rmse: 0.59887
+    robovan_lat_rmse: 0.61205
+    delta_lat_pct: 2.2
+    truck_head_rmse: 0.02483
+    robovan_head_rmse: 0.02438
+    delta_head_pct: -1.78
+    truck_lat_max: 1.04737
+    robovan_lat_max: 1.06352
+  lane_change_45kph:
+    name: 单换道 (45kph)
+    truck_lat_rmse: 0.45127
+    robovan_lat_rmse: 0.50092
+    delta_lat_pct: 11.0
+    truck_head_rmse: 0.01668
+    robovan_head_rmse: 0.01772
+    delta_head_pct: 6.24
+    truck_lat_max: 0.85024
+    robovan_lat_max: 0.93728
+  lane_change_55kph:
+    name: 单换道 (55kph)
+    truck_lat_rmse: 0.40479
+    robovan_lat_rmse: 0.48848
+    delta_lat_pct: 20.67
+    truck_head_rmse: 0.01217
+    robovan_head_rmse: 0.01293
+    delta_head_pct: 6.25
+    truck_lat_max: 0.71965
+    robovan_lat_max: 0.83789
+  double_lc_5kph:
+    name: 双换道 (5kph)
+    truck_lat_rmse: 0.14896
+    robovan_lat_rmse: 0.14886
+    delta_lat_pct: -0.07
+    truck_head_rmse: 0.01735
+    robovan_head_rmse: 0.01731
+    delta_head_pct: -0.23
+    truck_lat_max: 0.34519
+    robovan_lat_max: 0.34536
+  double_lc_18kph:
+    name: 双换道 (18kph)
+    truck_lat_rmse: 0.24314
+    robovan_lat_rmse: 0.24367
+    delta_lat_pct: 0.22
+    truck_head_rmse: 0.01866
+    robovan_head_rmse: 0.01849
+    delta_head_pct: -0.87
+    truck_lat_max: 0.43507
+    robovan_lat_max: 0.43774
+  double_lc_25kph:
+    name: 双换道 (25kph)
+    truck_lat_rmse: 0.43024
+    robovan_lat_rmse: 0.42682
+    delta_lat_pct: -0.79
+    truck_head_rmse: 0.02889
+    robovan_head_rmse: 0.02847
+    delta_head_pct: -1.45
+    truck_lat_max: 0.78142
+    robovan_lat_max: 0.78571
+  double_lc_35kph:
+    name: 双换道 (35kph)
+    truck_lat_rmse: 0.56775
+    robovan_lat_rmse: 0.57405
+    delta_lat_pct: 1.11
+    truck_head_rmse: 0.02451
+    robovan_head_rmse: 0.02431
+    delta_head_pct: -0.83
+    truck_lat_max: 1.04708
+    robovan_lat_max: 1.06442
+  double_lc_45kph:
+    name: 双换道 (45kph)
+    truck_lat_rmse: 0.42275
+    robovan_lat_rmse: 0.44303
+    delta_lat_pct: 4.8
+    truck_head_rmse: 0.01434
+    robovan_head_rmse: 0.01464
+    delta_head_pct: 2.12
+    truck_lat_max: 0.85856
+    robovan_lat_max: 0.90986
+  double_lc_55kph:
+    name: 双换道 (55kph)
+    truck_lat_rmse: 0.38201
+    robovan_lat_rmse: 0.4257
+    delta_lat_pct: 11.44
+    truck_head_rmse: 0.01254
+    robovan_head_rmse: 0.01266
+    delta_head_pct: 0.95
+    truck_lat_max: 0.70746
+    robovan_lat_max: 0.79445
+  clothoid_left_5kph:
+    name: 左转clothoid (5kph)
+    truck_lat_rmse: 0.58172
+    robovan_lat_rmse: 0.57199
+    delta_lat_pct: -1.67
+    truck_head_rmse: 0.03732
+    robovan_head_rmse: 0.03724
+    delta_head_pct: -0.21
+    truck_lat_max: 2.18721
+    robovan_lat_max: 2.12734
+  clothoid_left_18kph:
+    name: 左转clothoid (18kph)
+    truck_lat_rmse: 0.41308
+    robovan_lat_rmse: 0.42161
+    delta_lat_pct: 2.06
+    truck_head_rmse: 0.03325
+    robovan_head_rmse: 0.03328
+    delta_head_pct: 0.09
+    truck_lat_max: 0.70844
+    robovan_lat_max: 0.72846
+  clothoid_left_25kph:
+    name: 左转clothoid (25kph)
+    truck_lat_rmse: 0.87455
+    robovan_lat_rmse: 0.88314
+    delta_lat_pct: 0.98
+    truck_head_rmse: 0.02949
+    robovan_head_rmse: 0.02962
+    delta_head_pct: 0.46
+    truck_lat_max: 1.57388
+    robovan_lat_max: 1.58947
+  clothoid_left_35kph:
+    name: 左转clothoid (35kph)
+    truck_lat_rmse: 1.93219
+    robovan_lat_rmse: 1.89988
+    delta_lat_pct: -1.67
+    truck_head_rmse: 0.02358
+    robovan_head_rmse: 0.02326
+    delta_head_pct: -1.35
+    truck_lat_max: 3.49401
+    robovan_lat_max: 3.46397
+  clothoid_left_45kph:
+    name: 左转clothoid (45kph)
+    truck_lat_rmse: 2.89597
+    robovan_lat_rmse: 3.10736
+    delta_lat_pct: 7.3
+    truck_head_rmse: 0.02259
+    robovan_head_rmse: 0.02193
+    delta_head_pct: -2.91
+    truck_lat_max: 5.17105
+    robovan_lat_max: 5.56001
+  clothoid_left_55kph:
+    name: 左转clothoid (55kph)
+    truck_lat_rmse: 2.71518
+    robovan_lat_rmse: 2.77303
+    delta_lat_pct: 2.13
+    truck_head_rmse: 0.03519
+    robovan_head_rmse: 0.03087
+    delta_head_pct: -12.26
+    truck_lat_max: 5.19929
+    robovan_lat_max: 5.2675
+  clothoid_right_5kph:
+    name: 右转clothoid (5kph)
+    truck_lat_rmse: 0.27839
+    robovan_lat_rmse: 0.27753
+    delta_lat_pct: -0.31
+    truck_head_rmse: 0.03231
+    robovan_head_rmse: 0.03227
+    delta_head_pct: -0.13
+    truck_lat_max: 0.47278
+    robovan_lat_max: 0.47321
+  clothoid_right_18kph:
+    name: 右转clothoid (18kph)
+    truck_lat_rmse: 0.44159
+    robovan_lat_rmse: 0.44457
+    delta_lat_pct: 0.67
+    truck_head_rmse: 0.03307
+    robovan_head_rmse: 0.03291
+    delta_head_pct: -0.47
+    truck_lat_max: 0.78038
+    robovan_lat_max: 0.79442
+  clothoid_right_25kph:
+    name: 右转clothoid (25kph)
+    truck_lat_rmse: 0.88141
+    robovan_lat_rmse: 0.86176
+    delta_lat_pct: -2.23
+    truck_head_rmse: 0.02742
+    robovan_head_rmse: 0.02726
+    delta_head_pct: -0.59
+    truck_lat_max: 1.56664
+    robovan_lat_max: 1.54707
+  clothoid_right_35kph:
+    name: 右转clothoid (35kph)
+    truck_lat_rmse: 1.75767
+    robovan_lat_rmse: 1.71469
+    delta_lat_pct: -2.45
+    truck_head_rmse: 0.02546
+    robovan_head_rmse: 0.02557
+    delta_head_pct: 0.42
+    truck_lat_max: 3.21081
+    robovan_lat_max: 3.15443
+  clothoid_right_45kph:
+    name: 右转clothoid (45kph)
+    truck_lat_rmse: 2.78493
+    robovan_lat_rmse: 2.72308
+    delta_lat_pct: -2.22
+    truck_head_rmse: 0.02422
+    robovan_head_rmse: 0.02462
+    delta_head_pct: 1.67
+    truck_lat_max: 5.10299
+    robovan_lat_max: 5.0185
+  clothoid_right_55kph:
+    name: 右转clothoid (55kph)
+    truck_lat_rmse: 2.93168
+    robovan_lat_rmse: 2.94423
+    delta_lat_pct: 0.43
+    truck_head_rmse: 0.03647
+    robovan_head_rmse: 0.03802
+    delta_head_pct: 4.26
+    truck_lat_max: 5.4247
+    robovan_lat_max: 5.46083
+  s_curve_5kph:
+    name: S弯 (5kph)
+    truck_lat_rmse: 0.22284
+    robovan_lat_rmse: 0.22326
+    delta_lat_pct: 0.19
+    truck_head_rmse: 0.03928
+    robovan_head_rmse: 0.03923
+    delta_head_pct: -0.12
+    truck_lat_max: 0.35955
+    robovan_lat_max: 0.36098
+  s_curve_18kph:
+    name: S弯 (18kph)
+    truck_lat_rmse: 0.3949
+    robovan_lat_rmse: 0.39149
+    delta_lat_pct: -0.86
+    truck_head_rmse: 0.02908
+    robovan_head_rmse: 0.02918
+    delta_head_pct: 0.36
+    truck_lat_max: 0.61988
+    robovan_lat_max: 0.62208
+  s_curve_25kph:
+    name: S弯 (25kph)
+    truck_lat_rmse: 0.73385
+    robovan_lat_rmse: 0.76166
+    delta_lat_pct: 3.79
+    truck_head_rmse: 0.03119
+    robovan_head_rmse: 0.03141
+    delta_head_pct: 0.7
+    truck_lat_max: 1.25549
+    robovan_lat_max: 1.28522
+  s_curve_35kph:
+    name: S弯 (35kph)
+    truck_lat_rmse: 1.24119
+    robovan_lat_rmse: 1.27716
+    delta_lat_pct: 2.9
+    truck_head_rmse: 0.04714
+    robovan_head_rmse: 0.0481
+    delta_head_pct: 2.04
+    truck_lat_max: 2.15825
+    robovan_lat_max: 2.25972
+  s_curve_45kph:
+    name: S弯 (45kph)
+    truck_lat_rmse: 1.78078
+    robovan_lat_rmse: 1.85572
+    delta_lat_pct: 4.21
+    truck_head_rmse: 0.06405
+    robovan_head_rmse: 0.06539
+    delta_head_pct: 2.09
+    truck_lat_max: 3.37948
+    robovan_lat_max: 3.56159
+  s_curve_55kph:
+    name: S弯 (55kph)
+    truck_lat_rmse: 2.17095
+    robovan_lat_rmse: 2.38437
+    delta_lat_pct: 9.83
+    truck_head_rmse: 0.07131
+    robovan_head_rmse: 0.07291
+    delta_head_pct: 2.25
+    truck_lat_max: 4.23767
+    robovan_lat_max: 4.66943
+  combined_decel_5kph:
+    name: 组合弯(变速) (5kph)
+    truck_lat_rmse: 0.59675
+    robovan_lat_rmse: 0.59693
+    delta_lat_pct: 0.03
+    truck_head_rmse: 0.04476
+    robovan_head_rmse: 0.04449
+    delta_head_pct: -0.61
+    truck_lat_max: 1.23819
+    robovan_lat_max: 1.24197
+  combined_decel_18kph:
+    name: 组合弯(变速) (18kph)
+    truck_lat_rmse: 0.77767
+    robovan_lat_rmse: 0.78164
+    delta_lat_pct: 0.51
+    truck_head_rmse: 0.0388
+    robovan_head_rmse: 0.03875
+    delta_head_pct: -0.13
+    truck_lat_max: 1.36666
+    robovan_lat_max: 1.37054
+  combined_decel_25kph:
+    name: 组合弯(变速) (25kph)
+    truck_lat_rmse: 1.0317
+    robovan_lat_rmse: 1.04754
+    delta_lat_pct: 1.53
+    truck_head_rmse: 0.03567
+    robovan_head_rmse: 0.03604
+    delta_head_pct: 1.05
+    truck_lat_max: 1.90246
+    robovan_lat_max: 1.92293
+  combined_decel_35kph:
+    name: 组合弯(变速) (35kph)
+    truck_lat_rmse: 1.71397
+    robovan_lat_rmse: 1.72308
+    delta_lat_pct: 0.53
+    truck_head_rmse: 0.03612
+    robovan_head_rmse: 0.03668
+    delta_head_pct: 1.56
+    truck_lat_max: 3.17323
+    robovan_lat_max: 3.16126
+  combined_decel_45kph:
+    name: 组合弯(变速) (45kph)
+    truck_lat_rmse: 2.51269
+    robovan_lat_rmse: 2.58785
+    delta_lat_pct: 2.99
+    truck_head_rmse: 0.03516
+    robovan_head_rmse: 0.03618
+    delta_head_pct: 2.9
+    truck_lat_max: 4.53905
+    robovan_lat_max: 4.68409
+  combined_decel_55kph:
+    name: 组合弯(变速) (55kph)
+    truck_lat_rmse: 2.40544
+    robovan_lat_rmse: 2.31231
+    delta_lat_pct: -3.87
+    truck_head_rmse: 0.03715
+    robovan_head_rmse: 0.03763
+    delta_head_pct: 1.28
+    truck_lat_max: 4.70219
+    robovan_lat_max: 4.50517
+  clothoid_decel_5kph:
+    name: clothoid(变速) (5kph)
+    truck_lat_rmse: 0.50367
+    robovan_lat_rmse: 0.50187
+    delta_lat_pct: -0.36
+    truck_head_rmse: 0.04048
+    robovan_head_rmse: 0.04031
+    delta_head_pct: -0.41
+    truck_lat_max: 1.05505
+    robovan_lat_max: 1.05593
+  clothoid_decel_18kph:
+    name: clothoid(变速) (18kph)
+    truck_lat_rmse: 1.00709
+    robovan_lat_rmse: 0.99988
+    delta_lat_pct: -0.72
+    truck_head_rmse: 0.03773
+    robovan_head_rmse: 0.03732
+    delta_head_pct: -1.08
+    truck_lat_max: 1.84982
+    robovan_lat_max: 1.83841
+  clothoid_decel_25kph:
+    name: clothoid(变速) (25kph)
+    truck_lat_rmse: 1.45269
+    robovan_lat_rmse: 1.44208
+    delta_lat_pct: -0.73
+    truck_head_rmse: 0.03974
+    robovan_head_rmse: 0.03955
+    delta_head_pct: -0.48
+    truck_lat_max: 2.7043
+    robovan_lat_max: 2.6864
+  clothoid_decel_35kph:
+    name: clothoid(变速) (35kph)
+    truck_lat_rmse: 2.36528
+    robovan_lat_rmse: 2.43486
+    delta_lat_pct: 2.94
+    truck_head_rmse: 0.04858
+    robovan_head_rmse: 0.05019
+    delta_head_pct: 3.31
+    truck_lat_max: 4.36583
+    robovan_lat_max: 4.47177
+  clothoid_decel_45kph:
+    name: clothoid(变速) (45kph)
+    truck_lat_rmse: 3.2058
+    robovan_lat_rmse: 3.13232
+    delta_lat_pct: -2.29
+    truck_head_rmse: 0.04947
+    robovan_head_rmse: 0.05028
+    delta_head_pct: 1.64
+    truck_lat_max: 5.79787
+    robovan_lat_max: 5.71897
+  clothoid_decel_55kph:
+    name: clothoid(变速) (55kph)
+    truck_lat_rmse: 2.97803
+    robovan_lat_rmse: 2.72154
+    delta_lat_pct: -8.61
+    truck_head_rmse: 0.07134
+    robovan_head_rmse: 0.07027
+    delta_head_pct: -1.5
+    truck_lat_max: 6.0285
+    robovan_lat_max: 5.51826
+  lc_accel_5kph:
+    name: 换道(变速) (5kph)
+    truck_lat_rmse: 0.15942
+    robovan_lat_rmse: 0.15665
+    delta_lat_pct: -1.74
+    truck_head_rmse: 0.01796
+    robovan_head_rmse: 0.01891
+    delta_head_pct: 5.28
+    truck_lat_max: 0.23613
+    robovan_lat_max: 0.23536
+  lc_accel_18kph:
+    name: 换道(变速) (18kph)
+    truck_lat_rmse: 0.33243
+    robovan_lat_rmse: 0.26675
+    delta_lat_pct: -19.76
+    truck_head_rmse: 0.01672
+    robovan_head_rmse: 0.01533
+    delta_head_pct: -8.34
+    truck_lat_max: 0.572
+    robovan_lat_max: 0.47299
+  lc_accel_25kph:
+    name: 换道(变速) (25kph)
+    truck_lat_rmse: 0.52619
+    robovan_lat_rmse: 0.45497
+    delta_lat_pct: -13.54
+    truck_head_rmse: 0.02823
+    robovan_head_rmse: 0.0273
+    delta_head_pct: -3.3
+    truck_lat_max: 0.94317
+    robovan_lat_max: 0.77088
+  lc_accel_35kph:
+    name: 换道(变速) (35kph)
+    truck_lat_rmse: 0.44734
+    robovan_lat_rmse: 0.4082
+    delta_lat_pct: -8.75
+    truck_head_rmse: 0.02265
+    robovan_head_rmse: 0.02234
+    delta_head_pct: -1.38
+    truck_lat_max: 0.96374
+    robovan_lat_max: 0.88835
+  lc_accel_45kph:
+    name: 换道(变速) (45kph)
+    truck_lat_rmse: 0.47428
+    robovan_lat_rmse: 0.63721
+    delta_lat_pct: 34.35
+    truck_head_rmse: 0.01618
+    robovan_head_rmse: 0.0221
+    delta_head_pct: 36.61
+    truck_lat_max: 0.92647
+    robovan_lat_max: 1.29191
+  lc_accel_55kph:
+    name: 换道(变速) (55kph)
+    truck_lat_rmse: 0.42961
+    robovan_lat_rmse: 0.77417
+    delta_lat_pct: 80.2
+    truck_head_rmse: 0.01529
+    robovan_head_rmse: 0.02041
+    delta_head_pct: 33.5
+    truck_lat_max: 0.7916
+    robovan_lat_max: 1.43345
+  park_route:
+    name: 园区综合
+    truck_lat_rmse: 397.69032
+    robovan_lat_rmse: 344.46319
+    delta_lat_pct: -13.38
+    truck_head_rmse: 0.33119
+    robovan_head_rmse: 0.27638
+    delta_head_pct: -16.55
+    truck_lat_max: 1389.32495
+    robovan_lat_max: 1242.99597

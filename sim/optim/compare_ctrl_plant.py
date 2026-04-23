@@ -52,7 +52,8 @@ def _run_scalar_all_scenarios(cfg, scenarios, label):
     return out
 
 
-def _run_batched_truck_trailer(cfg, scenarios, label):
+def _run_batched(cfg, scenarios, label):
+    """走并行 batched（仅 truck_trailer / hybrid_dynamic 支持）。"""
     from optim.train_batch import run_simulation_batch
     trajs = [gen() for _k, _lbl, gen in scenarios]
     init_vs = [float(t[0].v) for t in trajs]
@@ -76,9 +77,9 @@ def run_plant_comparison(plant, out_dir):
     cfg_t = load_config(CFG_TRUCK); apply_plant_override(cfg_t, plant)
     cfg_r = load_config(CFG_ROBOVAN); apply_plant_override(cfg_r, plant)
 
-    if plant == 'truck_trailer':
-        all_t = _run_batched_truck_trailer(cfg_t, scenarios, '卡车控制器')
-        all_r = _run_batched_truck_trailer(cfg_r, scenarios, 'roboVAN控制器')
+    if plant in ('truck_trailer', 'hybrid_dynamic'):
+        all_t = _run_batched(cfg_t, scenarios, '卡车控制器')
+        all_r = _run_batched(cfg_r, scenarios, 'roboVAN控制器')
     else:
         all_t = _run_scalar_all_scenarios(cfg_t, scenarios, '卡车控制器')
         all_r = _run_scalar_all_scenarios(cfg_r, scenarios, 'roboVAN控制器')
@@ -170,11 +171,25 @@ def plot_cross_summary(summaries, out_dir):
 
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--plants', nargs='+',
+                        default=['truck_trailer', 'hybrid_v2'],
+                        help='要对比的 plant（任意数量）')
+    args = parser.parse_args()
+
     root = os.path.join(SIM_DIR, 'results', 'ctrl_plant_comparison')
     os.makedirs(root, exist_ok=True)
 
-    summaries = {}
-    for plant in ['truck_trailer', 'hybrid_v2']:
+    # 若之前 cross_summary.yaml 已存在，读入做 merge（保留其它 plant 结果）
+    existing = {}
+    existing_yaml = os.path.join(root, 'cross_summary.yaml')
+    if os.path.exists(existing_yaml):
+        with open(existing_yaml, 'r', encoding='utf-8') as f:
+            existing = yaml.safe_load(f) or {}
+
+    summaries = dict(existing)
+    for plant in args.plants:
         out = os.path.join(root, plant)
         summaries[plant] = run_plant_comparison(plant, out)
 
