@@ -16,6 +16,8 @@ class BicycleModel:
         self.y = torch.tensor(float(y))
         self.yaw = torch.tensor(float(yaw))
         self.v = torch.tensor(float(v))
+        # 上一步末的横摆角速度（kinematic 模型没有 r 状态，在 step 里显式记录）
+        self._yawrate = torch.tensor(0.0)
         self.dt = dt
         self.differentiable = differentiable
 
@@ -33,6 +35,8 @@ class BicycleModel:
             self.v = torch.nn.functional.softplus(self.v, beta=10.0)
         else:
             self.v = torch.clamp(self.v, min=0.0)
+        # 步末 yawrate = v_new · tan(δ_applied) / L（与 sim_loop 原 synth 公式等价）
+        self._yawrate = self.v * torch.tan(delta) / self.L
 
     def detach_state(self):
         """截断梯度链：将当前状态从计算图中 detach（用于 truncated BPTT）。"""
@@ -40,6 +44,12 @@ class BicycleModel:
         self.y = self.y.detach().requires_grad_(False)
         self.yaw = self.yaw.detach().requires_grad_(False)
         self.v = self.v.detach().requires_grad_(False)
+        self._yawrate = self._yawrate.detach().requires_grad_(False)
+
+    @property
+    def yawrate(self):
+        """kinematic 模型的当前横摆角速度 = v · tan(δ_last) / L。"""
+        return self._yawrate
 
     @property
     def speed_kph(self):

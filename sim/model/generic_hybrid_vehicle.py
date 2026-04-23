@@ -356,6 +356,11 @@ class GenericHybridVehicle:
         return torch.sqrt(vx * vx + vy * vy + 1e-10)
 
     @property
+    def yawrate(self):
+        """当前横摆角速度 r (rad/s)，base 动力学 + MLP 残差修正后的值。"""
+        return self._state[5]
+
+    @property
     def speed_kph(self):
         return self.v * 3.6
 

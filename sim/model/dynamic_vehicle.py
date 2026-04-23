@@ -206,6 +206,11 @@ class DynamicVehicle:
         return torch.sqrt(vx * vx + vy * vy + 1e-10)
 
     @property
+    def yawrate(self):
+        """当前横摆角速度 r (rad/s)，来自 6D 状态积分结果。"""
+        return self._state[5]
+
+    @property
     def speed_kph(self):
         return self.v * 3.6
 

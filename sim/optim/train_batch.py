@@ -444,6 +444,11 @@ class BatchedTruckTrailerVehicle:
         return torch.sqrt(vx * vx + vy_rear * vy_rear + 1e-10)
 
     @property
+    def yawrate(self):
+        """牵引车真实横摆角速度 r_t (rad/s)，动力学积分结果。"""
+        return self._state[:, 5]
+
+    @property
     def speed_kph(self):
         return self.v * 3.6
 
@@ -873,6 +878,9 @@ def run_simulation_batch(trajectories: list, cfg: dict = None,
 
     返回 dict：每项 [B, T_max]，另含 'valid_mask' [B, T_max] 和控制器句柄
     供上层做 loss / 导出用。
+
+    注：控制器拿到的横摆角速度是 plant 真实值（vehicle.yawrate = state[:,5]），
+        不再用 kinematic 合成 v·tan(δ_prev)/L。sim_loop scalar 路径同此。
     """
     if cfg is None:
         cfg = load_config()
@@ -947,9 +955,8 @@ def _run_sim_batch_inner(trajectories, cfg, lat_ctrl, lon_ctrl, tbptt_k,
             prev_steer = prev_steer.detach()
             v_prev = v_prev.detach()
 
-        # yawrate 估计（用上一步 steer）
-        delta_prev = prev_steer / steer_ratio * DEG2RAD
-        yawrate = vehicle.v * torch.tan(delta_prev) / wheelbase
+        # 横摆角速度：plant 真实值（动力学积分结果，含 MLP 残差修正）
+        yawrate = vehicle.yawrate
 
         steer_out, _kappa_cur, _nk, curvature_far, steer_fb, steer_ff = \
             lat_ctrl.compute(

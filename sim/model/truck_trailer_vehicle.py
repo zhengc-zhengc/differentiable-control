@@ -402,6 +402,11 @@ class TruckTrailerVehicle:
         return torch.sqrt(vx * vx + vy_rear * vy_rear + 1e-10)
 
     @property
+    def yawrate(self):
+        """牵引车真实横摆角速度 r_t (rad/s)，来自 12D 状态积分（base + MLP 残差）。"""
+        return self._state[5]
+
+    @property
     def speed_kph(self):
         return self.v * 3.6
 

@@ -96,9 +96,8 @@ def run_simulation(trajectory: list[TrajectoryPoint],
             lateral_error = torch.cos(ref_theta) * dy - torch.sin(ref_theta) * dx
             heading_error = normalize_angle(car.yaw - ref_theta)
 
-            # 估算横摆角速度
-            delta_prev = prev_steer / steer_ratio * DEG2RAD
-            yawrate = car.v * torch.tan(delta_prev) / wheelbase
+            # 横摆角速度：直接取 plant 真实值（各 plant 适配器都暴露 yawrate property）
+            yawrate = car.yawrate
 
             # 横向控制器
             steer_out, kappa_cur, kappa_near, curvature_far, steer_fb, steer_ff = \
@@ -171,9 +170,8 @@ def run_simulation(trajectory: list[TrajectoryPoint],
                              - math.sin(ref_pt.theta) * dx)
             heading_error = normalize_angle(car_yaw - ref_pt.theta).item()
 
-            # 估算横摆角速度
-            delta_prev = prev_steer / steer_ratio * DEG2RAD
-            yawrate = car_v * math.tan(delta_prev) / wheelbase
+            # 横摆角速度：直接取 plant 真实值（各 plant 适配器都暴露 yawrate property）
+            yawrate = car.yawrate.item()
 
             # 横向控制器
             steer_out, kappa_cur, kappa_near, curvature_far, steer_fb, steer_ff = \
