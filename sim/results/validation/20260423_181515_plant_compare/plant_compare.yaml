@@ -1,0 +1,498 @@
+n_scenarios: 49
+sim_time_truck_s: 228.7
+sim_time_hybrid_s: 155.4
+truck_trailer_avg_lat_rmse: 2.6919
+hybrid_dynamic_avg_lat_rmse: 9.1854
+truck_trailer_avg_head_rmse: 0.0558
+hybrid_dynamic_avg_head_rmse: 0.0375
+per_scenario:
+  lane_change_5kph:
+    name: 单换道 (5kph)
+    truck_lat_rmse: 0.4937
+    hybrid_lat_rmse: 0.1574
+    delta_lat: -0.3363
+    truck_head_rmse: 0.0986
+    hybrid_head_rmse: 0.0195
+    delta_head: -0.0791
+    truck_lat_max: 0.9329
+    hybrid_lat_max: 0.2353
+  lane_change_18kph:
+    name: 单换道 (18kph)
+    truck_lat_rmse: 0.421
+    hybrid_lat_rmse: 0.2122
+    delta_lat: -0.2088
+    truck_head_rmse: 0.0281
+    hybrid_head_rmse: 0.0161
+    delta_head: -0.012
+    truck_lat_max: 0.7351
+    hybrid_lat_max: 0.3776
+  lane_change_25kph:
+    name: 单换道 (25kph)
+    truck_lat_rmse: 0.4983
+    hybrid_lat_rmse: 0.424
+    delta_lat: -0.0743
+    truck_head_rmse: 0.0343
+    hybrid_head_rmse: 0.0249
+    delta_head: -0.0093
+    truck_lat_max: 0.8585
+    hybrid_lat_max: 0.6931
+  lane_change_35kph:
+    name: 单换道 (35kph)
+    truck_lat_rmse: 0.5243
+    hybrid_lat_rmse: 0.5989
+    delta_lat: 0.0746
+    truck_head_rmse: 0.0297
+    hybrid_head_rmse: 0.0248
+    delta_head: -0.0049
+    truck_lat_max: 1.0656
+    hybrid_lat_max: 1.0474
+  lane_change_45kph:
+    name: 单换道 (45kph)
+    truck_lat_rmse: 0.6083
+    hybrid_lat_rmse: 0.4513
+    delta_lat: -0.157
+    truck_head_rmse: 0.0256
+    hybrid_head_rmse: 0.0167
+    delta_head: -0.0089
+    truck_lat_max: 1.0856
+    hybrid_lat_max: 0.8502
+  lane_change_55kph:
+    name: 单换道 (55kph)
+    truck_lat_rmse: 1.06
+    hybrid_lat_rmse: 0.4048
+    delta_lat: -0.6552
+    truck_head_rmse: 0.0248
+    hybrid_head_rmse: 0.0122
+    delta_head: -0.0126
+    truck_lat_max: 1.7538
+    hybrid_lat_max: 0.7196
+  double_lc_5kph:
+    name: 双换道 (5kph)
+    truck_lat_rmse: 0.6074
+    hybrid_lat_rmse: 0.149
+    delta_lat: -0.4584
+    truck_head_rmse: 0.084
+    hybrid_head_rmse: 0.0173
+    delta_head: -0.0667
+    truck_lat_max: 0.9893
+    hybrid_lat_max: 0.3452
+  double_lc_18kph:
+    name: 双换道 (18kph)
+    truck_lat_rmse: 0.4229
+    hybrid_lat_rmse: 0.2431
+    delta_lat: -0.1798
+    truck_head_rmse: 0.0272
+    hybrid_head_rmse: 0.0187
+    delta_head: -0.0085
+    truck_lat_max: 0.7345
+    hybrid_lat_max: 0.4351
+  double_lc_25kph:
+    name: 双换道 (25kph)
+    truck_lat_rmse: 0.642
+    hybrid_lat_rmse: 0.4302
+    delta_lat: -0.2118
+    truck_head_rmse: 0.0381
+    hybrid_head_rmse: 0.0289
+    delta_head: -0.0092
+    truck_lat_max: 1.0211
+    hybrid_lat_max: 0.7814
+  double_lc_35kph:
+    name: 双换道 (35kph)
+    truck_lat_rmse: 0.6586
+    hybrid_lat_rmse: 0.5678
+    delta_lat: -0.0908
+    truck_head_rmse: 0.0324
+    hybrid_head_rmse: 0.0245
+    delta_head: -0.0079
+    truck_lat_max: 1.0745
+    hybrid_lat_max: 1.0471
+  double_lc_45kph:
+    name: 双换道 (45kph)
+    truck_lat_rmse: 0.7727
+    hybrid_lat_rmse: 0.4228
+    delta_lat: -0.3499
+    truck_head_rmse: 0.0294
+    hybrid_head_rmse: 0.0143
+    delta_head: -0.015
+    truck_lat_max: 1.2687
+    hybrid_lat_max: 0.8586
+  double_lc_55kph:
+    name: 双换道 (55kph)
+    truck_lat_rmse: 1.0404
+    hybrid_lat_rmse: 0.382
+    delta_lat: -0.6584
+    truck_head_rmse: 0.0333
+    hybrid_head_rmse: 0.0125
+    delta_head: -0.0207
+    truck_lat_max: 1.7467
+    hybrid_lat_max: 0.7075
+  clothoid_left_5kph:
+    name: 左转clothoid (5kph)
+    truck_lat_rmse: 1.8847
+    hybrid_lat_rmse: 0.5817
+    delta_lat: -1.303
+    truck_head_rmse: 0.0304
+    hybrid_head_rmse: 0.0373
+    delta_head: 0.0069
+    truck_lat_max: 3.2718
+    hybrid_lat_max: 2.1872
+  clothoid_left_18kph:
+    name: 左转clothoid (18kph)
+    truck_lat_rmse: 3.3507
+    hybrid_lat_rmse: 0.4131
+    delta_lat: -2.9376
+    truck_head_rmse: 0.0324
+    hybrid_head_rmse: 0.0333
+    delta_head: 0.0009
+    truck_lat_max: 5.7449
+    hybrid_lat_max: 0.7084
+  clothoid_left_25kph:
+    name: 左转clothoid (25kph)
+    truck_lat_rmse: 4.8126
+    hybrid_lat_rmse: 0.8746
+    delta_lat: -3.938
+    truck_head_rmse: 0.0492
+    hybrid_head_rmse: 0.0295
+    delta_head: -0.0197
+    truck_lat_max: 8.6077
+    hybrid_lat_max: 1.5739
+  clothoid_left_35kph:
+    name: 左转clothoid (35kph)
+    truck_lat_rmse: 6.4404
+    hybrid_lat_rmse: 1.9322
+    delta_lat: -4.5082
+    truck_head_rmse: 0.0734
+    hybrid_head_rmse: 0.0236
+    delta_head: -0.0498
+    truck_lat_max: 11.8825
+    hybrid_lat_max: 3.494
+  clothoid_left_45kph:
+    name: 左转clothoid (45kph)
+    truck_lat_rmse: 6.6031
+    hybrid_lat_rmse: 2.896
+    delta_lat: -3.7071
+    truck_head_rmse: 0.0728
+    hybrid_head_rmse: 0.0226
+    delta_head: -0.0502
+    truck_lat_max: 12.5253
+    hybrid_lat_max: 5.1711
+  clothoid_left_55kph:
+    name: 左转clothoid (55kph)
+    truck_lat_rmse: 4.1361
+    hybrid_lat_rmse: 2.7152
+    delta_lat: -1.4209
+    truck_head_rmse: 0.0522
+    hybrid_head_rmse: 0.0352
+    delta_head: -0.0171
+    truck_lat_max: 7.999
+    hybrid_lat_max: 5.1993
+  clothoid_right_5kph:
+    name: 右转clothoid (5kph)
+    truck_lat_rmse: 0.9004
+    hybrid_lat_rmse: 0.2784
+    delta_lat: -0.622
+    truck_head_rmse: 0.0412
+    hybrid_head_rmse: 0.0323
+    delta_head: -0.0089
+    truck_lat_max: 1.5518
+    hybrid_lat_max: 0.4728
+  clothoid_right_18kph:
+    name: 右转clothoid (18kph)
+    truck_lat_rmse: 2.4119
+    hybrid_lat_rmse: 0.4416
+    delta_lat: -1.9703
+    truck_head_rmse: 0.0255
+    hybrid_head_rmse: 0.0331
+    delta_head: 0.0076
+    truck_lat_max: 4.371
+    hybrid_lat_max: 0.7804
+  clothoid_right_25kph:
+    name: 右转clothoid (25kph)
+    truck_lat_rmse: 4.2506
+    hybrid_lat_rmse: 0.8814
+    delta_lat: -3.3691
+    truck_head_rmse: 0.0482
+    hybrid_head_rmse: 0.0274
+    delta_head: -0.0208
+    truck_lat_max: 7.8587
+    hybrid_lat_max: 1.5666
+  clothoid_right_35kph:
+    name: 右转clothoid (35kph)
+    truck_lat_rmse: 6.8933
+    hybrid_lat_rmse: 1.7577
+    delta_lat: -5.1356
+    truck_head_rmse: 0.0827
+    hybrid_head_rmse: 0.0255
+    delta_head: -0.0573
+    truck_lat_max: 13.0929
+    hybrid_lat_max: 3.2108
+  clothoid_right_45kph:
+    name: 右转clothoid (45kph)
+    truck_lat_rmse: 8.4072
+    hybrid_lat_rmse: 2.7849
+    delta_lat: -5.6223
+    truck_head_rmse: 0.0966
+    hybrid_head_rmse: 0.0242
+    delta_head: -0.0724
+    truck_lat_max: 16.4208
+    hybrid_lat_max: 5.103
+  clothoid_right_55kph:
+    name: 右转clothoid (55kph)
+    truck_lat_rmse: 6.6355
+    hybrid_lat_rmse: 2.9317
+    delta_lat: -3.7038
+    truck_head_rmse: 0.1068
+    hybrid_head_rmse: 0.0365
+    delta_head: -0.0704
+    truck_lat_max: 13.7212
+    hybrid_lat_max: 5.4247
+  s_curve_5kph:
+    name: S弯 (5kph)
+    truck_lat_rmse: 0.8022
+    hybrid_lat_rmse: 0.2228
+    delta_lat: -0.5793
+    truck_head_rmse: 0.0957
+    hybrid_head_rmse: 0.0393
+    delta_head: -0.0564
+    truck_lat_max: 1.4371
+    hybrid_lat_max: 0.3595
+  s_curve_18kph:
+    name: S弯 (18kph)
+    truck_lat_rmse: 1.5069
+    hybrid_lat_rmse: 0.3949
+    delta_lat: -1.112
+    truck_head_rmse: 0.0619
+    hybrid_head_rmse: 0.0291
+    delta_head: -0.0328
+    truck_lat_max: 2.8195
+    hybrid_lat_max: 0.6199
+  s_curve_25kph:
+    name: S弯 (25kph)
+    truck_lat_rmse: 2.1294
+    hybrid_lat_rmse: 0.7338
+    delta_lat: -1.3955
+    truck_head_rmse: 0.0948
+    hybrid_head_rmse: 0.0312
+    delta_head: -0.0637
+    truck_lat_max: 4.0015
+    hybrid_lat_max: 1.2555
+  s_curve_35kph:
+    name: S弯 (35kph)
+    truck_lat_rmse: 2.8428
+    hybrid_lat_rmse: 1.2412
+    delta_lat: -1.6016
+    truck_head_rmse: 0.1199
+    hybrid_head_rmse: 0.0471
+    delta_head: -0.0728
+    truck_lat_max: 5.2893
+    hybrid_lat_max: 2.1583
+  s_curve_45kph:
+    name: S弯 (45kph)
+    truck_lat_rmse: 2.5206
+    hybrid_lat_rmse: 1.7808
+    delta_lat: -0.7398
+    truck_head_rmse: 0.1069
+    hybrid_head_rmse: 0.064
+    delta_head: -0.0428
+    truck_lat_max: 5.4643
+    hybrid_lat_max: 3.3795
+  s_curve_55kph:
+    name: S弯 (55kph)
+    truck_lat_rmse: 3.0448
+    hybrid_lat_rmse: 2.1709
+    delta_lat: -0.8738
+    truck_head_rmse: 0.1128
+    hybrid_head_rmse: 0.0713
+    delta_head: -0.0415
+    truck_lat_max: 5.6519
+    hybrid_lat_max: 4.2377
+  combined_decel_5kph:
+    name: 组合弯(变速) (5kph)
+    truck_lat_rmse: 1.1108
+    hybrid_lat_rmse: 0.5967
+    delta_lat: -0.5141
+    truck_head_rmse: 0.0327
+    hybrid_head_rmse: 0.0448
+    delta_head: 0.012
+    truck_lat_max: 1.7358
+    hybrid_lat_max: 1.2382
+  combined_decel_18kph:
+    name: 组合弯(变速) (18kph)
+    truck_lat_rmse: 2.5527
+    hybrid_lat_rmse: 0.7777
+    delta_lat: -1.775
+    truck_head_rmse: 0.0305
+    hybrid_head_rmse: 0.0388
+    delta_head: 0.0083
+    truck_lat_max: 4.3722
+    hybrid_lat_max: 1.3667
+  combined_decel_25kph:
+    name: 组合弯(变速) (25kph)
+    truck_lat_rmse: 3.8199
+    hybrid_lat_rmse: 1.0317
+    delta_lat: -2.7882
+    truck_head_rmse: 0.0434
+    hybrid_head_rmse: 0.0357
+    delta_head: -0.0077
+    truck_lat_max: 6.6597
+    hybrid_lat_max: 1.9025
+  combined_decel_35kph:
+    name: 组合弯(变速) (35kph)
+    truck_lat_rmse: 5.2305
+    hybrid_lat_rmse: 1.714
+    delta_lat: -3.5165
+    truck_head_rmse: 0.0576
+    hybrid_head_rmse: 0.0361
+    delta_head: -0.0214
+    truck_lat_max: 9.1556
+    hybrid_lat_max: 3.1732
+  combined_decel_45kph:
+    name: 组合弯(变速) (45kph)
+    truck_lat_rmse: 6.7226
+    hybrid_lat_rmse: 2.5127
+    delta_lat: -4.2099
+    truck_head_rmse: 0.0721
+    hybrid_head_rmse: 0.0352
+    delta_head: -0.037
+    truck_lat_max: 12.368
+    hybrid_lat_max: 4.5391
+  combined_decel_55kph:
+    name: 组合弯(变速) (55kph)
+    truck_lat_rmse: 6.2322
+    hybrid_lat_rmse: 2.4054
+    delta_lat: -3.8267
+    truck_head_rmse: 0.0677
+    hybrid_head_rmse: 0.0372
+    delta_head: -0.0305
+    truck_lat_max: 12.6127
+    hybrid_lat_max: 4.7022
+  clothoid_decel_5kph:
+    name: clothoid(变速) (5kph)
+    truck_lat_rmse: 1.6753
+    hybrid_lat_rmse: 0.5037
+    delta_lat: -1.1716
+    truck_head_rmse: 0.0327
+    hybrid_head_rmse: 0.0405
+    delta_head: 0.0078
+    truck_lat_max: 3.0327
+    hybrid_lat_max: 1.0551
+  clothoid_decel_18kph:
+    name: clothoid(变速) (18kph)
+    truck_lat_rmse: 2.4253
+    hybrid_lat_rmse: 1.0071
+    delta_lat: -1.4182
+    truck_head_rmse: 0.0351
+    hybrid_head_rmse: 0.0377
+    delta_head: 0.0027
+    truck_lat_max: 4.3307
+    hybrid_lat_max: 1.8498
+  clothoid_decel_25kph:
+    name: clothoid(变速) (25kph)
+    truck_lat_rmse: 3.5803
+    hybrid_lat_rmse: 1.4527
+    delta_lat: -2.1276
+    truck_head_rmse: 0.0508
+    hybrid_head_rmse: 0.0397
+    delta_head: -0.0111
+    truck_lat_max: 6.4959
+    hybrid_lat_max: 2.7043
+  clothoid_decel_35kph:
+    name: clothoid(变速) (35kph)
+    truck_lat_rmse: 5.014
+    hybrid_lat_rmse: 2.3653
+    delta_lat: -2.6487
+    truck_head_rmse: 0.0745
+    hybrid_head_rmse: 0.0486
+    delta_head: -0.0259
+    truck_lat_max: 9.5292
+    hybrid_lat_max: 4.3658
+  clothoid_decel_45kph:
+    name: clothoid(变速) (45kph)
+    truck_lat_rmse: 5.626
+    hybrid_lat_rmse: 3.2058
+    delta_lat: -2.4202
+    truck_head_rmse: 0.0791
+    hybrid_head_rmse: 0.0495
+    delta_head: -0.0296
+    truck_lat_max: 10.848
+    hybrid_lat_max: 5.7979
+  clothoid_decel_55kph:
+    name: clothoid(变速) (55kph)
+    truck_lat_rmse: 4.9368
+    hybrid_lat_rmse: 2.978
+    delta_lat: -1.9588
+    truck_head_rmse: 0.1002
+    hybrid_head_rmse: 0.0713
+    delta_head: -0.0288
+    truck_lat_max: 10.1081
+    hybrid_lat_max: 6.0285
+  lc_accel_5kph:
+    name: 换道(变速) (5kph)
+    truck_lat_rmse: 0.4684
+    hybrid_lat_rmse: 0.1594
+    delta_lat: -0.3089
+    truck_head_rmse: 0.0958
+    hybrid_head_rmse: 0.018
+    delta_head: -0.0778
+    truck_lat_max: 0.9391
+    hybrid_lat_max: 0.2361
+  lc_accel_18kph:
+    name: 换道(变速) (18kph)
+    truck_lat_rmse: 0.436
+    hybrid_lat_rmse: 0.3324
+    delta_lat: -0.1036
+    truck_head_rmse: 0.0289
+    hybrid_head_rmse: 0.0167
+    delta_head: -0.0122
+    truck_lat_max: 0.756
+    hybrid_lat_max: 0.572
+  lc_accel_25kph:
+    name: 换道(变速) (25kph)
+    truck_lat_rmse: 0.5411
+    hybrid_lat_rmse: 0.5262
+    delta_lat: -0.0149
+    truck_head_rmse: 0.0365
+    hybrid_head_rmse: 0.0282
+    delta_head: -0.0082
+    truck_lat_max: 1.0063
+    hybrid_lat_max: 0.9432
+  lc_accel_35kph:
+    name: 换道(变速) (35kph)
+    truck_lat_rmse: 0.5601
+    hybrid_lat_rmse: 0.4473
+    delta_lat: -0.1128
+    truck_head_rmse: 0.0308
+    hybrid_head_rmse: 0.0226
+    delta_head: -0.0081
+    truck_lat_max: 1.0669
+    hybrid_lat_max: 0.9637
+  lc_accel_45kph:
+    name: 换道(变速) (45kph)
+    truck_lat_rmse: 0.6805
+    hybrid_lat_rmse: 0.4743
+    delta_lat: -0.2062
+    truck_head_rmse: 0.0273
+    hybrid_head_rmse: 0.0162
+    delta_head: -0.0111
+    truck_lat_max: 1.2933
+    hybrid_lat_max: 0.9265
+  lc_accel_55kph:
+    name: 换道(变速) (55kph)
+    truck_lat_rmse: 1.056
+    hybrid_lat_rmse: 0.4296
+    delta_lat: -0.6264
+    truck_head_rmse: 0.0241
+    hybrid_head_rmse: 0.0153
+    delta_head: -0.0088
+    truck_lat_max: 1.7671
+    hybrid_lat_max: 0.7916
+  park_route:
+    name: 园区综合
+    truck_lat_rmse: 1.9101
+    hybrid_lat_rmse: 397.6903
+    delta_lat: 395.7802
+    truck_head_rmse: 0.0275
+    hybrid_head_rmse: 0.3312
+    delta_head: 0.3037
+    truck_lat_max: 3.9538
+    hybrid_lat_max: 1389.325

@@ -15,10 +15,16 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SIM_DIR = os.path.normpath(os.path.join(HERE, '..', '..', '..', 'sim'))
 sys.path.insert(0, SIM_DIR)
 
+import matplotlib.pyplot as plt
+
 from config import apply_plant_override, load_config
 from optim.post_training import _build_eval_scenarios, _calc_metrics
 from optim.train_batch import run_simulation_batch
-from optim.validate_batch import _batched_to_scenario_histories
+from optim.validate_batch import (_batched_to_scenario_histories,
+                                   _plot_comparison_grid_custom)
+
+plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'sans-serif']
+plt.rcParams['axes.unicode_minus'] = False
 
 
 def run_plant(plant_name, scenarios, trajs):
@@ -30,7 +36,7 @@ def run_plant(plant_name, scenarios, trajs):
     elapsed = time.time() - t0
     hists = _batched_to_scenario_histories(batch, len(trajs), dt)
     metrics = [_calc_metrics(h) for h in hists]
-    return metrics, elapsed
+    return hists, metrics, elapsed
 
 
 def main():
@@ -40,11 +46,11 @@ def main():
     print(f"场景数: {n}\n")
 
     print("[1/2] truck_trailer plant ...")
-    m_tr, t_tr = run_plant('truck_trailer', scenarios, trajs)
+    h_tr, m_tr, t_tr = run_plant('truck_trailer', scenarios, trajs)
     print(f"  完成 {t_tr:.1f}s")
 
     print("[2/2] hybrid_dynamic plant ...")
-    m_hy, t_hy = run_plant('hybrid_dynamic', scenarios, trajs)
+    h_hy, m_hy, t_hy = run_plant('hybrid_dynamic', scenarios, trajs)
     print(f"  完成 {t_hy:.1f}s\n")
 
     print(f"{'场景':<32} {'truck lat':>10} {'hybrid lat':>10} "
@@ -114,7 +120,28 @@ def main():
             'hybrid_dynamic_avg_head_rmse': round(hy_sum_head/n, 4),
             'per_scenario': rows,
         }, f, allow_unicode=True, sort_keys=False)
+
+    # 5 张对比图（复用 validate_batch 的 plot helper）
+    ref_speeds = [float(t[0].v) for t in trajs]
+    all_a = [(key, name, traj, h, m, vref)
+             for (key, name, _g), traj, h, m, vref
+             in zip(scenarios, trajs, h_tr, m_tr, ref_speeds)]
+    all_b = [(key, name, traj, h, m, vref)
+             for (key, name, _g), traj, h, m, vref
+             in zip(scenarios, trajs, h_hy, m_hy, ref_speeds)]
+    for plot_type, fname in [
+            ('trajectory', 'comparison_trajectory.png'),
+            ('lateral_error', 'comparison_lateral_error.png'),
+            ('speed_error', 'comparison_speed_error.png'),
+            ('steer', 'comparison_steer.png'),
+            ('acc', 'comparison_acc.png')]:
+        _plot_comparison_grid_custom(
+            all_a, all_b, output_dir, plot_type, fname,
+            label_a='truck_trailer', label_b='hybrid_dynamic',
+            title_prefix='两种 plant ')
+
     print(f"\n输出: {output_dir}")
+    print(f"  plant_compare.yaml + 5 张对比图")
 
 
 if __name__ == '__main__':
