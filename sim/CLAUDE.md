@@ -35,8 +35,10 @@ sim/
 │   ├── lat_truck.py       # LatControllerTruck (nn.Module, 可微:T2-T4/T6, 固定:kLh/T1/T5/T7/T8)
 │   └── lon.py             # LonController (nn.Module, 可微:7 PID, 固定:L1-L5)
 ├── optim/
-│   ├── train.py           # 可微调参（--trajectories 接收类型名自动展开全速度段、per-traj loss 归一化、TBPTT）
-│   └── post_training.py   # 训练后自动化 + 独立验证 CLI（49 场景对比图、参数变化图、实验日志）
+│   ├── train.py           # scalar 可微调参（--trajectories 接收类型名自动展开全速度段、per-traj loss 归一化、TBPTT），单 epoch ~40 min
+│   ├── train_batch.py     # 批量并行训练（truck_trailer 专用，B=48 同步推进，单 epoch ~5 min）；内含 run_simulation_batch + hard_mode 并行 V1 路径
+│   ├── validate_batch.py  # 自定义 A/B 并行 V1 对比入口（--config-a/b、自定义 label、--disable-mlp / --trailer-mass 覆盖）
+│   └── post_training.py   # 训练后自动化 + 独立验证 CLI（49 场景对比图、参数变化图、实验日志）；支持 --batched 并行开关
 ├── configs/
 │   ├── default.yaml       # 默认参数（C++ 原始控制器参数，作为训练基线）
 │   └── tuned/             # 调参结果 YAML（文件名含 commit hash + timestamp）
@@ -157,7 +159,7 @@ python optim/post_training.py --config configs/tuned/xxx.yaml --plant dynamic  #
 - 多轨迹时打印分轨迹 loss 明细（lat/head/speed RMSE + loss 分项）
 - 每 N epoch（默认 10）打印参数快照：当前值、初始值、变化量、变化百分比
 - 训练完成后打印汇总：初始 loss → 最终 loss（含变化量和百分比）、总耗时
-- **训练完成后自动运行 `post_training`**：生成 loss 曲线、分轨迹 loss 分项图、baseline vs tuned 对比图（轨迹/横向误差/转向角/加速度）、实验日志 YAML，全部保存到 `results/training/{timestamp}/`
+- **训练完成后自动运行 `post_training`**：生成 loss 曲线、分轨迹 loss 分项图、baseline vs tuned 对比图（轨迹/横向误差/转向角/加速度）、实验日志 YAML，全部保存到 `results/training/{timestamp}/`。`train_batch.py` 默认 `use_batched=True` 走并行 V1，总链路训练+验证 ~11 min；`--scalar-validation` 可退回 scalar per-scene（10 min）
 
 ## 训练最佳实践
 
