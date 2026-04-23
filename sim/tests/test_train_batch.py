@@ -23,9 +23,9 @@ from model.truck_trailer_vehicle import TruckTrailerVehicle
 from sim_loop import run_simulation
 
 from optim.train_batch import (
-    BatchedLatTruck, BatchedLonCtrl, BatchedTrajectoryTable,
-    BatchedTruckTrailerVehicle, _clamp_ste_batch, _lookup1d_batch,
-    _PIDBatch, _rate_limit_batch, batched_tracking_loss,
+    BatchedHybridDynamicVehicle, BatchedLatTruck, BatchedLonCtrl,
+    BatchedTrajectoryTable, BatchedTruckTrailerVehicle, _clamp_ste_batch,
+    _lookup1d_batch, _PIDBatch, _rate_limit_batch, batched_tracking_loss,
     run_simulation_batch, train_batch)
 
 
@@ -245,6 +245,29 @@ class TestRunSimulationBatch:
                 assert max_diff < tol[key], (
                     f"hard_mode {key}: max diff {max_diff} > {tol[key]} "
                     f"(traj_len={n})")
+
+    def test_hybrid_dynamic_batch_matches_scalar(self):
+        """hybrid_dynamic batched hard_mode 与 scalar run_simulation(differentiable=False)
+        在短圆弧上 lateral_error / v / steer 应一致（容差同 truck_trailer 版）。
+        只测一条轨迹 + 短弧，保证 pytest 下 <5s 完成。MLP 走默认 checkpoint。"""
+        cfg = load_config()
+        apply_plant_override(cfg, 'hybrid_dynamic')
+        traj = generate_circle(radius=60.0, speed=10.0, arc_angle=0.3)
+        scalar_hist = run_simulation(
+            traj, init_speed=traj[0].v, cfg=cfg,
+            differentiable=False, tbptt_k=0)
+        batch_hist = run_simulation_batch(
+            [traj], cfg=cfg, tbptt_k=0, hard_mode=True)
+        n = len(scalar_hist)
+        tol = {'lateral_error': 5e-3, 'heading_error': 2e-3,
+               'v': 5e-3, 'steer': 0.5, 'acc': 5e-3}
+        for key, t in tol.items():
+            scalar_vals = torch.tensor([float(h[key]) for h in scalar_hist])
+            batch_vals = batch_hist[key][0, :n]
+            max_diff = (scalar_vals - batch_vals).abs().max().item()
+            assert max_diff < t, (
+                f"hybrid_dynamic batched vs scalar {key}: "
+                f"max diff {max_diff} > {t}")
 
     def test_b3_variable_length(self):
         cfg = _truck_cfg()

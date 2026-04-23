@@ -25,6 +25,11 @@ from config import (apply_plant_override, load_config, save_tuned_config,
                     table_from_config)
 from controller.lat_truck import LatControllerTruck  # 复用参数导出
 from controller.lon import LonController
+from model.dynamic_vehicle import VehicleDynamics
+from model.hybrid_dynamic_vehicle import (
+    MLPErrorModel as HybridMLPErrorModel,
+    _MLP_CONTROL_INDICES as _HYBRID_MLP_CTRL_IDX,
+    _reconstruct_full_error as _hybrid_reconstruct_full_error)
 from model.trajectory import (SPEED_BANDS_KPH, TRAJECTORY_TYPES,
                               expand_trajectories)
 from model.truck_trailer_dynamics import (NO_TRAILER_MASS_THRESHOLD_KG,
@@ -262,6 +267,147 @@ class BatchedTrajectoryTable:
 # ─────────────────────────────────────────────────────────────────────────
 # 3. 批量 truck_trailer 车辆（直接复用已有的批量动力学/MLP 模块）
 # ─────────────────────────────────────────────────────────────────────────
+
+class BatchedHybridDynamicVehicle:
+    """hybrid_dynamic 的批量版：Base Euler + MLP 残差修正。
+
+    接口与 BatchedTruckTrailerVehicle 对齐：x/y 返回后轴坐标（控制器约定）。
+    内部 6D 状态 [x_f, y_f, yaw, vx, vy, r]（前轴参考点），step 和 scalar
+    HybridDynamicVehicle 逐行对齐。
+    """
+
+    def __init__(self, cfg: dict, batch_size: int,
+                 init_x: torch.Tensor, init_y: torch.Tensor,
+                 init_yaw: torch.Tensor, init_v: torch.Tensor,
+                 dt: float = 0.02, checkpoint_path=None):
+        self.B = batch_size
+        params = cfg['hybrid_dynamic_vehicle']
+        self.dt = dt
+        self.dynamics = VehicleDynamics(params)
+        self._steer_ratio = self.dynamics.steer_ratio
+        self._L = self.dynamics.lf + self.dynamics.lr
+
+        # 入口 (x, y) 是后轴坐标，转为前轴存储（与 scalar 一致）
+        yaw_f = init_yaw.to(torch.float32).view(batch_size)
+        v_f = init_v.to(torch.float32).view(batch_size)
+        x_rear = init_x.to(torch.float32).view(batch_size)
+        y_rear = init_y.to(torch.float32).view(batch_size)
+        x_f = x_rear + self._L * torch.cos(yaw_f)
+        y_f = y_rear + self._L * torch.sin(yaw_f)
+        zeros = torch.zeros(batch_size)
+        self._state = torch.stack(
+            [x_f, y_f, yaw_f, v_f, zeros, zeros], dim=1)  # [B, 6]
+
+        self._mlp = None
+        self._feature_mean = None
+        self._feature_scale = None
+        self._motion_error_clip = None
+
+        ckpt = _resolve_checkpoint_path(
+            checkpoint_path or params.get('checkpoint_path'))
+        if ckpt:
+            self._load_checkpoint(ckpt)
+
+    def _load_checkpoint(self, path):
+        if not os.path.exists(path):
+            raise FileNotFoundError(path)
+        payload = torch.load(path, map_location='cpu', weights_only=False)
+        if isinstance(payload, dict) and 'state_dict' in payload:
+            sd = payload['state_dict']
+            input_dim = int(payload.get('model_input_dim', 10))
+            output_dim = int(payload.get('model_output_dim', 3))
+            if 'feature_mean' in payload and 'feature_scale' in payload:
+                self._feature_mean = torch.tensor(
+                    payload['feature_mean'], dtype=torch.float32).reshape(1, -1)
+                self._feature_scale = torch.tensor(
+                    payload['feature_scale'],
+                    dtype=torch.float32).reshape(1, -1)
+            if 'motion_error_scale' in payload:
+                self._motion_error_clip = 3.0 * torch.tensor(
+                    payload['motion_error_scale'],
+                    dtype=torch.float32).reshape(1, -1)
+        else:
+            sd = payload if isinstance(payload, dict) else {}
+            weights = [v for k, v in sd.items()
+                       if k.endswith('.weight') and v.ndim == 2]
+            if not weights:
+                raise ValueError(f"Checkpoint 不包含线性层权重: {path}")
+            input_dim = int(weights[0].shape[1])
+            output_dim = int(weights[-1].shape[0])
+        self._mlp = HybridMLPErrorModel(
+            input_dim=input_dim, output_dim=output_dim)
+        self._mlp.load_state_dict(sd)
+        self._mlp.eval()
+        for p in self._mlp.parameters():
+            p.requires_grad_(False)
+
+    def step(self, delta: torch.Tensor, torque_wheel: torch.Tensor):
+        """delta/torque_wheel: [B]。delta 前轮转角 (rad)，torque 车轮总扭矩。"""
+        delta_sw = delta * self._steer_ratio
+        torque_rear = torque_wheel / 2.0
+        zero = torch.zeros_like(torque_wheel)
+        control = torch.stack(
+            [delta_sw, zero, zero, torque_rear, torque_rear], dim=1)  # [B, 5]
+
+        # Base: Euler（MLP 训练时用 Euler，不能改 RK4）
+        derivatives = self.dynamics.derivatives(self._state, control)
+        base_next = self._state + derivatives * self.dt
+
+        if self._mlp is not None:
+            selected_ctrl = control[:, _HYBRID_MLP_CTRL_IDX]  # [B, 3]
+            dt_t = torch.full((self.B, 1), self.dt)
+            features = torch.cat([self._state, selected_ctrl, dt_t], dim=1)
+
+            if self._feature_mean is not None:
+                features = (features - self._feature_mean) / self._feature_scale
+
+            motion_error = self._mlp(features)
+
+            if self._motion_error_clip is not None:
+                motion_error = torch.clamp(
+                    motion_error,
+                    -self._motion_error_clip, self._motion_error_clip)
+
+            full_error = _hybrid_reconstruct_full_error(
+                motion_error, base_next, self.dt)
+            self._state = base_next + full_error
+        else:
+            self._state = base_next
+
+    def detach_state(self):
+        self._state = self._state.detach()
+
+    @property
+    def x(self):
+        return self._state[:, 0] - self._L * torch.cos(self._state[:, 2])
+
+    @property
+    def y(self):
+        return self._state[:, 1] - self._L * torch.sin(self._state[:, 2])
+
+    @property
+    def yaw(self):
+        return self._state[:, 2]
+
+    @property
+    def v(self):
+        vx = self._state[:, 3]
+        vy = self._state[:, 4]
+        return torch.sqrt(vx * vx + vy * vy + 1e-10)
+
+    @property
+    def yawrate(self):
+        """当前横摆角速度 r (rad/s)，Euler 积分 + MLP 残差后的值。"""
+        return self._state[:, 5]
+
+    @property
+    def speed_kph(self):
+        return self.v * 3.6
+
+    @property
+    def yaw_deg(self):
+        return self.yaw * RAD2DEG
+
 
 class BatchedTruckTrailerVehicle:
     """TruckTrailerNominalDynamics.forward 已接受 [B,12] 状态，这里只做包装。
@@ -862,19 +1008,23 @@ class BatchedLonCtrl(nn.Module):
 # 5. 主循环 / loss / 训练入口
 # ─────────────────────────────────────────────────────────────────────────
 
+_SUPPORTED_BATCH_PLANTS = ('truck_trailer', 'hybrid_dynamic')
+
+
 def run_simulation_batch(trajectories: list, cfg: dict = None,
                          lat_ctrl: BatchedLatTruck = None,
                          lon_ctrl: BatchedLonCtrl = None,
                          tbptt_k: int = 0,
                          hard_mode: bool = False,
                          trailer_mass_kg=None) -> dict:
-    """B 条轨迹同步推进 50Hz 闭环。仅支持 truck_trailer plant。
+    """B 条轨迹同步推进 50Hz 闭环。支持 truck_trailer / hybrid_dynamic plant。
 
     Args:
         hard_mode: True 时控制器走硬限幅路径（与 V1 scalar run_simulation 等价），
                    整个主循环自动套 torch.no_grad() 省显存/跳过 autograd。
                    False 时走 smooth 近似（训练用，需要梯度回传）。
-        trailer_mass_kg: 标量或 [B] tensor，覆盖 cfg 默认挂车质量。
+        trailer_mass_kg: truck_trailer 专用，标量或 [B] tensor 覆盖默认挂车质量；
+                         hybrid_dynamic 下此参数被忽略。
 
     返回 dict：每项 [B, T_max]，另含 'valid_mask' [B, T_max] 和控制器句柄
     供上层做 loss / 导出用。
@@ -884,8 +1034,9 @@ def run_simulation_batch(trajectories: list, cfg: dict = None,
     """
     if cfg is None:
         cfg = load_config()
-    assert cfg['vehicle'].get('model_type') == 'truck_trailer', \
-        "run_simulation_batch 目前仅支持 truck_trailer"
+    model_type = cfg['vehicle'].get('model_type')
+    assert model_type in _SUPPORTED_BATCH_PLANTS, \
+        f"run_simulation_batch 仅支持 {_SUPPORTED_BATCH_PLANTS}，当前：{model_type}"
 
     grad_ctx = torch.no_grad() if hard_mode else _nullctx()
     with grad_ctx:
@@ -914,25 +1065,35 @@ def _run_sim_batch_inner(trajectories, cfg, lat_ctrl, lon_ctrl, tbptt_k,
     else:
         lon_ctrl.reset_state()
 
-    # 挂车质量：优先用 override，否则读 cfg 默认
-    tt_params = cfg['truck_trailer_vehicle']
-    if trailer_mass_override is not None:
-        if isinstance(trailer_mass_override, torch.Tensor):
-            trailer_mass = trailer_mass_override.to(torch.float32).view(B)
+    # 按 plant 类型分发车辆模型
+    model_type = cfg['vehicle'].get('model_type')
+    if model_type == 'truck_trailer':
+        tt_params = cfg['truck_trailer_vehicle']
+        if trailer_mass_override is not None:
+            if isinstance(trailer_mass_override, torch.Tensor):
+                trailer_mass = trailer_mass_override.to(torch.float32).view(B)
+            else:
+                trailer_mass = torch.full(
+                    (B,), float(trailer_mass_override))
         else:
-            trailer_mass = torch.full((B,), float(trailer_mass_override))
+            default_m = float(tt_params.get(
+                'default_trailer_mass_kg', tt_params.get('m_s_base', 0.0)))
+            trailer_mass = torch.full((B,), default_m)
+        vehicle = BatchedTruckTrailerVehicle(
+            cfg, batch_size=B,
+            init_x=bt.init_x, init_y=bt.init_y,
+            init_yaw=bt.init_yaw, init_v=bt.init_v,
+            dt=dt, trailer_mass_kg=trailer_mass)
+    elif model_type == 'hybrid_dynamic':
+        vehicle = BatchedHybridDynamicVehicle(
+            cfg, batch_size=B,
+            init_x=bt.init_x, init_y=bt.init_y,
+            init_yaw=bt.init_yaw, init_v=bt.init_v,
+            dt=dt)
     else:
-        default_m = float(tt_params.get('default_trailer_mass_kg',
-                                         tt_params.get('m_s_base', 0.0)))
-        trailer_mass = torch.full((B,), default_m)
+        raise NotImplementedError(
+            f"run_simulation_batch 不支持 plant {model_type}")
 
-    vehicle = BatchedTruckTrailerVehicle(
-        cfg, batch_size=B,
-        init_x=bt.init_x, init_y=bt.init_y,
-        init_yaw=bt.init_yaw, init_v=bt.init_v,
-        dt=dt, trailer_mass_kg=trailer_mass)
-
-    wheelbase = vehicle._L_t
     steer_ratio = vehicle._steer_ratio
 
     # 预分配 history：用 list-of-[B] 再 stack，autograd 图节点数最少

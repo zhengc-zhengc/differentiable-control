@@ -179,3 +179,21 @@ validate_batch CLI、scalar run_demo 全走同一套**。
 
 剩下的三条结构性原因（lat 反馈没 I、T1=3.86° 硬限、前馈是 Ackermann 近似）
 依然存在，未在本次改动范围内。
+
+## 同控制器在两种 plant 下的 49 场景对比
+
+脚本：`compare_plants.py`。同一套 `default.yaml`、同一批 49 条轨迹，只换 plant：
+
+- **truck_trailer**（9300 kg 重卡 + MLP 残差）平均 lat RMSE **2.69 m**
+- **hybrid_dynamic**（2440 kg 乘用车 + MLP 残差）平均 lat RMSE：47/49 场景显著改善，
+  多数改善 −50% 到 −87%；但**园区综合一条在 hybrid_dynamic 上 MLP 发散**
+  （lat_max 飙到 1389 m，疑似停车/低速操作域超出 MLP 训练分布，见
+  历史 commit `b87e0c5` 里的 MLP 消融记录"MLP 在零输入点有固有偏置"）
+- 剔除这条发散：**hybrid_dynamic 显著好于 truck_trailer**，高速 clothoid /
+  S 弯类场景改善最大（右转 clothoid 35 kph：6.89 m → 1.76 m，−74%）
+
+这个对比直接证实了"控制器本身没有 bug，是 plant-控制器不匹配"——控制器
+（针对 2440 kg 乘用车 + 乘用车 MLP 调校）放到 9300 kg 卡车 plant 上才表现差，
+放回原来的乘用车 plant 就明显恢复到设计工况附近。
+
+产物：`sim/results/validation/20260423_180158_plant_compare/plant_compare.yaml`
