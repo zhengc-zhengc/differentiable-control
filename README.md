@@ -90,7 +90,9 @@
 │   │   └── lon.py                      #     纵向控制器：级联 PID + 加速度限幅
 │   │
 │   ├── optim/                          #   训练与验证
-│   │   ├── train.py                    #     可微调参训练（--trajectories 接收类型名自动展开全速度段）
+│   │   ├── train.py                    #     scalar 可微调参训练（单场景串行，单 epoch ~40 min）
+│   │   ├── train_batch.py              #     batched 并行训练（truck_trailer 专用，单 epoch ~5 min）
+│   │   ├── validate_batch.py           #     自定义 A/B 并行验证入口（有/无 MLP 对比等）
 │   │   └── post_training.py            #     训练后自动化：49 场景对比图、参数变化图、实验日志
 │   │
 │   ├── configs/
@@ -101,7 +103,7 @@
 │   ├── results/
 │   │   └── baseline/                   #     基线结果图（按被控对象分目录）
 │   │
-│   ├── tests/                          #     pytest 测试（200+ 用例）
+│   ├── tests/                          #     pytest 测试（158 用例）
 │   └── learn/                          #     学习笔记
 │
 ├── docs/                               # 设计文档
@@ -137,7 +139,7 @@ cd sim
 python -m pytest tests/ -q
 ```
 
-预期：`200+ passed`。如有 FAILED 先解决环境问题再往后走。
+预期：`158 passed`。如有 FAILED 先解决环境问题再往后走。
 
 ### 第 3 步：跑可视化 Demo 看基线效果（约 1-2 分钟）
 
@@ -149,19 +151,27 @@ python run_demo.py --plant truck_trailer --save --no-show
 
 ### 第 4 步：跑可微调参训练
 
-**⚠️ Windows PowerShell 必加 `-u` 参数**，否则看不到实时进度（Python stdout 管道缓冲）：
+**truck_trailer 强烈推荐 `train_batch.py`**（49 场景每时间步同步推进的 batched 并行训练），比 scalar 版 `train.py` 快 8× 左右。
 
-```powershell
-# PowerShell（推荐长跑配置，带日志文件）
-python -u optim/train.py --epochs 6 --plant truck_trailer 2>&1 | Tee-Object -FilePath "training_log_$(Get-Date -Format 'yyyyMMdd_HHmmss').txt"
+```bash
+# 推荐路径：batched 并行（truck_trailer 专用）
+# Linux/Mac/Git Bash
+python optim/train_batch.py --epochs 6 --plant truck_trailer
+
+# Windows PowerShell 必加 -u 才能看到实时进度
+python -u optim/train_batch.py --epochs 6 --plant truck_trailer 2>&1 | Tee-Object -FilePath "training_log_$(Get-Date -Format 'yyyyMMdd_HHmmss').txt"
 ```
 
 ```bash
-# Linux/Mac/Git Bash
-python optim/train.py --epochs 6 --plant truck_trailer
+# 其它 plant（kinematic/dynamic/hybrid_*）走 scalar 路径
+python optim/train.py --epochs 6 --plant kinematic
 ```
 
-**时间预估**：truck_trailer 单步计算量是运动学模型的 20×，6 epoch 全量训练约 **2-4 小时**。想先快速验证流程：加 `--trajectories lane_change --sim-length 60`，1-2 分钟跑完。
+**时间预估**：
+- `train_batch.py` + truck_trailer: 单 epoch ~5 min，6 epoch + post_training 验证约 **35-40 分钟**
+- `train.py` scalar（kinematic/dynamic 等非卡车 plant）: 单 epoch ~40 min，6 epoch 全量 **2-4 小时**
+
+想先快速验证流程：加 `--trajectories lane_change --sim-length 60`，1-2 分钟跑完。
 
 ### 第 5 步：查看结果
 
@@ -192,14 +202,20 @@ python run_demo.py --plant truck_trailer --config configs/tuned/xxx.yaml --save 
 # 一键体检：跑测试 + 基线性能 + 梯度健康
 python health_check.py
 
-# 指定轨迹类型训练（自动展开到 6 速度段）
-python optim/train.py --plant truck_trailer --trajectories lane_change clothoid_decel --epochs 10
+# 指定轨迹类型训练（truck_trailer 走 batched 并行）
+python optim/train_batch.py --plant truck_trailer --trajectories lane_change clothoid_decel --epochs 10
 
 # warm-start：基于上次调参继续训练
-python optim/train.py --plant truck_trailer --config configs/tuned/xxx.yaml --epochs 6
+python optim/train_batch.py --plant truck_trailer --config configs/tuned/xxx.yaml --epochs 6
 
 # 只跑独立验证（不训练）
-python optim/post_training.py --config configs/tuned/xxx.yaml --plant truck_trailer
+python optim/post_training.py --config configs/tuned/xxx.yaml --plant truck_trailer --batched
+
+# 自定义 A/B 对比（比如"有 MLP vs 无 MLP"、不同 tuned yaml）
+python optim/validate_batch.py \
+  --config-a configs/default.yaml --label-a "仅机理" \
+  --config-b configs/default.yaml --label-b "机理+MLP" \
+  --disable-mlp-a --plant truck_trailer
 ```
 
 **双路径说明**：训练用 `differentiable=True`（平滑近似 + 可导），验证用 `differentiable=False`（与原始 C++ 硬限幅行为一致）。训练脚本已封好，`run_demo.py / post_training.py` 也默认走 V1 硬限幅路径。
@@ -295,25 +311,35 @@ vehicle:
   model_type: truck_trailer
 
 truck_trailer_vehicle:
-  # 车辆物理参数（与上游 BASE_MODEL_PARAMS 对齐）
-  m_t: 9300.0          # 牵引车质量 (kg)
-  L_t: 4.475           # 牵引车轴距 (m)
-  a_t: 3.8             # 前轴到质心距离 (m)
+  # 车辆物理参数（按 L4 电拖头首台车实车标定校准）
+  m_t: 9300.0          # 牵引车空载质量 (kg)
+  L_t: 4.475           # 名义轴距 (m)
+  a_t: 3.8             # 前轴到质心距离 (m，满载/带挂工况)
   m_s_base: 15004.0    # 挂车基础质量 (kg)
   L_s: 8.0             # 挂车长度 (m)
   c_s: 4.0             # 挂车质心到铰接点距离 (m)
-  wheel_radius: 0.5    # 车轮半径 (m)
-  steering_ratio: 16.39
-  # ... 其他空气动力 / 轮胎 / 铰接参数
-  default_trailer_mass_kg: 15004.0   # 运行时挂车质量；改为 0 切到无挂车模式
-  checkpoint_path: configs/checkpoints/truck_trailer_error_model.pth  # MLP 残差权重
+  Cf: 264000.0         # 前轴侧偏刚度 (N/rad，空载 F_z=46.2kN 推算)
+  Cr: 335000.0         # 后轴组侧偏刚度 (N/rad，空载 F_z=45kN 推算)
+  Cs: 80000.0          # 挂车轴侧偏刚度 (无挂车模式不参与计算)
+  wheel_radius: 0.5    # 车轮有效半径 (m)
+  track_width: 1.8
+  steering_ratio: 24.0 # 方向盘→车轮传动比（实车真值，xlsx R43=24.51~32 非线性）
+  rho: 1.225           # 空气密度
+  CdA_t: 5.82          # 牵引车 Cd × A
+  CdA_s: 6.50          # 挂车 Cd × A
+  rolling_coeff: 0.013 # 滚阻系数（与 lon_torque.coef_rolling 一致）
+  # ... 其他铰接点偏移等
+  default_trailer_mass_kg: 0.0   # 默认无挂车（改为 15000 切到带挂模式）
+  checkpoint_path: configs/checkpoints/best_truck_trailer_error_model.pth  # MLP 残差权重
 ```
 
 **关键事实：**
 - 内部维护 12D 状态（牵引车质心 6 + 挂车质心 6），对外仅暴露**牵引车后轴** x/y/yaw/v
 - Base 用 RK4 积分（与上游 MLP 训练时一致）
-- 挂车质量可通过 yaml 切换（`< 1.0 kg` 自动进入无挂车模式）
+- 挂车质量可通过 yaml 切换（`< 1.0 kg` 自动进入无挂车模式，默认 `0` 即单机）
+- **物理参数和 MLP checkpoint 是耦合的**：MLP 学的是"特定 base 参数下 + CarSim 真值"的残差，改 Cf/Cr/steering_ratio 等 base 参数后 MLP 可能失配，需重新训练 checkpoint
 - 上游若有更新，需手动同步 `truck_trailer_dynamics.py`（文件头标注了上游版本）
+- 侧偏刚度推算依据 + xlsx 完整参数表见 [`docs/truck_vehicle_parameters.md`](docs/truck_vehicle_parameters.md)
 
 ### 新增被控对象
 
@@ -369,8 +395,10 @@ python optim/post_training.py --config configs/tuned/xxx.yaml --trajectories lan
 
 ## 文档
 
+- [`docs/project_overview_and_ai_workflow.md`](docs/project_overview_and_ai_workflow.md) — 项目技术总览 + AI 协作开发实录
 - [`docs/controller_spec_v2.md`](docs/controller_spec_v2.md) — 控制器完整规格（含纵向扭矩模型/坡度估计）
 - [`docs/controller_reproduction_workflow.md`](docs/controller_reproduction_workflow.md) — 新控制器可微复现的标准 5 阶段流程
+- [`docs/truck_vehicle_parameters.md`](docs/truck_vehicle_parameters.md) — L4 电拖头实车参数提取 + 侧偏刚度推算
 - [`docs/tunable_params_analysis.md`](docs/tunable_params_analysis.md) — 可调参数分析
 - [`docs/bptt_gradient_explosion_analysis.md`](docs/bptt_gradient_explosion_analysis.md) — BPTT 梯度爆炸分析
 - [`docs/plans/2026-04-15-torque-output-layer-design.md`](docs/plans/2026-04-15-torque-output-layer-design.md) — 纵向扭矩输出层设计
