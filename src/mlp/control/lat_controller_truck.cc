@@ -14,8 +14,8 @@ constexpr double kh = 0;  // ?? constant name / value unclear (possibly kLh / kT
 constexpr double kRate_limit_fb = 120.0;
 constexpr double kRate_limit_ff = 165.0;
 constexpr double kRate_limit_total = 300.0;
-constexpr double kMin_prev_dist = 4.0;
-constexpr double kMin_reach_dis_theta = 3.8;
+constexpr double kMin_prev_dist = 5.0;
+constexpr double kMin_reach_dis_theta = 3.0;
 constexpr double kPideg = 180;
 }  // namespace
 

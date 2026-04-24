@@ -163,7 +163,7 @@ class LonController(nn.Module):
         station_limited = clamp(torch.tensor(station_error),
                                 -self.station_error_limit,
                                 self.station_error_limit).item()
-        if speed_kph_val > 10:
+        if speed_kph_val > 1.0:
             station_fnl = station_limited
         elif station_limited <= 0.25:
             station_fnl = min(0.0, station_limited)
@@ -227,7 +227,7 @@ class LonController(nn.Module):
             acc_clamped = clamp(torch.tensor(acc_cmd),
                                 acc_low_lim, acc_up_lim).item()
 
-            if abs(speed_mps) >= 0.2 or acc_clamped >= 0.25:
+            if abs(speed_mps) >= 0.2 or acc_clamped >= 0.06:
                 acc_lowspd = acc_clamped
             else:
                 acc_lowspd = min(-0.05, acc_clamped)
@@ -294,10 +294,10 @@ class LonController(nn.Module):
             station_error, -self.station_error_limit, self.station_error_limit)
 
         # 简化：differentiable 模式用 smooth_step 混合高速/低速路径
-        # 高速（>10kph）直接用 station_limited；低速复杂逻辑简化为 station_limited
+        # 高速（>1.0kph，spec v2）直接用 station_limited；低速复杂逻辑简化为 station_limited
         # （低速站位保护逻辑不在梯度主要路径上，简化处理）
         speed_kph_val = speed_kph.item()
-        if speed_kph_val > 10:
+        if speed_kph_val > 1.0:
             station_fnl = station_limited
         elif station_limited.item() <= 0.25:
             station_fnl = smooth_upper_bound(station_limited, 0.0)
@@ -365,9 +365,10 @@ class LonController(nn.Module):
                 acc_cmd, acc_low_lim_adj, acc_up_lim_adj)
 
             # 低速蠕行保护：smooth_step 混合
-            # if abs(speed) >= 0.2 or acc >= 0.25: pass, else min(-0.05, acc)
+            # if abs(speed) >= 0.2 or acc >= 0.06: pass, else min(-0.05, acc)
+            # 0.06 = kMinAccForStarting (spec v2)
             w_pass = smooth_step(abs_speed, 0.2, temp=0.05)
-            w_acc_ok = smooth_step(acc_clamped, 0.25, temp=0.05)
+            w_acc_ok = smooth_step(acc_clamped, 0.06, temp=0.05)
             w_normal = 1.0 - (1.0 - w_pass) * (1.0 - w_acc_ok)
             acc_creep = smooth_upper_bound(acc_clamped, -0.05)
             acc_lowspd = w_normal * acc_clamped + (1.0 - w_normal) * acc_creep

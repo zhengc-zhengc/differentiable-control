@@ -76,16 +76,16 @@ truck_trailer_vehicle:
   Iz_s_base: 96659.0   # 挂车基础横摆惯量
   L_s: 8.0             # 挂车长度 (m)
   c_s: 4.0             # 挂车质心到铰接点距离 (m)
-  Cf: 80000.0          # 牵引车前轴侧偏刚度
-  Cr: 80000.0          # 牵引车后轴侧偏刚度
-  Cs: 80000.0          # 挂车轴侧偏刚度
+  Cf: 264000.0         # 牵引车前轴(1 轴,2 胎)空载 F_z=46.2kN 推算,见 docs/truck_vehicle_parameters.md
+  Cr: 335000.0         # 牵引车后轴组(2+3 轴共 8 胎)空载 F_z=45kN 推算
+  Cs: 80000.0          # 挂车轴侧偏刚度(无挂车模式下 trailer_mask=0 不参与计算)
   wheel_radius: 0.5    # 车轮半径 (m)
   track_width: 1.8
-  steering_ratio: 16.39
+  steering_ratio: 24.0  # 实车真值（xlsx R43 为 24.51~32 非线性，C++ vehicle_param 取 24）
   rho: 1.225           # 空气密度
   CdA_t: 5.82          # 牵引车 Cd × A
   CdA_s: 6.50          # 挂车 Cd × A
-  rolling_coeff: 0.006
+  rolling_coeff: 0.013  # 与控制器 lon_torque.coef_rolling 一致（卡车 C++ 清稿）
   hitch_x: -0.331      # 铰接点偏移 x（牵引车体坐标系）
   hitch_y: 0.002
   min_speed_mps: 0.5

@@ -907,7 +907,7 @@ class BatchedLonCtrl(nn.Module):
         preview_accel_ref = prev_a
 
         # Step 2: 站位误差保护 — 用 torch.where 逐元素精确复刻 scalar 分支：
-        #   if speed>10: station_limited
+        #   if speed>1.0 (spec v2): station_limited
         #   elif station_limited <= 0.25: {smooth|hard} min(station_limited, 0)
         #   elif station_limited >= 0.8: station_limited
         #   elif station_error_fnl_prev <= 0.01: station_error_fnl_prev (stale prev)
@@ -915,7 +915,7 @@ class BatchedLonCtrl(nn.Module):
         station_limited = _clamp_ste_batch(
             station_error,
             -self.station_error_limit, self.station_error_limit)
-        high_speed = speed_kph > 10.0
+        high_speed = speed_kph > 1.0
         small_pos = station_limited <= 0.25
         large_pos = station_limited >= 0.8
         prev_near_zero = self.station_error_fnl_prev <= 0.01
@@ -976,7 +976,7 @@ class BatchedLonCtrl(nn.Module):
         acc_clamped = _clamp_ste_batch(acc_cmd, acc_low_lim_adj, acc_up_lim_adj)
 
         w_pass = step(abs_speed, 0.2, temp=0.05)
-        w_acc_ok = step(acc_clamped, 0.25, temp=0.05)
+        w_acc_ok = step(acc_clamped, 0.06, temp=0.05)  # spec v2 kMinAccForStarting
         w_normal = 1.0 - (1.0 - w_pass) * (1.0 - w_acc_ok)
         acc_creep = ub(acc_clamped, -0.05)
         acc_lowspd = w_normal * acc_clamped + (1.0 - w_normal) * acc_creep
