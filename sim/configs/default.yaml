@@ -68,10 +68,10 @@ dynamic_v2_vehicle:
 # 牵引车-挂车双体动力学模型（外部仓库 truckdynamicmodel）
 # 参数与 truckdynamicmodel/truck_trailer_residual_modular/constants.py BASE_MODEL_PARAMS 对齐
 truck_trailer_vehicle:
-  m_t: 9300.0          # 牵引车质量 (kg)
-  Iz_t: 48639.0        # 牵引车横摆惯量
-  L_t: 4.475           # 牵引车轴距 (m)
-  a_t: 3.8             # 前轴到质心距离 (m)
+  m_t: 9300.0          # 牵引车空载质量 (kg, xlsx R74)
+  Iz_t: 48639.0        # 牵引车横摆惯量(上游 BASE_MODEL_PARAMS,xlsx 未给)
+  L_t: 4.483           # 名义轴距 (m, xlsx R71)
+  a_t: 2.21            # 空载 CG 距前轴距离 (m,由 xlsx R76 轴荷 4712/4588 反推)
   m_s_base: 15004.0    # 挂车基础质量 (kg)，决定 Iz_s 缩放基准
   Iz_s_base: 96659.0   # 挂车基础横摆惯量
   L_s: 8.0             # 挂车长度 (m)
