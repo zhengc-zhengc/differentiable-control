@@ -193,7 +193,7 @@ python optim/post_training.py --config configs/tuned/xxx.yaml --plant dynamic  #
 
 - **底层动力学已本地化**在 `sim/model/truck_trailer_dynamics.py`（来自上游 `mutespeaker/truckdynamicmodel` 的拷贝）；checkpoint 也在 `sim/configs/checkpoints/`；无任何外部仓库依赖
 - **状态 12D**：牵引车质心 6D + 挂车质心 6D；对外暴露**牵引车后轴** x/y/yaw/v（控制器约定）
-- **质心↔后轴偏移**：b_t = L_t − a_t = 0.675 m（适配器 4 个 property 各做一次坐标转换）
+- **质心↔后轴偏移**：b_t = L_t − a_t（当前空载工况:4.483 − 2.21 = 2.273 m;适配器 4 个 property 各做一次坐标转换）
 - **Base 用 RK4 积分**（和 hybrid_dynamic 用 Euler 不同；MLP 训练时 base 也是 RK4）
 - **挂车质量 yaml 可配**：`default_trailer_mass_kg`，默认 0 kg（无挂车）；< 1.0 kg 自动进入无挂车模式（底层强制 `挂车态=牵引车态`）；当前 MLP checkpoint 输入特征里有显式 `has_trailer` 标志，可直接切换
 - **底层车轮假设**：外部 base model 的控制量是 `[方向盘角, T_fl, T_fr, T_rl, T_rr]` = 4 轮，其中前轮扭矩始终为 0（等效 4×2 单后桥驱动）；适配器把纵向控制器给的总扭矩 `torque_wheel` 平分到左右后轮

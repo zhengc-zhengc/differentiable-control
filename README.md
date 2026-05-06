@@ -313,8 +313,8 @@ vehicle:
 truck_trailer_vehicle:
   # 车辆物理参数（按 L4 电拖头首台车实车标定校准）
   m_t: 9300.0          # 牵引车空载质量 (kg)
-  L_t: 4.475           # 名义轴距 (m)
-  a_t: 3.8             # 前轴到质心距离 (m，满载/带挂工况)
+  L_t: 4.483           # 名义轴距 (m，xlsx R71)
+  a_t: 2.21            # 空载 CG 距前轴距离 (m，由 xlsx R76 轴荷反推)
   m_s_base: 15004.0    # 挂车基础质量 (kg)
   L_s: 8.0             # 挂车长度 (m)
   c_s: 4.0             # 挂车质心到铰接点距离 (m)
@@ -339,7 +339,7 @@ truck_trailer_vehicle:
 - 挂车质量可通过 yaml 切换（`< 1.0 kg` 自动进入无挂车模式，默认 `0` 即单机）
 - **物理参数和 MLP checkpoint 是耦合的**：MLP 学的是"特定 base 参数下 + CarSim 真值"的残差，改 Cf/Cr/steering_ratio 等 base 参数后 MLP 可能失配，需重新训练 checkpoint
 - 上游若有更新，需手动同步 `truck_trailer_dynamics.py`（文件头标注了上游版本）
-- 侧偏刚度推算依据 + xlsx 完整参数表见 [`docs/truck_vehicle_parameters.md`](docs/truck_vehicle_parameters.md)
+- xlsx 完整参数提取见 [`docs/truck_vehicle_parameters.md`](docs/truck_vehicle_parameters.md);Cf/Cr 推算见 [`docs/cornering_stiffness_derivation.md`](docs/cornering_stiffness_derivation.md);a_t 推算见 [`docs/cg_position_derivation.md`](docs/cg_position_derivation.md)
 
 ### 新增被控对象
 
@@ -398,7 +398,9 @@ python optim/post_training.py --config configs/tuned/xxx.yaml --trajectories lan
 - [`docs/project_overview_and_ai_workflow.md`](docs/project_overview_and_ai_workflow.md) — 项目技术总览 + AI 协作开发实录
 - [`docs/controller_spec_v2.md`](docs/controller_spec_v2.md) — 控制器完整规格（含纵向扭矩模型/坡度估计）
 - [`docs/controller_reproduction_workflow.md`](docs/controller_reproduction_workflow.md) — 新控制器可微复现的标准 5 阶段流程
-- [`docs/truck_vehicle_parameters.md`](docs/truck_vehicle_parameters.md) — L4 电拖头实车参数提取 + 侧偏刚度推算
+- [`docs/truck_vehicle_parameters.md`](docs/truck_vehicle_parameters.md) — L4 电拖头实车参数提取
+- [`docs/cornering_stiffness_derivation.md`](docs/cornering_stiffness_derivation.md) — 前后轴侧偏刚度 Cf/Cr 推算
+- [`docs/cg_position_derivation.md`](docs/cg_position_derivation.md) — 前轴到质心距离 a_t 推算
 - [`docs/tunable_params_analysis.md`](docs/tunable_params_analysis.md) — 可调参数分析
 - [`docs/bptt_gradient_explosion_analysis.md`](docs/bptt_gradient_explosion_analysis.md) — BPTT 梯度爆炸分析
 - [`docs/plans/2026-04-15-torque-output-layer-design.md`](docs/plans/2026-04-15-torque-output-layer-design.md) — 纵向扭矩输出层设计
