@@ -155,7 +155,8 @@ def get_scenario_keys(trajectory_types=None):
 
 
 def run_comparison(tuned_config_path, output_dir, verbose=True, plant=None,
-                   trajectory_types=None, use_batched=False):
+                   trajectory_types=None, use_batched=False,
+                   baseline_config_path=None):
     """用 V1 路径跑 baseline vs tuned 对比，生成对比图 + 返回指标。
 
     Args:
@@ -167,11 +168,14 @@ def run_comparison(tuned_config_path, output_dir, verbose=True, plant=None,
         use_batched: True 时用 `run_simulation_batch(hard_mode=True)` 并行一次
                      跑完所有 49 场景（仅 truck_trailer plant），总耗时 ~6 min；
                      False 走 scalar per-scene 循环，~10 min。数值精度等价。
+        baseline_config_path: 对比基准的配置文件路径，None 走 default.yaml；
+                              warm-start 训练后透传训练输入 yaml，可让"调参前"
+                              那一栏使用训练起点而非 default
 
     Returns:
         comparison_metrics: {scenario_key: {baseline, tuned, delta_lat_pct, delta_head_pct}}
     """
-    cfg_base = load_config()
+    cfg_base = load_config(baseline_config_path)
     cfg_tuned = load_config(tuned_config_path)
     if plant:
         apply_plant_override(cfg_base, plant)
@@ -744,7 +748,8 @@ def plot_parameter_changes(train_result, output_dir):
 
 
 def run_validation(tuned_config_path, output_dir=None, verbose=True,
-                    plant=None, trajectory_types=None, use_batched=False):
+                    plant=None, trajectory_types=None, use_batched=False,
+                    baseline_config_path=None):
     """独立验证入口：仅跑 V1 对比 + 生成对比图，不需要 train_result。
 
     Args:
@@ -754,6 +759,7 @@ def run_validation(tuned_config_path, output_dir=None, verbose=True,
         plant: 被控对象类型，None 使用配置默认值
         trajectory_types: 轨迹类型名列表，None 则全量验证
         use_batched: True 走并行 batched（仅 truck_trailer），False 走 scalar per-scene
+        baseline_config_path: 对比基准的配置文件路径，None 走 default.yaml
 
     Returns:
         output_dir: 产物保存目录路径
@@ -779,7 +785,8 @@ def run_validation(tuned_config_path, output_dir=None, verbose=True,
 
     comparison_metrics, scenario_labels = run_comparison(
         tuned_config_path, output_dir, verbose=verbose, plant=plant,
-        trajectory_types=trajectory_types, use_batched=use_batched)
+        trajectory_types=trajectory_types, use_batched=use_batched,
+        baseline_config_path=baseline_config_path)
 
     # 复制 tuned config 到产物目录
     shutil.copy2(tuned_config_path,
@@ -806,7 +813,8 @@ def run_validation(tuned_config_path, output_dir=None, verbose=True,
 
 
 def run_post_training(train_result, hyperparams, verbose=True, plant=None,
-                      trajectory_types=None, use_batched=False):
+                      trajectory_types=None, use_batched=False,
+                      baseline_config_path=None):
     """训练后一站式自动化入口。
 
     Args:
@@ -815,6 +823,9 @@ def run_post_training(train_result, hyperparams, verbose=True, plant=None,
         verbose: 是否打印进度
         plant: 被控对象类型 ('kinematic'/'dynamic')，None 使用配置默认值
         trajectory_types: 验证用轨迹类型，None 则全量
+        baseline_config_path: 对比基准的配置文件路径，None 走 default.yaml；
+                              warm-start 训练时透传训练输入 yaml，让验证里的"调参前"
+                              对照组与训练起点匹配，Δ% 反映本轮训练增量
 
     Returns:
         output_dir: 产物保存目录路径
@@ -846,7 +857,8 @@ def run_post_training(train_result, hyperparams, verbose=True, plant=None,
         print(f"\n  --- V1 路径验证（baseline vs tuned）---")
     comparison_metrics, scenario_labels = run_comparison(
         train_result['saved_path'], output_dir, verbose=verbose, plant=plant,
-        trajectory_types=trajectory_types, use_batched=use_batched)
+        trajectory_types=trajectory_types, use_batched=use_batched,
+        baseline_config_path=baseline_config_path)
 
     # 4. 训练摘要仪表板
     p = plot_training_summary(train_result, comparison_metrics, hyperparams, output_dir,
@@ -895,8 +907,12 @@ if __name__ == '__main__':
                         help='输出目录，默认 results/validation/{plant}/{timestamp}/')
     parser.add_argument('--batched', action='store_true',
                         help='用并行批量路径跑 V1（仅 truck_trailer），~6 min vs scalar ~10 min')
+    parser.add_argument('--baseline-config', default=None,
+                        help='对比基准的配置文件路径，默认 default.yaml；'
+                             '想跟某份 tuned 起点对比时显式指定该路径')
     args = parser.parse_args()
 
     run_validation(args.config, output_dir=args.output_dir, plant=args.plant,
                    trajectory_types=args.trajectories,
-                   use_batched=args.batched)
+                   use_batched=args.batched,
+                   baseline_config_path=args.baseline_config)

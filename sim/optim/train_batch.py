@@ -1593,4 +1593,5 @@ if __name__ == '__main__':
         }
         run_post_training(result, hyperparams, plant='truck_trailer',
                           trajectory_types=args.trajectories,
-                          use_batched=not args.scalar_validation)
+                          use_batched=not args.scalar_validation,
+                          baseline_config_path=args.config)

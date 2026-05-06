@@ -9,6 +9,7 @@ train() 运行多轨迹多 epoch 梯度优化。
     python train.py --epochs 5 --trajectories circle --speed 5.0
 """
 import argparse
+import copy
 import sys
 import os
 import torch
@@ -32,12 +33,15 @@ class DiffControllerParams(nn.Module):
         if cfg is None:
             cfg = load_config()
         self.cfg = cfg
+        # 深拷贝训练时实际输入的 cfg 当导出模板，保证 warm-start 场景下
+        # 非控制器字段（vehicle/plant/MLP/simulation 等）跟训练环境一致
+        self._template_cfg = copy.deepcopy(cfg)
         self.lat_ctrl = LatControllerTruck(cfg, differentiable=True)
         self.lon_ctrl = LonController(cfg, differentiable=True)
 
     def to_config_dict(self):
-        """将当前参数导出为 YAML 兼容的 dict（结构与 default.yaml 一致）。"""
-        cfg = load_config()  # 模板
+        """将当前参数导出为 YAML 兼容的 dict（模板=训练时输入的 cfg）。"""
+        cfg = copy.deepcopy(self._template_cfg)
 
         # --- 横向控制器参数 ---
         lat = cfg['lat_truck']
@@ -491,4 +495,5 @@ if __name__ == '__main__':
         'w_speed': args.w_speed,
     }
     run_post_training(result, hyperparams, plant=args.plant,
-                      trajectory_types=args.trajectories)
+                      trajectory_types=args.trajectories,
+                      baseline_config_path=args.config)
