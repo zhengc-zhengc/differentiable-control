@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from common import normalize_angle  # 支持 [B] tensor
 from config import (apply_plant_override, apply_runtime_overrides, load_config,
-                    save_tuned_config, table_from_config)
+                    runtime_info, save_tuned_config, table_from_config)
 from controller.lat_truck import LatControllerTruck  # 复用参数导出
 from controller.lon import LonController
 from model.dynamic_vehicle import VehicleDynamics
@@ -1658,6 +1658,8 @@ def train_batch(trajectories=None, n_epochs: int = 100, lr: float = 5e-2,
         'final_loss': losses[-1],
         'initial_loss': losses[0],
         'epochs': n_epochs,
+        'plant': 'truck_trailer',
+        'config_path': config_path,
         'trajectory_types': type_names,
         'trajectory_count': B_orig,
         'speed_bands_kph': SPEED_BANDS_KPH,
@@ -1668,8 +1670,13 @@ def train_batch(trajectories=None, n_epochs: int = 100, lr: float = 5e-2,
         'w_lat': w_lat,
         'w_head': w_head,
         'w_speed': w_speed,
+        'w_steer_rate': w_steer_rate,
+        'w_acc_rate': w_acc_rate,
+        'param_snapshot_interval': param_snapshot_interval,
+        'disable_mlp': bool(disable_mlp),
         'total_time_s': round(total_time, 1),
         'batched': True,
+        'runtime': runtime_info(),
     }
     if dr_config['enable']:
         meta['domain_randomization'] = {
@@ -1683,8 +1690,6 @@ def train_batch(trajectories=None, n_epochs: int = 100, lr: float = 5e-2,
             'effective_batch': B,
             'dr_seed': dr_seed,
         }
-    if disable_mlp:
-        meta['disable_mlp'] = True
     saved_path = save_tuned_config(cfg_out, meta=meta)
     if verbose:
         print(f"参数已保存: {saved_path}")
@@ -1797,10 +1802,16 @@ if __name__ == '__main__':
             'trajectory_types': result['trajectory_types'],
             'tbptt_k': args.tbptt_k, 'grad_clip': args.grad_clip,
             'plant': 'truck_trailer',
+            'config_path': args.config,
             'w_lat': args.w_lat, 'w_head': args.w_head, 'w_speed': args.w_speed,
+            'w_steer_rate': args.w_steer_rate, 'w_acc_rate': args.w_acc_rate,
+            'snapshot_interval': args.snapshot_interval,
+            'scalar_validation': args.scalar_validation,
             'batched': True,
             'disable_mlp': validation_disable_mlp,
             'domain_randomization': result.get('dr_config'),
+            'dr_seed': args.dr_seed,
+            'runtime': runtime_info(include_argv=True),
         }
         run_post_training(result, hyperparams, plant='truck_trailer',
                           trajectory_types=args.trajectories,

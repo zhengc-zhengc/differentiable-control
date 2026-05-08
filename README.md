@@ -103,7 +103,7 @@
 │   ├── results/
 │   │   └── baseline/                   #     基线结果图（按被控对象分目录）
 │   │
-│   ├── tests/                          #     pytest 测试（158 用例）
+│   ├── tests/                          #     pytest 测试（170 用例，含 12 项域随机化）
 │   └── learn/                          #     学习笔记
 │
 ├── docs/                               # 设计文档
@@ -139,7 +139,7 @@ cd sim
 python -m pytest tests/ -q
 ```
 
-预期：`158 passed`。如有 FAILED 先解决环境问题再往后走。
+预期：`170 passed`。如有 FAILED 先解决环境问题再往后走。
 
 ### 第 3 步：跑可视化 Demo 看基线效果（约 1-2 分钟）
 
@@ -169,6 +169,7 @@ python optim/train.py --epochs 6 --plant kinematic
 
 **时间预估**：
 - `train_batch.py` + truck_trailer: 单 epoch ~5 min，6 epoch + post_training 验证约 **35-40 分钟**
+- `train_batch.py` + truck_trailer + `--dr-enable`（K=4）: 单 epoch ~8 min，6 epoch + 验证约 **50 分钟**
 - `train.py` scalar（kinematic/dynamic 等非卡车 plant）: 单 epoch ~40 min，6 epoch 全量 **2-4 小时**
 
 想先快速验证流程：加 `--trajectories lane_change --sim-length 60`，1-2 分钟跑完。
@@ -183,7 +184,7 @@ python optim/train.py --epochs 6 --plant kinematic
 | `comparison_*.png` | 49 场景 baseline vs tuned 轨迹/误差对比 |
 | `parameter_changes.png` | 每个可微参数训练前后的变化热力图 |
 | `training_summary.png` | 全场景 lat_rmse/head_rmse 汇总仪表板 |
-| `experiment_log.yaml` | 完整实验日志（超参、最终参数、各场景指标）|
+| `experiment_log.yaml` | 完整实验日志（超参、最终参数、各场景指标、运行时环境快照含 Python/PyTorch 版本和完整 CLI argv）|
 
 调好的参数存在 `sim/configs/tuned/tuned_{commit}_{时间戳}.yaml`，可以再做独立验证：
 
@@ -222,6 +223,8 @@ python optim/validate_batch.py \
 
 ## 训练 CLI 参数
 
+通用参数（`train.py` 与 `train_batch.py` 共有）：
+
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
 | `--plant` | 读 yaml（默认 kinematic）| 被控对象；推荐 `truck_trailer`（见下方「车辆模型」） |
@@ -232,10 +235,48 @@ python optim/validate_batch.py \
 | `--lr-tables` | 5e-2 | 查找表 y 值学习率 |
 | `--tbptt-k` | 150 | TBPTT 截断窗口（步数，150 步 = 3 秒） |
 | `--grad-clip` | 10.0 | 梯度范数裁剪阈值 |
-| `--sim-length` | None | 仿真距离限制 (m)，None 为全长 |
+| `--sim-length` | None | 仿真距离限制 (m)，None 为全长（仅 `train.py`）|
 | `--w-lat` | 10.0 | 横向误差 loss 权重 |
 | `--w-head` | 8.0 | 航向误差 loss 权重 |
 | `--w-speed` | 3.0 | 速度误差 loss 权重 |
+| `--w-steer-rate` | 0.05 | 转向角变化率正则权重 |
+| `--w-acc-rate` | 0.01 | 加速度变化率正则权重 |
+| `--snapshot-interval` | 10 | 参数快照间隔（epoch） |
+
+`train_batch.py` 专属（truck_trailer 并行 + 域随机化 + MLP 开关）：
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `--scalar-validation` | False | post_training V1 验证退回 scalar 路径 |
+| `--no-post-training` | False | 跳过训练后自动验证 |
+| `--disable-mlp` | False | 训练 + 验证全程关 MLP（`checkpoint_path` 置空，纯机理 base） |
+| `--dr-enable` | None（cfg）| 启用域随机化（覆盖 yaml；与 `--disable-mlp` 解耦） |
+| `--dr-K` | None（cfg=4）| 每 epoch 采样的 domain 数（B 从 48 扩到 48×K） |
+| `--dr-mt-range` | None（cfg=0.10）| 牵引车质量 m_t 相对 nominal 的 ±range |
+| `--dr-cfcr-range` | None（cfg=0.20）| 前/后轴侧偏刚度 Cf/Cr 相对 nominal 的 ±range |
+| `--dr-seed` | None | DR 采样随机种子（None 不固定，传整数复现） |
+
+## 域随机化（Domain Randomization，`train_batch.py` + `truck_trailer`）
+
+为了让控制器对车辆物理参数不确定性鲁棒，训练时在车辆质量和前后轴侧偏刚度上加随机扰动。每个 epoch 开头采样 K 组 `(m_t, Cf, Cr)`，把 48 条标准轨迹复制 K 份分别绑到 K 个域上，让控制器一次更新就照顾到 K 种"不同的车"。`Iz_t` 跟随 `m_t` 线性缩放，保持物理一致性。
+
+```bash
+# 标准 DR 训练命令（K=4 默认值，6 epoch 约 50 分钟）
+python optim/train_batch.py --plant truck_trailer --dr-enable --dr-seed 2026 --epochs 6
+
+# 不带 MLP 的纯机理 DR 训练（避开 MLP 输入分布偏移训练域的问题）
+python optim/train_batch.py --plant truck_trailer --dr-enable --disable-mlp --epochs 6
+
+# 加大随机化范围（m_t ±20%、Cf/Cr ±30%）
+python optim/train_batch.py --plant truck_trailer --dr-enable \
+  --dr-mt-range 0.20 --dr-cfcr-range 0.30 --dr-K 8 --epochs 6
+```
+
+**默认范围（`default.yaml` 的 `domain_randomization` 段）**：m_t ±10%、Cf/Cr ±20%，K=4。每个参数独立均匀采样后凑成 K 个三元组，没有"同加同减"的相关性。
+
+**MLP 开关与 DR 正交**：是否启用 MLP 残差仅由 `truck_trailer_vehicle.checkpoint_path`（空串=关）和 `--disable-mlp` 决定。MLP 按 nominal 车辆参数训练，DR 大幅扰动参数时输入分布偏离训练域；是否打开 MLP 由使用方按场景权衡，代码不强制。
+
+详细设计与 2026-05-08 首跑结果（loss -42.3%、49 场景 47/49 改善 25-48%）见 [`docs/plans/2026-05-08-domain-randomization-design.md`](docs/plans/2026-05-08-domain-randomization-design.md)。
 
 ## 车辆模型（被控对象）
 

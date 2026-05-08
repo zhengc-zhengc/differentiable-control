@@ -81,6 +81,8 @@ python optim/train.py --config configs/tuned/xxx.yaml --epochs 6  # warm-start �
 python optim/train.py --plant hybrid_dynamic --epochs 6     # 指定被控对象
 python optim/train_batch.py --epochs 6 --plant truck_trailer  # 批量并行训练 + 并行 V1 验证（总约 11 min）
 python optim/train_batch.py --scalar-validation --epochs 6 --plant truck_trailer  # 训练并行+验证串行（回归调试用）
+python optim/train_batch.py --plant truck_trailer --dr-enable --dr-seed 2026 --epochs 6  # 域随机化训练（K=4 默认，每 epoch 采样 4 组车辆参数）
+python optim/train_batch.py --plant truck_trailer --disable-mlp --epochs 6  # 关闭 MLP 残差，纯机理 base 训练
 python optim/validate_batch.py --config configs/tuned/xxx.yaml --plant truck_trailer  # 自定义 A/B 对比（并行，支持 label 自定义）
 python optim/post_training.py --config configs/tuned/xxx.yaml              # 独立验证（全量 49 场景，默认 scalar）
 python optim/post_training.py --config configs/tuned/xxx.yaml --batched --plant truck_trailer  # 独立验证（并行批量）
@@ -103,6 +105,10 @@ python optim/post_training.py --config configs/tuned/xxx.yaml --plant dynamic  #
 | `--plant` | None | 被控对象：kinematic / dynamic / hybrid_dynamic |
 | `--config` | None | warm-start 配置文件路径 |
 | `--w-lat/head/speed` | 10/8/3 | loss 权重（横向/航向/速度） |
+
+## train_batch.py 专属参数
+
+`--scalar-validation`（V1 验证退回串行 per-scene）、`--no-post-training`、`--disable-mlp`（训练+验证全程关 MLP）、`--dr-enable / --dr-K / --dr-mt-range / --dr-cfcr-range / --dr-seed`（域随机化，详见下面 DR 段）。完整默认值与 yaml 对应字段见 `argparse` 帮助 (`python optim/train_batch.py -h`) 与 `default.yaml`。
 | `--w-steer-rate/acc-rate` | 0.05/0.01 | 平滑度正则权重 |
 
 ## 与 controller_spec_v2.md 的差异
@@ -226,6 +232,14 @@ scalar `optim/train.py` 把 48 条轨迹串行跑，单 epoch 约 40 分钟。`o
 - 变长轨迹用 `padding + valid_mask` 处理，padding 位置的 ref 值填末尾值；loss 仅在 `mask=1` 的 step 上累加
 - TBPTT：所有 batch 元素同步 `detach()`；PID/IIR/rate_limit 内部状态 shape `[B]` 独立演化
 - `torch.where` 精确复刻 scalar 分支（尤其 `station_fnl` 低速段 if/elif 链），避免 smooth 近似带来的系统偏差
+
+## 域随机化 (`--dr-enable`，仅 `train_batch.py` + `truck_trailer`)
+
+每 epoch 开头采样 K 组 `(m_t, Cf, Cr)`（独立均匀分布在 ±range 内，`Iz_t` 跟随 `m_t` 线性缩放），把 48 条轨迹复制 K 份分别绑域，B 扩到 48×K，一次平均反传更新让控制器对一族车辆物理鲁棒。配置入口 `default.yaml` 的 `domain_randomization` 段；CLI 优先级高于 yaml；`--dr-seed` 锁可复现。**MLP 开关与 DR 正交**——是否带 MLP 由 `checkpoint_path` 和 `--disable-mlp` 决定，代码不强制（MLP 按 nominal 训练，DR 范围外残差失真，由使用方按场景权衡）。耗时 K=4 单 epoch ~8 min（vs 无 DR 5 min）。详见 `docs/plans/2026-05-08-domain-randomization-design.md`。
+
+## 训练记录
+
+`tuned_xxx.yaml` 末尾 `_meta` 段（由 `save_tuned_config` 写）和 `experiment_log.yaml`（由 `post_training` 写）都记录完整训练超参 + DR 配置 + 运行时环境（python/torch 版本、CLI argv 原文）。复现历史训练直接读 `_meta.runtime.cli_argv` 照抄即可。
 
 ## 备注
 

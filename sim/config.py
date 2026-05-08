@@ -1,11 +1,29 @@
 # sim/config.py
 """配置文件加载器。V2: torch 表加载 + 调参结果保存。"""
 import os
+import platform as _platform
 import subprocess
+import sys
 from datetime import datetime
 
 import torch
 import yaml
+
+
+def runtime_info(include_argv: bool = False) -> dict:
+    """运行时环境快照，写进训练记录用于复现性追溯。
+
+    Args:
+        include_argv: True 时附上 sys.argv 原文（仅 __main__ 调用时有意义）。
+    """
+    info = {
+        'python': sys.version.split()[0],
+        'torch': str(torch.__version__),  # TorchVersion → str（避免 yaml 标签）
+        'platform': _platform.platform(),
+    }
+    if include_argv:
+        info['cli_argv'] = ' '.join(sys.argv)
+    return info
 
 
 def load_config(path: str | None = None) -> dict:
