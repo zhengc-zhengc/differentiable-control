@@ -8,6 +8,7 @@
 - run_simulation_batch + domain_params：vehicle 各 batch 元素受其 domain 影响
 - DR 关闭时 train_batch 行为与原路径完全一致（回归保护）
 - DR 开启时 train_batch 2 epoch 跑通，loss 收敛、参数变化非零
+- DR 与 MLP 开关解耦：DR 不再强制 disable_mlp，由 yaml/CLI 决定
 """
 from __future__ import annotations
 
@@ -228,10 +229,10 @@ class TestDrEnabledEndToEnd:
             dr_overrides={'enable': True, 'K': 2,
                           'mt_range': 0.05, 'cfcr_range': 0.1},
             dr_seed=42,
+            disable_mlp=True,  # 显式关 MLP 让测试快、不依赖 checkpoint
             param_snapshot_interval=0)
         assert r['dr_config']['enable'] is True
         assert r['dr_config']['K'] == 2
-        assert r['disable_mlp'] is True   # DR 强制蕴含
         # 至少一个参数从 init 移动了
         for name, init_val in r['initial_params'].items():
             final_val = r['final_params'][name]
@@ -243,6 +244,21 @@ class TestDrEnabledEndToEnd:
                 return
         pytest.fail("DR 训练 2 epoch 后参数未发生变化")
 
+    def test_dr_does_not_force_disable_mlp(self, tmp_path, monkeypatch):
+        """DR 启用 + 显式 disable_mlp=False 时，应保留 MLP（不再被强制关掉）。"""
+        monkeypatch.chdir(tmp_path)
+        torch.manual_seed(7)
+        r = train_batch(
+            trajectories=_short_truck_trajs(), n_epochs=1,
+            plant='truck_trailer', verbose=False,
+            dr_overrides={'enable': True, 'K': 2,
+                          'mt_range': 0.05, 'cfcr_range': 0.1},
+            dr_seed=42,
+            disable_mlp=False,
+            param_snapshot_interval=0)
+        assert r['dr_config']['enable'] is True
+        assert r['disable_mlp'] is False   # 不再被 DR 强制改为 True
+
     def test_dr_history_records_domains(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
         torch.manual_seed(7)
@@ -252,6 +268,7 @@ class TestDrEnabledEndToEnd:
             dr_overrides={'enable': True, 'K': 3,
                           'mt_range': 0.05, 'cfcr_range': 0.1},
             dr_seed=42,
+            disable_mlp=True,  # 显式关 MLP 让测试快、不依赖 checkpoint
             param_snapshot_interval=0)
         for ep in r['training_history']:
             assert 'dr_domains' in ep

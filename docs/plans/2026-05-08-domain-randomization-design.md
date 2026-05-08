@@ -31,7 +31,7 @@
 ## 非目标
 
 - 不随机化挂车质量、几何参数、阻力系数、转向比、风阻面积
-- 不打开 MLP 残差模型（当前 MLP 有已知问题；DR 也会让 base 偏离 MLP 训练域，此版本不处理这个耦合）
+- 不在代码侧自动处理 DR × MLP 耦合（MLP 是按 nominal 车辆参数训练的，DR 把车辆参数推到 ±10/20% 区间时输入分布偏离训练域）；是否启用 MLP 由使用方按场景在 yaml / CLI 决定，2026-05-08 首跑选择关 MLP 是出于这一权衡，但代码不做强制
 - 不在 kinematic、dynamic、hybrid_dynamic、hybrid_v2 这几条 plant 路径上启用 DR（仅 truck_trailer）
 - 不在 scalar `train.py` 上做 DR（仅扩展 `train_batch.py`）
 - 不做控制器参数的 robust optimization（如 minimax、CVaR），只做最朴素的 ensemble average loss
@@ -140,7 +140,7 @@ else:
 
 复用 `validate_batch.py` 里 `_apply_config_overrides` 的机制：把 `cfg['truck_trailer_vehicle']['checkpoint_path']` 置空字符串，vehicle factory 会传 `None` 给 vehicle，MLP 不加载。
 
-在 `train_batch.py` 加 `--disable-mlp` flag，触发同样的 cfg 改写。**`--dr-enable` 强制蕴含 `--disable-mlp`**：开启 DR 时若用户没显式 `--disable-mlp`，自动改写 cfg 并打印一行说明（不报错）。理由是非目标里已经明确这一版不处理 DR × MLP 耦合，给逃生通道反而会引入"控制器在 DR 域里学错残差"的隐患。
+在 `train_batch.py` 加 `--disable-mlp` flag，触发同样的 cfg 改写。**`--dr-enable` 与 MLP 开关解耦**：是否启用 MLP 仅由 `cfg['truck_trailer_vehicle']['checkpoint_path']`（空串=关）和 `--disable-mlp` 入参决定，DR 不再强制覆盖。注意 MLP 是按 nominal 车辆参数训练的，DR 把车辆参数推到 ±10/20% 区间时 MLP 输入分布偏移训练域、残差解释力下降——这个事实由使用方按场景权衡，需要时显式传 `--disable-mlp` 即可。
 
 把 `_apply_config_overrides` 抽到 `sim/config.py` 作为公共函数，validate_batch.py 和 train_batch.py 共用。
 
@@ -241,7 +241,7 @@ DR 开启 3 epoch（手动跑，不进 pytest）：
 
 - 命令：`python -u optim/train_batch.py --plant truck_trailer --dr-enable --epochs 6 --dr-seed 2026`
 - DR 开关：`enable=True`，K=4，m_t±10%，Cf/Cr±20%，dr_seed=2026（可复现）
-- DR 强制蕴含 `disable_mlp=True`，post_training V1 对比也关 MLP（baseline 走 default.yaml + 纯机理 base，tuned 走 tuned yaml + 纯机理 base）
+- 本次首跑由"DR 强制 disable_mlp"的旧逻辑接管，因此训练与 post_training V1 对比都走纯机理 base 路径（baseline default.yaml 与 tuned 同条件，对比公平）。该强制耦合在 2026-05-09 已解除，是否启用 MLP 改由 yaml/CLI 自决；如需复现本次效果，命令应改为 `--dr-enable --disable-mlp ...`
 - 训练集：48 条标准轨迹（8 类 × 6 速度）× K=4 → batch=192
 - 总耗时：2866s（~48 min），其中训练 ~46 min + V1 对比 ~2 min
 

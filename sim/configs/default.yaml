@@ -100,7 +100,10 @@ simulation:
 # 域随机化（仅 train_batch.py + truck_trailer plant 生效）
 # 启用后训练时为每个 epoch 采样 K 组车辆物理参数 (m_t, Cf, Cr)，扩展 batch
 # 维度到 48*K，让控制器看到一族 plant 上的状态轨迹。Iz_t 由 m_t 线性联动。
-# 启用 DR 强制蕴含 disable_mlp（不处理 MLP 残差与 base 参数偏离的耦合）。
+# 是否启用 MLP 残差与 DR 解耦：以 truck_trailer_vehicle.checkpoint_path
+# (空串=关) 与 --disable-mlp 入参为准。注意：MLP 是按 nominal 车辆参数训练
+# 的，DR 把车辆参数推到 ±10/20% 区间时 MLP 输入分布偏离训练域，残差解释力
+# 下降——是否打开由使用方按场景权衡。
 domain_randomization:
   enable: false       # 总开关，默认 false 走原训练路径不变
   K: 4                # 每个 epoch 采样的 domain 数（B 从 48 扩到 48*K）

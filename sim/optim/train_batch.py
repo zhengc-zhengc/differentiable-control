@@ -1350,7 +1350,8 @@ def train_batch(trajectories=None, n_epochs: int = 100, lr: float = 5e-2,
     Args:
         dr_overrides: 域随机化 CLI 覆盖 dict（含 enable/K/mt_range/cfcr_range，
                       值为 None 表示回落到 cfg['domain_randomization']）。
-                      DR 启用时强制蕴含 disable_mlp。
+                      是否启用 MLP 与 DR 解耦：以 cfg['truck_trailer_vehicle']
+                      ['checkpoint_path'] 与 disable_mlp 入参为准。
         disable_mlp: 训练时跳过 MLP 残差（cfg 的 checkpoint_path 置空）。
         dr_seed: 采样随机种子（None 不固定，方便复现实验时指定）。
 
@@ -1365,9 +1366,9 @@ def train_batch(trajectories=None, n_epochs: int = 100, lr: float = 5e-2,
         "train_batch 目前仅支持 truck_trailer plant"
 
     dr_config = _resolve_dr_config(cfg, dr_overrides)
-    if dr_config['enable']:
-        # DR 强制 disable_mlp（设计文档"非目标"明确不处理 MLP 域外失真）
-        disable_mlp = True
+    # 是否使用 MLP 与 DR 解耦：仅由 cfg['truck_trailer_vehicle']['checkpoint_path']
+    # 与 disable_mlp 入参决定。注意：MLP 是按 nominal 车辆参数训练的，DR 把车辆
+    # 参数推到 ±10/20% 区间时 MLP 输入分布偏移训练域，残差解释力下降。
     if disable_mlp:
         apply_runtime_overrides(cfg, disable_mlp=True)
 
@@ -1403,10 +1404,13 @@ def train_batch(trajectories=None, n_epochs: int = 100, lr: float = 5e-2,
         if dr_config['enable']:
             print(f"  域随机化: K={K} 组/epoch, "
                   f"m_t±{dr_config['mt_range']*100:.0f}%, "
-                  f"Cf/Cr±{dr_config['cfcr_range']*100:.0f}% "
-                  f"(强制 disable_mlp=True)")
-        elif disable_mlp:
+                  f"Cf/Cr±{dr_config['cfcr_range']*100:.0f}%")
+        if disable_mlp:
             print(f"  MLP 已关闭（纯机理 base 路径）")
+        else:
+            ckpt = cfg['truck_trailer_vehicle'].get('checkpoint_path', '')
+            if ckpt:
+                print(f"  MLP 已启用: {ckpt}")
 
     lat_ctrl = BatchedLatTruck(cfg, batch_size=B)
     lon_ctrl = BatchedLonCtrl(cfg, batch_size=B)
@@ -1678,9 +1682,8 @@ def train_batch(trajectories=None, n_epochs: int = 100, lr: float = 5e-2,
             'Cr_nominal': dr_nominal[2],
             'effective_batch': B,
             'dr_seed': dr_seed,
-            'disable_mlp': True,
         }
-    elif disable_mlp:
+    if disable_mlp:
         meta['disable_mlp'] = True
     saved_path = save_tuned_config(cfg_out, meta=meta)
     if verbose:
@@ -1740,7 +1743,7 @@ if __name__ == '__main__':
                         help='post_training 的 V1 验证走 scalar per-scene 路径（默认并行 batched）')
     # 域随机化（CLI 仅作覆盖；未指定时用 cfg['domain_randomization']）
     parser.add_argument('--dr-enable', action='store_true', default=None,
-                        help='启用域随机化（覆盖 cfg；蕴含 --disable-mlp）')
+                        help='启用域随机化（覆盖 cfg；MLP 开关由 yaml/CLI 决定）')
     parser.add_argument('--dr-K', type=int, default=None,
                         help='每 epoch 采样的 domain 数（默认 cfg=4）')
     parser.add_argument('--dr-mt-range', type=float, default=None,
@@ -1775,10 +1778,8 @@ if __name__ == '__main__':
     print(f"\n最终 loss: {result['losses'][-1]:.6f}")
     print(f"保存路径: {result['saved_path']}")
 
-    # post_training 验证：DR 训练或显式 disable_mlp 时，验证全程关 MLP
-    validation_disable_mlp = bool(result.get('disable_mlp', False)
-                                   or result.get('dr_config', {}).get('enable',
-                                                                      False))
+    # post_training 验证：与训练端配置一致（disable_mlp 透传，DR 不再额外强制）
+    validation_disable_mlp = bool(result.get('disable_mlp', False))
 
     if not args.no_post_training:
         # post_training 默认走 batched V1（49 场景并行 hard_mode），~6 min；
