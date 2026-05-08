@@ -50,8 +50,11 @@ sim/
 │   └── training/          # 训练产物（.gitignore 排除，按被控对象+时间戳分目录）
 │       └── {plant}/{timestamp}/  # loss_curve.png, loss_breakdown.png, comparison_*.png, experiment_log.yaml
 ├── learn/                 # 学习笔记与调试日志（不影响运行）
+├── debug/                 # 一次性 debug / 数据修复脚本（untracked，不影响主流程）
 └── tests/                 # pytest 测试
 ```
+
+`sim/debug/` 用法：放问题排查时写的临时脚本（如某场景 5kph 退化分析、MLP OOD 检查），统一在子目录里方便清理。约定脚本头加 `sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))` 把 `sim/` 加进 path，再 `from config import ...`。这些文件默认 untracked，跟随 git status 显示提示，需要保留时再显式 `git add -f`。
 
 ## 数据流
 
