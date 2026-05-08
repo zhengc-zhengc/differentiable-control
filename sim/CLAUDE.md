@@ -85,6 +85,7 @@ python optim/train.py --plant hybrid_dynamic --epochs 6     # 指定被控对象
 python optim/train_batch.py --epochs 6 --plant truck_trailer  # 批量并行训练 + 并行 V1 验证（总约 11 min）
 python optim/train_batch.py --scalar-validation --epochs 6 --plant truck_trailer  # 训练并行+验证串行（回归调试用）
 python optim/train_batch.py --plant truck_trailer --dr-enable --dr-seed 2026 --epochs 6  # 域随机化训练（K=4 默认，每 epoch 采样 4 组车辆参数）
+python optim/train_batch.py --plant truck_trailer --dr-enable --noise-enable --dither-enable --dr-seed 2026 --noise-seed 2026 --epochs 6  # 激进 DR：物理 + 噪声 + 抖动叠加训练
 python optim/train_batch.py --plant truck_trailer --disable-mlp --epochs 6  # 关闭 MLP 残差，纯机理 base 训练
 python optim/validate_batch.py --config configs/tuned/xxx.yaml --plant truck_trailer  # 自定义 A/B 对比（并行，支持 label 自定义）
 python optim/post_training.py --config configs/tuned/xxx.yaml              # 独立验证（全量 49 场景，默认 scalar）
@@ -239,6 +240,12 @@ scalar `optim/train.py` 把 48 条轨迹串行跑，单 epoch 约 40 分钟。`o
 ## 域随机化 (`--dr-enable`，仅 `train_batch.py` + `truck_trailer`)
 
 每 epoch 开头采样 K 组 `(m_t, Cf, Cr)`（独立均匀分布在 ±range 内，`Iz_t` 跟随 `m_t` 线性缩放），把 48 条轨迹复制 K 份分别绑域，B 扩到 48×K，一次平均反传更新让控制器对一族车辆物理鲁棒。配置入口 `default.yaml` 的 `domain_randomization` 段；CLI 优先级高于 yaml；`--dr-seed` 锁可复现。**MLP 开关与 DR 正交**——是否带 MLP 由 `checkpoint_path` 和 `--disable-mlp` 决定，代码不强制（MLP 按 nominal 训练，DR 范围外残差失真，由使用方按场景权衡）。耗时 K=4 单 epoch ~8 min（vs 无 DR 5 min）。详见 `docs/plans/2026-05-08-domain-randomization-design.md`。
+
+### 状态反馈噪声 + 指令抖动（叠加在 DR 之上）
+
+`--noise-enable` 在控制器读取 vehicle 状态之前往真值上加独立高斯（5 通道：x/y/yaw/speed/yawrate），`--dither-enable` 在 vehicle.step 收到指令之前给 delta/torque 加高斯抖动；两者均为单步白噪声、3σ 截断、噪声/抖动共用同一个 `torch.Generator`，由 `--noise-seed` 锁种子（与 `--dr-seed` 解耦）。loss 始终用 vehicle 真值；`hard_mode=True` 验证路径强制 mute——所以 V1 49 场景对比仍然干净。
+
+yaml 配置入口 `feedback_noise` / `command_dither`，CLI 优先级高于 yaml；σ 一次性覆盖通过 `--sigma-{x,y,yaw,speed,yawrate,delta,torque}` 传入。详见 `docs/plans/2026-05-08-aggressive-dr-noise-dither-design.md`。
 
 ## 训练记录
 

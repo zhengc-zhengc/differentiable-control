@@ -255,6 +255,11 @@ python optim/validate_batch.py \
 | `--dr-mt-range` | None（cfg=0.10）| 牵引车质量 m_t 相对 nominal 的 ±range |
 | `--dr-cfcr-range` | None（cfg=0.20）| 前/后轴侧偏刚度 Cf/Cr 相对 nominal 的 ±range |
 | `--dr-seed` | None | DR 采样随机种子（None 不固定，传整数复现） |
+| `--noise-enable` / `--no-noise` | None（cfg）| 状态反馈高斯白噪声开关（5 通道：x/y/yaw/speed/yawrate） |
+| `--sigma-x / --sigma-y / --sigma-yaw / --sigma-speed / --sigma-yawrate` | None（cfg）| 状态噪声各通道 σ 一次性覆盖 |
+| `--dither-enable` / `--no-dither` | None（cfg）| 指令高频抖动开关（delta + torque） |
+| `--sigma-delta / --sigma-torque` | None（cfg）| 抖动各通道 σ 一次性覆盖 |
+| `--noise-seed` | None | 噪声 + 抖动共用的随机种子（与 `--dr-seed` 解耦） |
 
 ## 域随机化（Domain Randomization，`train_batch.py` + `truck_trailer`）
 
@@ -277,6 +282,20 @@ python optim/train_batch.py --plant truck_trailer --dr-enable \
 **MLP 开关与 DR 正交**：是否启用 MLP 残差仅由 `truck_trailer_vehicle.checkpoint_path`（空串=关）和 `--disable-mlp` 决定。MLP 按 nominal 车辆参数训练，DR 大幅扰动参数时输入分布偏离训练域；是否打开 MLP 由使用方按场景权衡，代码不强制。
 
 详细设计与 2026-05-08 首跑结果（loss -42.3%、49 场景 47/49 改善 25-48%）见 [`docs/plans/2026-05-08-domain-randomization-design.md`](docs/plans/2026-05-08-domain-randomization-design.md)。
+
+### 激进 DR：状态噪声 + 指令抖动
+
+在物理参数 DR 之上叠加两类感知/执行扰动：控制器读取 vehicle 状态之前往真值上加 5 通道（x/y/yaw/speed/yawrate）独立高斯，控制器算出 `delta/torque` 后送 plant 之前再加 2 通道高斯抖动。两者均为单步白噪声、3σ 截断、`--noise-seed` 锁种子。`hard_mode=True` 验证路径强制 mute——V1 49 场景对比仍然干净。
+
+```bash
+# 激进 DR：物理 + 状态噪声 + 指令抖动叠加（中档 σ，6 epoch ~50 min）
+python optim/train_batch.py --plant truck_trailer \
+  --dr-enable --dr-seed 2026 \
+  --noise-enable --dither-enable --noise-seed 2026 \
+  --epochs 6
+```
+
+设计与实施计划见 [`docs/plans/2026-05-08-aggressive-dr-noise-dither-design.md`](docs/plans/2026-05-08-aggressive-dr-noise-dither-design.md) / [`docs/plans/2026-05-08-aggressive-dr-noise-dither-plan.md`](docs/plans/2026-05-08-aggressive-dr-noise-dither-plan.md)。
 
 ## 车辆模型（被控对象）
 
@@ -525,4 +544,6 @@ python run_demo.py --plant truck_trailer --config configs/tuned/xxx.yaml --save 
 - [`docs/bptt_gradient_explosion_analysis.md`](docs/bptt_gradient_explosion_analysis.md) — BPTT 梯度爆炸分析
 - [`docs/plans/2026-04-15-torque-output-layer-design.md`](docs/plans/2026-04-15-torque-output-layer-design.md) — 纵向扭矩输出层设计
 - [`docs/plans/2026-05-08-domain-randomization-design.md`](docs/plans/2026-05-08-domain-randomization-design.md) — 域随机化设计 + 首跑结果
+- [`docs/plans/2026-05-08-aggressive-dr-noise-dither-design.md`](docs/plans/2026-05-08-aggressive-dr-noise-dither-design.md) — 激进 DR：状态噪声 + 指令抖动设计
+- [`docs/plans/2026-05-08-aggressive-dr-noise-dither-plan.md`](docs/plans/2026-05-08-aggressive-dr-noise-dither-plan.md) — 激进 DR 实施计划（8 task）
 - [`docs/plans/`](docs/plans/) — 其他设计文档与实现计划
