@@ -1445,7 +1445,10 @@ def train_batch(trajectories=None, n_epochs: int = 100, lr: float = 5e-2,
                 param_snapshot_interval: int = 10,
                 dr_overrides: dict | None = None,
                 disable_mlp: bool = False,
-                dr_seed: int | None = None):
+                dr_seed: int | None = None,
+                noise_overrides: dict | None = None,
+                dither_overrides: dict | None = None,
+                noise_seed: int | None = None):
     """批量版训练入口。梯度/优化/归一化/投影/导出语义与 scalar train() 等价。
 
     Args:
@@ -1455,10 +1458,15 @@ def train_batch(trajectories=None, n_epochs: int = 100, lr: float = 5e-2,
                       ['checkpoint_path'] 与 disable_mlp 入参为准。
         disable_mlp: 训练时跳过 MLP 残差（cfg 的 checkpoint_path 置空）。
         dr_seed: 采样随机种子（None 不固定，方便复现实验时指定）。
+        noise_overrides: 状态反馈噪声 CLI 覆盖 dict，键见 _NOISE_KEYS；None 走 cfg。
+        dither_overrides: 指令抖动 CLI 覆盖 dict，键见 _DITHER_KEYS；None 走 cfg。
+        noise_seed: 噪声 + 抖动共用的随机种子（None 不固定）。与 dr_seed 解耦，
+                    便于跑"同物理 / 不同噪声"的对比实验。
 
     返回 dict: {'losses', 'training_history', 'initial_params', 'final_params',
                 'saved_path', 'trajectory_types', 'trajectory_keys',
-                'lat_ctrl', 'lon_ctrl', 'dr_config'}
+                'lat_ctrl', 'lon_ctrl', 'dr_config', 'noise_config',
+                'dither_config', 'noise_seed'}
     """
     cfg = load_config(config_path)
     if plant:
@@ -1467,6 +1475,8 @@ def train_batch(trajectories=None, n_epochs: int = 100, lr: float = 5e-2,
         "train_batch 目前仅支持 truck_trailer plant"
 
     dr_config = _resolve_dr_config(cfg, dr_overrides)
+    noise_config = _resolve_noise_config(cfg, noise_overrides)
+    dither_config = _resolve_dither_config(cfg, dither_overrides)
     # 是否使用 MLP 与 DR 解耦：仅由 cfg['truck_trailer_vehicle']['checkpoint_path']
     # 与 disable_mlp 入参决定。注意：MLP 是按 nominal 车辆参数训练的，DR 把车辆
     # 参数推到 ±10/20% 区间时 MLP 输入分布偏移训练域，残差解释力下降。
@@ -1530,6 +1540,34 @@ def train_batch(trajectories=None, n_epochs: int = 100, lr: float = 5e-2,
         dr_nominal = None
         dr_generator = None
 
+    # 噪声 / 抖动 共用同一个 Generator（noise_seed 锁住 7 个采样调用顺序）
+    if noise_config['enable'] or dither_config['enable']:
+        noise_generator = (torch.Generator().manual_seed(int(noise_seed))
+                           if noise_seed is not None else None)
+    else:
+        noise_generator = None
+    noise_params_for_run = None
+    dither_params_for_run = None
+    if noise_config['enable']:
+        noise_params_for_run = dict(noise_config)
+        noise_params_for_run['generator'] = noise_generator
+    if dither_config['enable']:
+        dither_params_for_run = dict(dither_config)
+        dither_params_for_run['generator'] = noise_generator
+
+    if verbose:
+        if noise_config['enable']:
+            print(f"  状态噪声: x/y σ={noise_config['sigma_x_m']:.3f}m, "
+                  f"yaw σ={noise_config['sigma_yaw_deg']:.3f}°, "
+                  f"speed σ={noise_config['sigma_speed_kph']:.3f}km/h, "
+                  f"yawrate σ={noise_config['sigma_yawrate_radps']:.4f}rad/s, "
+                  f"clip {noise_config['clip_sigmas']:.1f}σ"
+                  f"{f'  seed={noise_seed}' if noise_seed is not None else ''}")
+        if dither_config['enable']:
+            print(f"  指令抖动: delta σ={dither_config['sigma_delta_rad']:.4f}rad, "
+                  f"torque σ={dither_config['sigma_torque_nm']:.1f}N·m, "
+                  f"clip {dither_config['clip_sigmas']:.1f}σ")
+
     # 分组 lr（table y 用 lr_tables，其他用 lr）
     table_params, other_params = [], []
     all_named = list(lat_ctrl.named_parameters()) + list(lon_ctrl.named_parameters())
@@ -1577,7 +1615,9 @@ def train_batch(trajectories=None, n_epochs: int = 100, lr: float = 5e-2,
 
         history = run_simulation_batch(
             trajs, cfg=cfg, lat_ctrl=lat_ctrl, lon_ctrl=lon_ctrl,
-            tbptt_k=tbptt_k, domain_params=domain_params)
+            tbptt_k=tbptt_k, domain_params=domain_params,
+            noise_params=noise_params_for_run,
+            dither_params=dither_params_for_run)
 
         per_traj, details = batched_tracking_loss(
             history, ref_speeds,
@@ -1808,6 +1848,9 @@ def train_batch(trajectories=None, n_epochs: int = 100, lr: float = 5e-2,
         'lat_ctrl': lat_ctrl,
         'lon_ctrl': lon_ctrl,
         'dr_config': dr_config,
+        'noise_config': noise_config,
+        'dither_config': dither_config,
+        'noise_seed': noise_seed,
         'disable_mlp': disable_mlp,
     }
 

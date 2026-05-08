@@ -154,3 +154,42 @@ class TestRunSimulationBatchNoise:
                                      noise_params=np_aggressive)
         assert torch.equal(clean['x'], muted['x'])
         assert torch.equal(clean['steer'], muted['steer'])
+
+
+class TestTrainBatchNoiseSeed:
+    def test_train_batch_noise_disabled_unchanged(self, tmp_path, monkeypatch):
+        """传 noise_overrides=None / dither_overrides=None 时 train_batch 与原路径 2 epoch 结果一致。"""
+        monkeypatch.chdir(tmp_path)
+        torch.manual_seed(7)
+        out_a = train_batch(trajectories=_short_trajs(), n_epochs=2,
+                            plant='truck_trailer', verbose=False,
+                            disable_mlp=True,
+                            dr_overrides={'enable': False},
+                            noise_overrides=None,
+                            dither_overrides=None,
+                            param_snapshot_interval=0)
+        torch.manual_seed(7)
+        out_b = train_batch(trajectories=_short_trajs(), n_epochs=2,
+                            plant='truck_trailer', verbose=False,
+                            disable_mlp=True,
+                            dr_overrides={'enable': False},
+                            param_snapshot_interval=0)
+        assert abs(out_a['losses'][-1] - out_b['losses'][-1]) < 1e-6
+
+    def test_train_batch_seeded_reproducible(self, tmp_path, monkeypatch):
+        """相同 noise_seed 跑 2 epoch，最终 loss 完全一致。"""
+        monkeypatch.chdir(tmp_path)
+        kw = dict(trajectories=_short_trajs(), n_epochs=2,
+                  plant='truck_trailer', verbose=False,
+                  disable_mlp=True,
+                  dr_overrides={'enable': True, 'K': 2,
+                                'mt_range': 0.05, 'cfcr_range': 0.10},
+                  noise_overrides={'enable': True},
+                  dither_overrides={'enable': True},
+                  dr_seed=2026, noise_seed=2026,
+                  param_snapshot_interval=0)
+        torch.manual_seed(7)
+        a = train_batch(**kw)
+        torch.manual_seed(7)
+        b = train_batch(**kw)
+        assert abs(a['losses'][-1] - b['losses'][-1]) < 1e-6
