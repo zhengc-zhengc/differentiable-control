@@ -110,6 +110,27 @@ domain_randomization:
   mt_range: 0.10      # m_t 相对 nominal 的均匀采样 ±range（0.10 = ±10%）
   cfcr_range: 0.20    # Cf/Cr 相对 nominal 的均匀采样 ±range（0.20 = ±20%）
 
+# 状态反馈噪声（仅 train_batch.py + truck_trailer 生效；hard_mode 验证默认关）
+# 在控制器读取 vehicle 状态之前往真值上加独立高斯，模拟定位/IMU/轮速噪声。
+# 单步白噪声、每 batch 元素独立、3σ 截断。loss 仍在 vehicle 真值上算。
+feedback_noise:
+  enable: false
+  sigma_x_m: 0.02            # 位置 x 噪声 σ（合成出 lat_err σ ≈ 0.02 m）
+  sigma_y_m: 0.02            # 位置 y 噪声 σ
+  sigma_yaw_deg: 0.115       # 朝向噪声 σ（≈ 0.002 rad）
+  sigma_speed_kph: 0.18      # 车速噪声 σ（≈ 0.05 m/s）
+  sigma_yawrate_radps: 0.002 # 横摆率噪声 σ
+  clip_sigmas: 3.0
+
+# 指令高频抖动（同样 train_batch.py + truck_trailer，hard_mode 默认关）
+# 控制器算出 delta/torque 后、送进 vehicle.step 之前加高斯抖动。
+# history 仍记录控制器原始输出，loss 用真值。
+command_dither:
+  enable: false
+  sigma_delta_rad: 0.001     # 前轮转角抖动 σ（≈ 0.057°）
+  sigma_torque_nm: 15.0      # 总车轮扭矩抖动 σ
+  clip_sigmas: 3.0
+
 lat_truck:
   kLh: 0.0
   rate_limit_fb: 120.0
