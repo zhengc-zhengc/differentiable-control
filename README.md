@@ -445,4 +445,5 @@ python optim/post_training.py --config configs/tuned/xxx.yaml --trajectories lan
 - [`docs/tunable_params_analysis.md`](docs/tunable_params_analysis.md) — 可调参数分析
 - [`docs/bptt_gradient_explosion_analysis.md`](docs/bptt_gradient_explosion_analysis.md) — BPTT 梯度爆炸分析
 - [`docs/plans/2026-04-15-torque-output-layer-design.md`](docs/plans/2026-04-15-torque-output-layer-design.md) — 纵向扭矩输出层设计
+- [`docs/plans/2026-05-08-domain-randomization-design.md`](docs/plans/2026-05-08-domain-randomization-design.md) — 域随机化设计 + 首跑结果
 - [`docs/plans/`](docs/plans/) — 其他设计文档与实现计划
