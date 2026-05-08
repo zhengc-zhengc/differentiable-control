@@ -15,7 +15,8 @@ import yaml
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from config import load_config, _get_commit_hash, _tensor_to_python, apply_plant_override
+from config import (load_config, _get_commit_hash, _tensor_to_python,
+                    apply_plant_override, apply_runtime_overrides)
 from model.trajectory import (expand_trajectories, generate_park_route,
                               TRAJECTORY_TYPES, SPEED_BANDS_KPH)
 from sim_loop import run_simulation
@@ -156,7 +157,7 @@ def get_scenario_keys(trajectory_types=None):
 
 def run_comparison(tuned_config_path, output_dir, verbose=True, plant=None,
                    trajectory_types=None, use_batched=False,
-                   baseline_config_path=None):
+                   baseline_config_path=None, disable_mlp: bool = False):
     """用 V1 路径跑 baseline vs tuned 对比，生成对比图 + 返回指标。
 
     Args:
@@ -171,6 +172,10 @@ def run_comparison(tuned_config_path, output_dir, verbose=True, plant=None,
         baseline_config_path: 对比基准的配置文件路径，None 走 default.yaml；
                               warm-start 训练后透传训练输入 yaml，可让"调参前"
                               那一栏使用训练起点而非 default
+        disable_mlp: True 时把 baseline / tuned 两份 cfg 的
+                     truck_trailer_vehicle.checkpoint_path 同时置空，
+                     baseline 和 tuned 都走纯机理 base 验证（DR 训练
+                     场景必须开启，避免对照组带 MLP 而 tuned 不带）
 
     Returns:
         comparison_metrics: {scenario_key: {baseline, tuned, delta_lat_pct, delta_head_pct}}
@@ -180,6 +185,11 @@ def run_comparison(tuned_config_path, output_dir, verbose=True, plant=None,
     if plant:
         apply_plant_override(cfg_base, plant)
         apply_plant_override(cfg_tuned, plant)
+    if disable_mlp:
+        apply_runtime_overrides(cfg_base, disable_mlp=True)
+        apply_runtime_overrides(cfg_tuned, disable_mlp=True)
+        if verbose:
+            print("V1 对比 MLP 已关闭：baseline / tuned 均走纯机理 base")
 
     eval_scenarios = _build_eval_scenarios(trajectory_types)
 
@@ -749,7 +759,7 @@ def plot_parameter_changes(train_result, output_dir):
 
 def run_validation(tuned_config_path, output_dir=None, verbose=True,
                     plant=None, trajectory_types=None, use_batched=False,
-                    baseline_config_path=None):
+                    baseline_config_path=None, disable_mlp: bool = False):
     """独立验证入口：仅跑 V1 对比 + 生成对比图，不需要 train_result。
 
     Args:
@@ -786,7 +796,8 @@ def run_validation(tuned_config_path, output_dir=None, verbose=True,
     comparison_metrics, scenario_labels = run_comparison(
         tuned_config_path, output_dir, verbose=verbose, plant=plant,
         trajectory_types=trajectory_types, use_batched=use_batched,
-        baseline_config_path=baseline_config_path)
+        baseline_config_path=baseline_config_path,
+        disable_mlp=disable_mlp)
 
     # 复制 tuned config 到产物目录
     shutil.copy2(tuned_config_path,
@@ -814,7 +825,8 @@ def run_validation(tuned_config_path, output_dir=None, verbose=True,
 
 def run_post_training(train_result, hyperparams, verbose=True, plant=None,
                       trajectory_types=None, use_batched=False,
-                      baseline_config_path=None):
+                      baseline_config_path=None,
+                      disable_mlp: bool = False):
     """训练后一站式自动化入口。
 
     Args:
@@ -826,6 +838,8 @@ def run_post_training(train_result, hyperparams, verbose=True, plant=None,
         baseline_config_path: 对比基准的配置文件路径，None 走 default.yaml；
                               warm-start 训练时透传训练输入 yaml，让验证里的"调参前"
                               对照组与训练起点匹配，Δ% 反映本轮训练增量
+        disable_mlp: True 时把 baseline 与 tuned 的 cfg.checkpoint_path 同时
+                     置空（DR 训练后必须开启，验证才能反映"无 MLP"工况）
 
     Returns:
         output_dir: 产物保存目录路径
@@ -858,7 +872,8 @@ def run_post_training(train_result, hyperparams, verbose=True, plant=None,
     comparison_metrics, scenario_labels = run_comparison(
         train_result['saved_path'], output_dir, verbose=verbose, plant=plant,
         trajectory_types=trajectory_types, use_batched=use_batched,
-        baseline_config_path=baseline_config_path)
+        baseline_config_path=baseline_config_path,
+        disable_mlp=disable_mlp)
 
     # 4. 训练摘要仪表板
     p = plot_training_summary(train_result, comparison_metrics, hyperparams, output_dir,
@@ -910,9 +925,13 @@ if __name__ == '__main__':
     parser.add_argument('--baseline-config', default=None,
                         help='对比基准的配置文件路径，默认 default.yaml；'
                              '想跟某份 tuned 起点对比时显式指定该路径')
+    parser.add_argument('--disable-mlp', action='store_true',
+                        help='验证全程关 MLP（baseline / tuned 都把 cfg '
+                             'checkpoint_path 置空，走纯机理 base）')
     args = parser.parse_args()
 
     run_validation(args.config, output_dir=args.output_dir, plant=args.plant,
                    trajectory_types=args.trajectories,
                    use_batched=args.batched,
-                   baseline_config_path=args.baseline_config)
+                   baseline_config_path=args.baseline_config,
+                   disable_mlp=args.disable_mlp)

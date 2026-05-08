@@ -21,8 +21,8 @@ import torch.nn as nn
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from common import normalize_angle  # 支持 [B] tensor
-from config import (apply_plant_override, load_config, save_tuned_config,
-                    table_from_config)
+from config import (apply_plant_override, apply_runtime_overrides, load_config,
+                    save_tuned_config, table_from_config)
 from controller.lat_truck import LatControllerTruck  # 复用参数导出
 from controller.lon import LonController
 from model.dynamic_vehicle import VehicleDynamics
@@ -569,6 +569,16 @@ class BatchedTruckTrailerVehicle:
     def detach_state(self):
         self._state = self._state.detach()
 
+    def set_domain(self, m_t: torch.Tensor, Cf: torch.Tensor, Cr: torch.Tensor):
+        """注入域随机化参数（每 epoch 调一次）。透传到底层 nominal dynamics。
+
+        m_t/Cf/Cr 必须是 shape [B] 张量，与 self.B 对齐。
+        """
+        assert m_t.shape == (self.B,), f"m_t shape {m_t.shape} != ({self.B},)"
+        assert Cf.shape == (self.B,), f"Cf shape {Cf.shape} != ({self.B},)"
+        assert Cr.shape == (self.B,), f"Cr shape {Cr.shape} != ({self.B},)"
+        self.dynamics.set_domain(m_t, Cf, Cr)
+
     @property
     def x(self):
         return self._state[:, 0] - self._b_t * torch.cos(self._state[:, 2])
@@ -1016,7 +1026,8 @@ def run_simulation_batch(trajectories: list, cfg: dict = None,
                          lon_ctrl: BatchedLonCtrl = None,
                          tbptt_k: int = 0,
                          hard_mode: bool = False,
-                         trailer_mass_kg=None) -> dict:
+                         trailer_mass_kg=None,
+                         domain_params: dict | None = None) -> dict:
     """B 条轨迹同步推进 50Hz 闭环。支持 truck_trailer / hybrid_dynamic plant。
 
     Args:
@@ -1025,6 +1036,9 @@ def run_simulation_batch(trajectories: list, cfg: dict = None,
                    False 时走 smooth 近似（训练用，需要梯度回传）。
         trailer_mass_kg: truck_trailer 专用，标量或 [B] tensor 覆盖默认挂车质量；
                          hybrid_dynamic 下此参数被忽略。
+        domain_params: 可选 dict {'m_t': [B], 'Cf': [B], 'Cr': [B]}。
+                       提供时在创建 vehicle 后调 vehicle.set_domain 注入域参数。
+                       仅 truck_trailer plant 生效，其他 plant 必须为 None。
 
     返回 dict：每项 [B, T_max]，另含 'valid_mask' [B, T_max] 和控制器句柄
     供上层做 loss / 导出用。
@@ -1037,12 +1051,15 @@ def run_simulation_batch(trajectories: list, cfg: dict = None,
     model_type = cfg['vehicle'].get('model_type')
     assert model_type in _SUPPORTED_BATCH_PLANTS, \
         f"run_simulation_batch 仅支持 {_SUPPORTED_BATCH_PLANTS}，当前：{model_type}"
+    if domain_params is not None and model_type != 'truck_trailer':
+        raise NotImplementedError(
+            f"domain_params 仅在 truck_trailer plant 上支持，当前：{model_type}")
 
     grad_ctx = torch.no_grad() if hard_mode else _nullctx()
     with grad_ctx:
         return _run_sim_batch_inner(
             trajectories, cfg, lat_ctrl, lon_ctrl, tbptt_k,
-            hard_mode, trailer_mass_kg)
+            hard_mode, trailer_mass_kg, domain_params)
 
 
 class _nullctx:
@@ -1051,7 +1068,7 @@ class _nullctx:
 
 
 def _run_sim_batch_inner(trajectories, cfg, lat_ctrl, lon_ctrl, tbptt_k,
-                         hard_mode, trailer_mass_override):
+                         hard_mode, trailer_mass_override, domain_params=None):
     bt = BatchedTrajectoryTable(trajectories)
     B, T_max = bt.B, bt.T_max
     dt = cfg['simulation']['dt']
@@ -1084,6 +1101,10 @@ def _run_sim_batch_inner(trajectories, cfg, lat_ctrl, lon_ctrl, tbptt_k,
             init_x=bt.init_x, init_y=bt.init_y,
             init_yaw=bt.init_yaw, init_v=bt.init_v,
             dt=dt, trailer_mass_kg=trailer_mass)
+        if domain_params is not None:
+            vehicle.set_domain(domain_params['m_t'],
+                               domain_params['Cf'],
+                               domain_params['Cr'])
     elif model_type == 'hybrid_dynamic':
         vehicle = BatchedHybridDynamicVehicle(
             cfg, batch_size=B,
@@ -1273,18 +1294,69 @@ def _materialize_trajectories(trajectories):
     raise ValueError(f"无法识别的 trajectories 参数：{type(trajectories)}")
 
 
+# ─────────────────────────────────────────────────────────────────────────
+# 域随机化 helper（仅 truck_trailer）
+# ─────────────────────────────────────────────────────────────────────────
+
+def _resolve_dr_config(cfg: dict, overrides: dict | None = None) -> dict:
+    """合并 cfg['domain_randomization'] 和 CLI 覆盖。
+
+    overrides 中值为 None 的字段表示用户未指定 CLI，回落到 cfg 默认。
+    返回 normalized dict: {enable, K, mt_range, cfcr_range}。
+    """
+    base = cfg.get('domain_randomization') or {}
+    overrides = overrides or {}
+    def _pick(key, default):
+        ov = overrides.get(key)
+        if ov is not None:
+            return ov
+        return base.get(key, default)
+    return {
+        'enable': bool(_pick('enable', False)),
+        'K': int(_pick('K', 4)),
+        'mt_range': float(_pick('mt_range', 0.10)),
+        'cfcr_range': float(_pick('cfcr_range', 0.20)),
+    }
+
+
+def _sample_dr_domains(K: int, mt_range: float, cfcr_range: float,
+                        m_t_nom: float, Cf_nom: float, Cr_nom: float,
+                        generator: torch.Generator | None = None
+                        ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """从 ±range 均匀分布采样 K 组 (m_t, Cf, Cr)。
+
+    返回三个 [K] 张量。范围为 nominal × (1 ± range)。
+    """
+    def _u(r):
+        return (torch.rand(K, generator=generator) * 2.0 - 1.0) * r
+    m_t = m_t_nom * (1.0 + _u(mt_range))
+    Cf = Cf_nom * (1.0 + _u(cfcr_range))
+    Cr = Cr_nom * (1.0 + _u(cfcr_range))
+    return m_t.float(), Cf.float(), Cr.float()
+
+
 def train_batch(trajectories=None, n_epochs: int = 100, lr: float = 5e-2,
                 lr_tables: float = 5e-2, tbptt_k: int = 150,
                 grad_clip: float = 10.0, verbose: bool = True,
                 plant: str = None, config_path: str = None,
                 w_lat: float = 10.0, w_head: float = 8.0, w_speed: float = 3.0,
                 w_steer_rate: float = 0.05, w_acc_rate: float = 0.01,
-                param_snapshot_interval: int = 10):
+                param_snapshot_interval: int = 10,
+                dr_overrides: dict | None = None,
+                disable_mlp: bool = False,
+                dr_seed: int | None = None):
     """批量版训练入口。梯度/优化/归一化/投影/导出语义与 scalar train() 等价。
+
+    Args:
+        dr_overrides: 域随机化 CLI 覆盖 dict（含 enable/K/mt_range/cfcr_range，
+                      值为 None 表示回落到 cfg['domain_randomization']）。
+                      DR 启用时强制蕴含 disable_mlp。
+        disable_mlp: 训练时跳过 MLP 残差（cfg 的 checkpoint_path 置空）。
+        dr_seed: 采样随机种子（None 不固定，方便复现实验时指定）。
 
     返回 dict: {'losses', 'training_history', 'initial_params', 'final_params',
                 'saved_path', 'trajectory_types', 'trajectory_keys',
-                'lat_ctrl', 'lon_ctrl'}
+                'lat_ctrl', 'lon_ctrl', 'dr_config'}
     """
     cfg = load_config(config_path)
     if plant:
@@ -1292,10 +1364,30 @@ def train_batch(trajectories=None, n_epochs: int = 100, lr: float = 5e-2,
     assert cfg['vehicle'].get('model_type') == 'truck_trailer', \
         "train_batch 目前仅支持 truck_trailer plant"
 
+    dr_config = _resolve_dr_config(cfg, dr_overrides)
+    if dr_config['enable']:
+        # DR 强制 disable_mlp（设计文档"非目标"明确不处理 MLP 域外失真）
+        disable_mlp = True
+    if disable_mlp:
+        apply_runtime_overrides(cfg, disable_mlp=True)
+
     pairs = _materialize_trajectories(trajectories)
-    keys = [k for k, _t in pairs]
-    trajs = [t for _k, t in pairs]
-    B = len(trajs)
+    keys_orig = [k for k, _t in pairs]
+    trajs_orig = [t for _k, t in pairs]
+    B_orig = len(trajs_orig)
+
+    if dr_config['enable']:
+        K = dr_config['K']
+        # python list × K 复制：[t0, t1, ..., t_{B-1}] × K
+        # → 元素 i 的 traj_idx = i % B_orig，domain_idx = i // B_orig
+        trajs = trajs_orig * K
+        keys = keys_orig * K
+        B = B_orig * K
+    else:
+        K = 1
+        trajs = trajs_orig
+        keys = keys_orig
+        B = B_orig
 
     if verbose:
         if isinstance(trajectories, list) and trajectories and isinstance(
@@ -1304,15 +1396,34 @@ def train_batch(trajectories=None, n_epochs: int = 100, lr: float = 5e-2,
         elif trajectories is None:
             n_types = len(TRAJECTORY_TYPES)
         else:
-            n_types = B
+            n_types = B_orig
         print(f"批量训练轨迹: {n_types} 类型 × {len(SPEED_BANDS_KPH)} 速度段 "
-              f"= {B} 条 (batch 维 B={B})")
+              f"= {B_orig} 条 (batch 维 B={B})")
         print(f"  速度段: {SPEED_BANDS_KPH} kph")
+        if dr_config['enable']:
+            print(f"  域随机化: K={K} 组/epoch, "
+                  f"m_t±{dr_config['mt_range']*100:.0f}%, "
+                  f"Cf/Cr±{dr_config['cfcr_range']*100:.0f}% "
+                  f"(强制 disable_mlp=True)")
+        elif disable_mlp:
+            print(f"  MLP 已关闭（纯机理 base 路径）")
 
     lat_ctrl = BatchedLatTruck(cfg, batch_size=B)
     lon_ctrl = BatchedLonCtrl(cfg, batch_size=B)
 
     ref_speeds = torch.tensor([float(t[0].v) for t in trajs])
+
+    # DR 采样 nominal 值与生成器（仅 enable 时使用）
+    if dr_config['enable']:
+        tt_params = cfg['truck_trailer_vehicle']
+        dr_nominal = (float(tt_params['m_t']),
+                      float(tt_params['Cf']),
+                      float(tt_params['Cr']))
+        dr_generator = (torch.Generator().manual_seed(int(dr_seed))
+                        if dr_seed is not None else None)
+    else:
+        dr_nominal = None
+        dr_generator = None
 
     # 分组 lr（table y 用 lr_tables，其他用 lr）
     table_params, other_params = [], []
@@ -1346,9 +1457,22 @@ def train_batch(trajectories=None, n_epochs: int = 100, lr: float = 5e-2,
         te = time.time()
         optimizer.zero_grad()
 
+        # 域随机化：每 epoch 重采样 K 组 (m_t, Cf, Cr)
+        domain_params = None
+        epoch_domains_K = None  # [K, 3] 当前 epoch 的 nominal 缩放后值
+        if dr_config['enable']:
+            mt_K, cf_K, cr_K = _sample_dr_domains(
+                K, dr_config['mt_range'], dr_config['cfcr_range'],
+                *dr_nominal, generator=dr_generator)
+            mt_B = mt_K.repeat_interleave(B_orig)
+            cf_B = cf_K.repeat_interleave(B_orig)
+            cr_B = cr_K.repeat_interleave(B_orig)
+            domain_params = {'m_t': mt_B, 'Cf': cf_B, 'Cr': cr_B}
+            epoch_domains_K = torch.stack([mt_K, cf_K, cr_K], dim=1)
+
         history = run_simulation_batch(
             trajs, cfg=cfg, lat_ctrl=lat_ctrl, lon_ctrl=lon_ctrl,
-            tbptt_k=tbptt_k)
+            tbptt_k=tbptt_k, domain_params=domain_params)
 
         per_traj, details = batched_tracking_loss(
             history, ref_speeds,
@@ -1357,8 +1481,16 @@ def train_batch(trajectories=None, n_epochs: int = 100, lr: float = 5e-2,
             return_details=True)
 
         # Per-traj 软归一化（第 1 epoch 记 baseline，后续归一化）
+        # DR 启用时 baseline 在 K 个 domain 副本上取均值，再复制回 [B]
         if epoch == 0:
-            baseline_per_traj = per_traj.detach().clamp(min=1e-6)
+            base_raw = per_traj.detach().clamp(min=1e-6)  # [B]
+            if dr_config['enable']:
+                # [B = K * B_orig] → view(K, B_orig) → mean over K → [B_orig]
+                base_per_traj_orig = base_raw.view(K, B_orig).mean(dim=0)
+                # 复制回 [B]：每个 domain 副本共享同一 baseline
+                baseline_per_traj = base_per_traj_orig.repeat(K)
+            else:
+                baseline_per_traj = base_raw
             sorted_b = baseline_per_traj.sort().values
             median_b = sorted_b[len(sorted_b) // 2].item()
             norm_floor = median_b ** norm_alpha
@@ -1407,23 +1539,29 @@ def train_batch(trajectories=None, n_epochs: int = 100, lr: float = 5e-2,
         dt_epoch = time.time() - te
 
         # 汇总轨迹明细（对齐 scalar 训练日志结构）
+        # DR 启用时同 traj_key 在 K 个 domain 上的指标取均值，保持下游
+        # post_training 看到的 per_trajectory 结构与无 DR 时一致
         per_trajectory = {}
-        for i, key in enumerate(keys):
+        for j, key in enumerate(keys_orig):
+            indices = [j + k * B_orig for k in range(K)]
             per_trajectory[key] = {
-                'lat_rmse': float(details['lat_rmse'][i]),
-                'head_rmse': float(details['head_rmse'][i]),
-                'speed_rmse': float(details['speed_rmse'][i]),
-                'lat_max': float(details['lat_max'][i]),
-                'head_max': float(details['head_max'][i]),
-                'loss_lat': float(details['loss_lat'][i]),
-                'loss_head': float(details['loss_head'][i]),
-                'loss_speed': float(details['loss_speed'][i]),
-                'loss_steer_rate': float(details['loss_steer_rate'][i]),
-                'loss_acc_rate': float(details['loss_acc_rate'][i]),
+                'lat_rmse': float(details['lat_rmse'][indices].mean()),
+                'head_rmse': float(details['head_rmse'][indices].mean()),
+                'speed_rmse': float(details['speed_rmse'][indices].mean()),
+                'lat_max': float(details['lat_max'][indices].max()),
+                'head_max': float(details['head_max'][indices].max()),
+                'loss_lat': float(details['loss_lat'][indices].mean()),
+                'loss_head': float(details['loss_head'][indices].mean()),
+                'loss_speed': float(details['loss_speed'][indices].mean()),
+                'loss_steer_rate': float(
+                    details['loss_steer_rate'][indices].mean()),
+                'loss_acc_rate': float(
+                    details['loss_acc_rate'][indices].mean()),
             }
         avg = {k: float(details[k].mean().item()) for k in details}
 
-        training_history.append({
+        # DR：每 epoch 记 K 个 domain 的具体值 + 各自平均 loss
+        epoch_record = {
             'epoch': epoch + 1,
             'loss': loss_val,
             'grad_norm': grad_norm,
@@ -1431,7 +1569,18 @@ def train_batch(trajectories=None, n_epochs: int = 100, lr: float = 5e-2,
             'dt': dt_epoch,
             'per_trajectory': per_trajectory,
             'avg': avg,
-        })
+        }
+        if dr_config['enable']:
+            per_domain_loss = per_traj.detach().view(K, B_orig).mean(dim=1)
+            epoch_record['dr_domains'] = {
+                f'd{k}': {
+                    'm_t': float(epoch_domains_K[k, 0]),
+                    'Cf': float(epoch_domains_K[k, 1]),
+                    'Cr': float(epoch_domains_K[k, 2]),
+                    'mean_loss': float(per_domain_loss[k]),
+                } for k in range(K)
+            }
+        training_history.append(epoch_record)
 
         if verbose:
             warn = f" [!NaN grads:{int(nan_count)}]" if nan_count > 0 else ""
@@ -1443,8 +1592,19 @@ def train_batch(trajectories=None, n_epochs: int = 100, lr: float = 5e-2,
                   f"dt={dt_epoch:.1f}s B={B}{warn}",
                   flush=True)
 
-            if B > 1:
-                for key in keys:
+            if dr_config['enable']:
+                # 4 个 domain 的样本值 + 各自 mean loss + worst domain 标记
+                per_domain_loss = per_traj.detach().view(K, B_orig).mean(dim=1)
+                worst_k = int(per_domain_loss.argmax())
+                for k in range(K):
+                    mark = ' (worst)' if k == worst_k else ''
+                    print(f"    domain[{k}]: m_t={epoch_domains_K[k,0]:7.1f}kg "
+                          f"Cf={epoch_domains_K[k,1]:7.0f} "
+                          f"Cr={epoch_domains_K[k,2]:7.0f} | "
+                          f"mean_loss={per_domain_loss[k]:.4f}{mark}")
+
+            if B_orig > 1:
+                for key in keys_orig:
                     td = per_trajectory[key]
                     print(f"    {key:30s}: lat={td['lat_rmse']:.4f} "
                           f"head={td['head_rmse']:.4f} spd={td['speed_rmse']:.4f} | "
@@ -1488,14 +1648,14 @@ def train_batch(trajectories=None, n_epochs: int = 100, lr: float = 5e-2,
     elif trajectories is None:
         type_names = list(TRAJECTORY_TYPES)
     else:
-        type_names = keys
+        type_names = keys_orig
 
-    saved_path = save_tuned_config(cfg_out, meta={
+    meta = {
         'final_loss': losses[-1],
         'initial_loss': losses[0],
         'epochs': n_epochs,
         'trajectory_types': type_names,
-        'trajectory_count': B,
+        'trajectory_count': B_orig,
         'speed_bands_kph': SPEED_BANDS_KPH,
         'lr': lr,
         'lr_tables': lr_tables,
@@ -1506,7 +1666,23 @@ def train_batch(trajectories=None, n_epochs: int = 100, lr: float = 5e-2,
         'w_speed': w_speed,
         'total_time_s': round(total_time, 1),
         'batched': True,
-    })
+    }
+    if dr_config['enable']:
+        meta['domain_randomization'] = {
+            'enable': True,
+            'K': K,
+            'mt_range': dr_config['mt_range'],
+            'cfcr_range': dr_config['cfcr_range'],
+            'mt_nominal': dr_nominal[0],
+            'Cf_nominal': dr_nominal[1],
+            'Cr_nominal': dr_nominal[2],
+            'effective_batch': B,
+            'dr_seed': dr_seed,
+            'disable_mlp': True,
+        }
+    elif disable_mlp:
+        meta['disable_mlp'] = True
+    saved_path = save_tuned_config(cfg_out, meta=meta)
     if verbose:
         print(f"参数已保存: {saved_path}")
 
@@ -1514,7 +1690,7 @@ def train_batch(trajectories=None, n_epochs: int = 100, lr: float = 5e-2,
         'losses': losses,
         'training_history': training_history,
         'trajectory_types': type_names,
-        'trajectory_keys': keys,
+        'trajectory_keys': keys_orig,
         'initial_params': {name: p.cpu().tolist() if p.numel() > 1 else p.item()
                            for name, p in initial_params.items()},
         'final_params': {name: p.detach().cpu().tolist() if p.numel() > 1 else p.detach().item()
@@ -1522,6 +1698,8 @@ def train_batch(trajectories=None, n_epochs: int = 100, lr: float = 5e-2,
         'saved_path': saved_path,
         'lat_ctrl': lat_ctrl,
         'lon_ctrl': lon_ctrl,
+        'dr_config': dr_config,
+        'disable_mlp': disable_mlp,
     }
 
 
@@ -1560,7 +1738,27 @@ if __name__ == '__main__':
                         help='训练完不跑 post_training 自动化')
     parser.add_argument('--scalar-validation', action='store_true',
                         help='post_training 的 V1 验证走 scalar per-scene 路径（默认并行 batched）')
+    # 域随机化（CLI 仅作覆盖；未指定时用 cfg['domain_randomization']）
+    parser.add_argument('--dr-enable', action='store_true', default=None,
+                        help='启用域随机化（覆盖 cfg；蕴含 --disable-mlp）')
+    parser.add_argument('--dr-K', type=int, default=None,
+                        help='每 epoch 采样的 domain 数（默认 cfg=4）')
+    parser.add_argument('--dr-mt-range', type=float, default=None,
+                        help='m_t 相对 nominal 的 ±range（默认 cfg=0.10）')
+    parser.add_argument('--dr-cfcr-range', type=float, default=None,
+                        help='Cf/Cr 相对 nominal 的 ±range（默认 cfg=0.20）')
+    parser.add_argument('--dr-seed', type=int, default=None,
+                        help='DR 采样随机种子（None 不固定）')
+    parser.add_argument('--disable-mlp', action='store_true',
+                        help='训练 + 验证全程关 MLP（cfg checkpoint_path 置空）')
     args = parser.parse_args()
+
+    dr_overrides = {
+        'enable': args.dr_enable,
+        'K': args.dr_K,
+        'mt_range': args.dr_mt_range,
+        'cfcr_range': args.dr_cfcr_range,
+    }
 
     result = train_batch(
         trajectories=args.trajectories, n_epochs=args.epochs,
@@ -1569,16 +1767,26 @@ if __name__ == '__main__':
         plant=args.plant or 'truck_trailer', config_path=args.config,
         w_lat=args.w_lat, w_head=args.w_head, w_speed=args.w_speed,
         w_steer_rate=args.w_steer_rate, w_acc_rate=args.w_acc_rate,
-        param_snapshot_interval=args.snapshot_interval)
+        param_snapshot_interval=args.snapshot_interval,
+        dr_overrides=dr_overrides,
+        disable_mlp=args.disable_mlp,
+        dr_seed=args.dr_seed)
 
     print(f"\n最终 loss: {result['losses'][-1]:.6f}")
     print(f"保存路径: {result['saved_path']}")
+
+    # post_training 验证：DR 训练或显式 disable_mlp 时，验证全程关 MLP
+    validation_disable_mlp = bool(result.get('disable_mlp', False)
+                                   or result.get('dr_config', {}).get('enable',
+                                                                      False))
 
     if not args.no_post_training:
         # post_training 默认走 batched V1（49 场景并行 hard_mode），~6 min；
         # --scalar-validation 退回 scalar per-scene 路径 ~10 min（回归调试用）
         cfg = load_config(args.config)
         apply_plant_override(cfg, 'truck_trailer')
+        if validation_disable_mlp:
+            apply_runtime_overrides(cfg, disable_mlp=True)
         scalar_params = _build_scalar_params_for_post_training(
             result['lat_ctrl'], result['lon_ctrl'], cfg)
         result['params'] = scalar_params  # post_training 约定字段
@@ -1590,8 +1798,11 @@ if __name__ == '__main__':
             'plant': 'truck_trailer',
             'w_lat': args.w_lat, 'w_head': args.w_head, 'w_speed': args.w_speed,
             'batched': True,
+            'disable_mlp': validation_disable_mlp,
+            'domain_randomization': result.get('dr_config'),
         }
         run_post_training(result, hyperparams, plant='truck_trailer',
                           trajectory_types=args.trajectories,
                           use_batched=not args.scalar_validation,
-                          baseline_config_path=args.config)
+                          baseline_config_path=args.config,
+                          disable_mlp=validation_disable_mlp)

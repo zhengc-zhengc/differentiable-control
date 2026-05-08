@@ -67,6 +67,29 @@ class TruckTrailerNominalDynamics(nn.Module):
         self.register_buffer("_eps", torch.tensor(1.0e-8))
         self.no_trailer_mass_threshold_kg = NO_TRAILER_MASS_THRESHOLD_KG
 
+        # 域随机化用的 nominal 备份（不参与运算，仅供 set_domain 联动 Iz_t）
+        self.register_buffer("_m_t_nominal", torch.tensor(float(params["m_t"])))
+        self.register_buffer("_Iz_t_nominal", torch.tensor(float(params["Iz_t"])))
+
+    def set_domain(self, m_t: torch.Tensor, Cf: torch.Tensor, Cr: torch.Tensor) -> None:
+        """运行时注入域随机化参数。
+
+        m_t / Cf / Cr 必须同 shape（0-d 或 [B]）。Iz_t 由 m_t 与 nominal
+        值线性联动算出：Iz_t = Iz_t_nominal * (m_t / m_t_nominal)，避免
+        “轻车却惯量大”这种不物理 domain。
+
+        所有底层动力学算式（轮胎力、横摆、阻力）天然 element-wise，[B]
+        参数会自动广播到 state shape [B, state_dim]。
+        """
+        m_t = torch.as_tensor(m_t, dtype=self.m_t.dtype, device=self.m_t.device)
+        Cf = torch.as_tensor(Cf, dtype=self.Cf.dtype, device=self.Cf.device)
+        Cr = torch.as_tensor(Cr, dtype=self.Cr.dtype, device=self.Cr.device)
+        Iz_t = self._Iz_t_nominal * (m_t / self._m_t_nominal)
+        self.m_t = m_t
+        self.Iz_t = Iz_t
+        self.Cf = Cf
+        self.Cr = Cr
+
     def _signed_safe_velocity(self, velocity: torch.Tensor) -> torch.Tensor:
         sign = torch.where(velocity >= 0.0, 1.0, -1.0).to(dtype=velocity.dtype, device=velocity.device)
         return sign * torch.clamp(torch.abs(velocity), min=float(self.min_speed_mps.item()))

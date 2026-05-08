@@ -24,7 +24,7 @@ import yaml
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from config import apply_plant_override, load_config
+from config import apply_plant_override, apply_runtime_overrides, load_config
 from model.trajectory import generate_park_route  # noqa: F401
 from optim.post_training import _build_eval_scenarios, _calc_metrics
 from optim.train_batch import run_simulation_batch
@@ -162,11 +162,9 @@ def _plot_comparison_grid_custom(all_a, all_b, output_dir, plot_type, filename,
 
 
 def _apply_config_overrides(cfg: dict, trailer_mass_kg, disable_mlp: bool):
-    """允许命令行覆盖挂车质量和 MLP 开关（基于已加载 cfg，修改 in place）。"""
-    if trailer_mass_kg is not None:
-        cfg['truck_trailer_vehicle']['default_trailer_mass_kg'] = float(trailer_mass_kg)
-    if disable_mlp:
-        cfg['truck_trailer_vehicle']['checkpoint_path'] = ''
+    """命令行覆盖挂车质量和 MLP 开关。复用 config.apply_runtime_overrides。"""
+    apply_runtime_overrides(cfg, trailer_mass_kg=trailer_mass_kg,
+                            disable_mlp=disable_mlp)
 
 
 def run_ab_validation(cfg_a: dict, cfg_b: dict, label_a: str, label_b: str,

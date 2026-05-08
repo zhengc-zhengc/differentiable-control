@@ -27,6 +27,22 @@ def apply_plant_override(cfg: dict, plant: str) -> None:
             'configs/checkpoints/best_error_model_v2.pth')
 
 
+def apply_runtime_overrides(cfg: dict,
+                             trailer_mass_kg: float | None = None,
+                             disable_mlp: bool = False) -> None:
+    """运行时覆盖 plant 配置（in-place 修改 cfg）。
+
+    - trailer_mass_kg: 覆盖 truck_trailer_vehicle.default_trailer_mass_kg
+    - disable_mlp: 把 truck_trailer_vehicle.checkpoint_path 置空，使
+      vehicle factory 跳过 MLP 残差加载，等价于纯机理 base 模式
+    """
+    if trailer_mass_kg is not None and 'truck_trailer_vehicle' in cfg:
+        cfg['truck_trailer_vehicle']['default_trailer_mass_kg'] = float(
+            trailer_mass_kg)
+    if disable_mlp and 'truck_trailer_vehicle' in cfg:
+        cfg['truck_trailer_vehicle']['checkpoint_path'] = ''
+
+
 def table_from_config(entries: list[list[float]]) -> tuple[torch.Tensor, torch.Tensor]:
     """将 YAML 格式的表 [[idx, val], ...] 转为 (x_tensor, y_tensor)。
     返回的 y_tensor 可作为 nn.Parameter 进行梯度优化。

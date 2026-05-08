@@ -97,6 +97,16 @@ truck_trailer_vehicle:
 simulation:
   dt: 0.02
 
+# 域随机化（仅 train_batch.py + truck_trailer plant 生效）
+# 启用后训练时为每个 epoch 采样 K 组车辆物理参数 (m_t, Cf, Cr)，扩展 batch
+# 维度到 48*K，让控制器看到一族 plant 上的状态轨迹。Iz_t 由 m_t 线性联动。
+# 启用 DR 强制蕴含 disable_mlp（不处理 MLP 残差与 base 参数偏离的耦合）。
+domain_randomization:
+  enable: false       # 总开关，默认 false 走原训练路径不变
+  K: 4                # 每个 epoch 采样的 domain 数（B 从 48 扩到 48*K）
+  mt_range: 0.10      # m_t 相对 nominal 的均匀采样 ±range（0.10 = ±10%）
+  cfcr_range: 0.20    # Cf/Cr 相对 nominal 的均匀采样 ±range（0.20 = ±20%）
+
 lat_truck:
   kLh: 0.0
   rate_limit_fb: 120.0
