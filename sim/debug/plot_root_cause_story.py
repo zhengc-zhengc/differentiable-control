@@ -84,9 +84,10 @@ def main():
                            'mlp_instability')
     os.makedirs(out_dir, exist_ok=True)
 
-    print('--- 加载 MLP ---')
-    mlp_0507, fm_0507, fs_0507, clip_0507 = get_mlp(
-        'best_truck_trailer_error_model_0507.pth')
+    test_ckpt_name = os.environ.get(
+        'TEST_CKPT_NAME', 'best_truck_trailer_error_model_0507.pth')
+    print(f'--- 加载 MLP（测试 ckpt = {test_ckpt_name}）---')
+    mlp_0507, fm_0507, fs_0507, clip_0507 = get_mlp(test_ckpt_name)
     mlp_def, fm_def, fs_def, clip_def = get_mlp(
         'best_truck_trailer_error_model.pth')
     mlp_0506, fm_0506, fs_0506, clip_0506 = get_mlp(
@@ -105,9 +106,9 @@ def main():
     scen = 'lane_change_5kph'
     sd = os.path.join(base, scen)
     no = dict(np.load(os.path.join(sd, 'no_mlp.npz'), allow_pickle=True))
-    full = dict(np.load(os.path.join(sd, 'mlp_0507_full.npz'),
+    full = dict(np.load(os.path.join(sd, 'mlp_test_full.npz'),
                         allow_pickle=True))
-    zero_vel = dict(np.load(os.path.join(sd, 'mlp_0507_zero_vel_t.npz'),
+    zero_vel = dict(np.load(os.path.join(sd, 'mlp_test_zero_vel_t.npz'),
                             allow_pickle=True))
     n = min(len(no['hist_t']), len(full['hist_t']))
 
@@ -125,8 +126,9 @@ def main():
             label='0506 MLP（同架构上一版）', alpha=0.8)
     ax.plot(vx_kph, raw_def[:, 1], '-', linewidth=2.0, color='#377eb8',
             label='默认 MLP（64 隐层、上线版本）')
-    ax.fill_between(vx_kph, -0.539, 0.539, alpha=0.06, color='red',
-                    label='0507 输出 clip 区间 ±0.539 m/s')
+    clip_vy = float(clip_0507[1])
+    ax.fill_between(vx_kph, -clip_vy, clip_vy, alpha=0.06, color='red',
+                    label=f'0507 输出 clip 区间 ±{clip_vy:.3f} m/s')
     ax.axhline(0, color='k', linewidth=0.6)
     for vk in [5, 25]:
         ax.axvline(vk, color='gray', linestyle=':', linewidth=0.6,
@@ -242,8 +244,8 @@ def main():
                  'clothoid_left_5kph']
     scen_labels = ['直行 5kph', '圆周 25kph (R=80)', '变道 5kph',
                    'clothoid 左转 5kph']
-    variants = ['no_mlp', 'mlp_default', 'mlp_0507_full',
-                'mlp_0507_zero_vel_t']
+    variants = ['no_mlp', 'mlp_default', 'mlp_test_full',
+                'mlp_test_zero_vel_t']
     var_labels = ['无 MLP（纯 RK4）', '默认 MLP', '0507 MLP 完整',
                   '0507 MLP 但牵引车 v 残差置零']
     var_colors = ['#000000', '#377eb8', '#e41a1c', '#4daf4a']

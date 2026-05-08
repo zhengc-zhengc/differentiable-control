@@ -29,6 +29,11 @@ sys.path.insert(0, SIM_DIR)
 from config import load_config, apply_plant_override
 from model.vehicle_factory import create_vehicle
 
+# 测试 MLP 标签（由 TEST_LABEL / TEST_CKPT_NAME 环境变量指定，兜底 0507）
+TEST_LABEL = os.environ.get('TEST_LABEL', '0507')
+TEST_CKPT_NAME = os.environ.get(
+    'TEST_CKPT_NAME', 'best_truck_trailer_error_model_0507.pth')
+
 
 # ===== MLP 加载 =====
 def load_mlp(checkpoint_name):
@@ -103,7 +108,7 @@ def plot_1d_sweeps(mlps_dict, out_dir):
 
     out_dim_names = ['vx_t (m/s)', 'vy_t (m/s)', 'r_t (rad/s)']
     out_dim_idx = [0, 1, 2]
-    colors = {'0507': '#e41a1c', '0506': '#984ea3', '默认': '#377eb8'}
+    colors = {TEST_LABEL: '#e41a1c', '0506': '#984ea3', '默认': '#377eb8'}
 
     for row, (dim_name, values, xlabel, sub) in enumerate(sweeps):
         # 准备 baseline：vy/r/steer/torque sweep 时把 vx 设为 5 kph
@@ -179,7 +184,7 @@ def plot_2d_with_overlay(mlps_dict, scenarios_data, out_dir):
                  '(其余特征 = 训练均值/默认；overlay = 4 个闭环场景实际走过的输入点)',
                  fontsize=14, fontweight='bold')
 
-    mlp_tags = ['默认', '0506', '0507']
+    mlp_tags = ['默认', '0506', TEST_LABEL]
 
     for col, tag in enumerate(mlp_tags):
         mlp, fm, fs, clip = mlps_dict[tag]
@@ -257,7 +262,7 @@ def plot_2d_vy_r(mlps_dict, scenarios_data, out_dir):
                  '(vx_t = 5 kph 固定；overlay = 闭环里实际走过的 (vy_t, r_t))',
                  fontsize=14, fontweight='bold')
 
-    mlp_tags = ['默认', '0506', '0507']
+    mlp_tags = ['默认', '0506', TEST_LABEL]
 
     for col, tag in enumerate(mlp_tags):
         mlp, fm, fs, clip = mlps_dict[tag]
@@ -310,7 +315,9 @@ def plot_2d_vy_r(mlps_dict, scenarios_data, out_dir):
 
 # ===== 闭环输入散点 + 输出量级时序 =====
 def plot_input_to_output_correlation(scenarios_data, out_dir,
-                                      mlp_tag='0507'):
+                                      mlp_tag=None):
+    if mlp_tag is None:
+        mlp_tag = TEST_LABEL
     """对每个场景画 (输入特征 vs 输出量级) 散点 + 输出时序的"加权"图。"""
     fig, axes = plt.subplots(4, 3, figsize=(18, 16))
     fig.suptitle(f'{mlp_tag} MLP 闭环：实际输入 vs MLP 输出关系（4 个场景）',
@@ -380,9 +387,9 @@ def main():
     out_dir = os.path.join(SIM_DIR, 'results', 'diagnostic',
                            'mlp_instability')
 
-    print('--- 加载 3 个 MLP ---')
+    print(f'--- 加载 3 个 MLP（测试 = {TEST_LABEL}）---')
     mlps_dict = {
-        '0507': load_mlp('best_truck_trailer_error_model_0507.pth'),
+        TEST_LABEL: load_mlp(TEST_CKPT_NAME),
         '0506': load_mlp('best_truck_trailer_error_model_0506.pth'),
         '默认': load_mlp('best_truck_trailer_error_model.pth'),
     }
@@ -392,7 +399,7 @@ def main():
     scenarios_data = {}
     for s in ['straight_5kph', 'circle_25kph_R80', 'lane_change_5kph',
               'clothoid_left_5kph']:
-        path = os.path.join(base, s, 'mlp_0507_full.npz')
+        path = os.path.join(base, s, 'mlp_test_full.npz')
         if os.path.exists(path):
             scenarios_data[s] = dict(np.load(path, allow_pickle=True))
 

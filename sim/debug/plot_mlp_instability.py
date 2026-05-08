@@ -16,11 +16,20 @@ import matplotlib.pyplot as plt
 plt.rcParams['font.sans-serif'] = ['Microsoft YaHei', 'SimHei', 'DejaVu Sans']
 plt.rcParams['axes.unicode_minus'] = False
 
-# 0507 MLP 的特征归一化统计
-FEATURE_MEAN = np.array([0.0, 0.0, 5.115, 0.006, 0.006, 5.115, 0.006, 0.006,
-                         0.0, 0.0, 0.0, 1.0, 0.294, 1485.873])
-FEATURE_SCALE = np.array([1.0, 1.0, 2.9812, 0.2363, 0.0292, 2.9812, 0.2363,
-                          0.0292, 1.0, 1.0, 1.0, 1.0, 1.0082, 1933.2778])
+# 测试 MLP 的特征归一化统计：从 checkpoint 读，由 TEST_CKPT_NAME 环境变量指定
+def _load_feature_stats():
+    import torch
+    name = os.environ.get('TEST_CKPT_NAME',
+                          'best_truck_trailer_error_model_0507.pth')
+    sim_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    ckpt = torch.load(os.path.join(sim_dir, 'configs', 'checkpoints', name),
+                      map_location='cpu', weights_only=False)
+    fm = np.array(ckpt['feature_mean']).flatten()
+    fs = np.array(ckpt['feature_scale']).flatten()
+    return fm, fs
+
+
+FEATURE_MEAN, FEATURE_SCALE = _load_feature_stats()
 FEATURE_NAMES = ['trailer_mass', 'has_trailer', 'vx_t', 'vy_t', 'r_t',
                  'vx_s', 'vy_s', 'r_s', 'rel_x', 'rel_y',
                  'sin_rel_yaw', 'cos_rel_yaw', 'steer_sw', 'rear_torque']
@@ -29,29 +38,29 @@ OUTPUT_NAMES = ['vx_t (m/s)', 'vy_t (m/s)', 'r_t (rad/s)',
                 'vx_s', 'vy_s', 'r_s',
                 'rel_x', 'rel_y', 'rel_yaw']
 
-VARIANTS_FULL = ['no_mlp', 'mlp_default', 'mlp_0507_full',
-                 'mlp_0507_zero_vel_t', 'mlp_0507_zero_pose_s',
-                 'mlp_0507_only_yaw_t', 'mlp_0507_only_vx_t',
-                 'mlp_0507_only_vy_t']
+VARIANTS_FULL = ['no_mlp', 'mlp_default', 'mlp_test_full',
+                 'mlp_test_zero_vel_t', 'mlp_test_zero_pose_s',
+                 'mlp_test_only_yaw_t', 'mlp_test_only_vx_t',
+                 'mlp_test_only_vy_t']
 VARIANT_LABELS = {
     'no_mlp': '无 MLP（纯 RK4）',
     'mlp_default': '默认 MLP (64 隐层)',
-    'mlp_0507_full': '0507 MLP 完整',
-    'mlp_0507_zero_vel_t': '0507 但牵引车 v 残差置零',
-    'mlp_0507_zero_pose_s': '0507 但相对位姿残差置零',
-    'mlp_0507_only_yaw_t': '0507 仅留 r_t',
-    'mlp_0507_only_vx_t': '0507 仅留 vx_t',
-    'mlp_0507_only_vy_t': '0507 仅留 vy_t',
+    'mlp_test_full': '0507 MLP 完整',
+    'mlp_test_zero_vel_t': '0507 但牵引车 v 残差置零',
+    'mlp_test_zero_pose_s': '0507 但相对位姿残差置零',
+    'mlp_test_only_yaw_t': '0507 仅留 r_t',
+    'mlp_test_only_vx_t': '0507 仅留 vx_t',
+    'mlp_test_only_vy_t': '0507 仅留 vy_t',
 }
 COLORS = {
     'no_mlp': '#000000',
     'mlp_default': '#377eb8',
-    'mlp_0507_full': '#e41a1c',
-    'mlp_0507_zero_vel_t': '#4daf4a',
-    'mlp_0507_zero_pose_s': '#984ea3',
-    'mlp_0507_only_yaw_t': '#ff7f00',
-    'mlp_0507_only_vx_t': '#a65628',
-    'mlp_0507_only_vy_t': '#f781bf',
+    'mlp_test_full': '#e41a1c',
+    'mlp_test_zero_vel_t': '#4daf4a',
+    'mlp_test_zero_pose_s': '#984ea3',
+    'mlp_test_only_yaw_t': '#ff7f00',
+    'mlp_test_only_vx_t': '#a65628',
+    'mlp_test_only_vy_t': '#f781bf',
 }
 
 
@@ -75,15 +84,15 @@ def plot_scenario_panel(scenario_key, scenario_label, data, out_dir):
     gs = fig.add_gridspec(3, 3, hspace=0.42, wspace=0.30)
 
     no = data['no_mlp']
-    full = data['mlp_0507_full']
-    zero_vel = data['mlp_0507_zero_vel_t']
+    full = data['mlp_test_full']
+    zero_vel = data['mlp_test_zero_vel_t']
 
     # (1,1) 轨迹对比
     ax = fig.add_subplot(gs[0, 0])
     ax.plot(no['ref_traj_x'], no['ref_traj_y'], 'k--',
             linewidth=1.0, alpha=0.6, label='参考轨迹')
-    for v in ['no_mlp', 'mlp_default', 'mlp_0507_full',
-              'mlp_0507_zero_vel_t']:
+    for v in ['no_mlp', 'mlp_default', 'mlp_test_full',
+              'mlp_test_zero_vel_t']:
         if v not in data:
             continue
         d = data[v]
@@ -98,7 +107,7 @@ def plot_scenario_panel(scenario_key, scenario_label, data, out_dir):
     ax = fig.add_subplot(gs[0, 1])
     n = min(len(no['hist_t']), len(full['hist_t']))
     t = no['hist_t'][:n]
-    for v in ['mlp_default', 'mlp_0507_full', 'mlp_0507_zero_vel_t']:
+    for v in ['mlp_default', 'mlp_test_full', 'mlp_test_zero_vel_t']:
         if v not in data:
             continue
         d = data[v]
@@ -115,8 +124,8 @@ def plot_scenario_panel(scenario_key, scenario_label, data, out_dir):
 
     # (1,3) 横向跟踪误差时序
     ax = fig.add_subplot(gs[0, 2])
-    for v in ['no_mlp', 'mlp_default', 'mlp_0507_full',
-              'mlp_0507_zero_vel_t']:
+    for v in ['no_mlp', 'mlp_default', 'mlp_test_full',
+              'mlp_test_zero_vel_t']:
         if v not in data:
             continue
         d = data[v]
@@ -135,7 +144,7 @@ def plot_scenario_panel(scenario_key, scenario_label, data, out_dir):
     for i, comp in enumerate([0, 1, 2]):
         ax = fig.add_subplot(gs[1, i])
         ax.plot(t_mlp, out_full[:, comp], '-', linewidth=0.8,
-                color=COLORS['mlp_0507_full'], alpha=0.85, label='0507')
+                color=COLORS['mlp_test_full'], alpha=0.85, label='0507')
         if 'mlp_default' in data:
             d = data['mlp_default']
             out_def = d['mlp_output_clipped']
@@ -182,7 +191,7 @@ def plot_scenario_panel(scenario_key, scenario_label, data, out_dir):
 
     # (3,2) 控制器命令对比
     ax = fig.add_subplot(gs[2, 1])
-    for v in ['no_mlp', 'mlp_0507_full', 'mlp_0507_zero_vel_t']:
+    for v in ['no_mlp', 'mlp_test_full', 'mlp_test_zero_vel_t']:
         if v not in data:
             continue
         d = data[v]
@@ -226,7 +235,7 @@ def plot_early_steps(scenario_key, scenario_label, data, out_dir,
     fig.suptitle(f'早期失控时序（前 {n_steps} 步） — {scenario_label}',
                  fontsize=14, fontweight='bold')
 
-    full = data['mlp_0507_full']
+    full = data['mlp_test_full']
     no = data['no_mlp']
 
     n = min(n_steps, full['mlp_output_clipped'].shape[0],
@@ -346,7 +355,7 @@ def plot_cross_scenario_summary(all_data, out_dir):
     for ci, (comp_idx, comp_name) in enumerate(components):
         rmses = []
         for s in scenarios:
-            d = all_data[s].get('mlp_0507_full')
+            d = all_data[s].get('mlp_test_full')
             if d is None:
                 rmses.append(0); continue
             out = d['mlp_output_clipped']
@@ -384,6 +393,11 @@ def plot_mlp_static_test(out_dir):
 
     cfg = load_config('configs/train_with_0507.yaml')
     apply_plant_override(cfg, 'truck_trailer')
+    # 测试 ckpt 由环境变量指定（兜底 0507）
+    test_ckpt_name = os.environ.get(
+        'TEST_CKPT_NAME', 'best_truck_trailer_error_model_0507.pth')
+    cfg['truck_trailer_vehicle']['checkpoint_path'] = (
+        f'configs/checkpoints/{test_ckpt_name}')
     car = create_vehicle(cfg, x=0, y=0, yaw=0, v=0, dt=0.02,
                          differentiable=False)
     mlp = car._mlp

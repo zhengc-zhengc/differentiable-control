@@ -175,8 +175,12 @@ def make_scenarios(filter_keys=None):
 
 
 # ===== 配置加载 =====
+# 由 main() 设置：被测的"对象 MLP"checkpoint 路径（相对 sim/）
+_TEST_CKPT_PATH = 'configs/checkpoints/best_truck_trailer_error_model_0507.pth'
+
+
 def load_cfg_for_variant(variant):
-    """variant: 'no_mlp' | 'mlp_default' | 'mlp_0507' """
+    """variant: 'no_mlp' | 'mlp_default' | 'mlp_test' """
     if variant == 'no_mlp':
         cfg = load_config('configs/train_with_0507.yaml')
         apply_plant_override(cfg, 'truck_trailer')
@@ -184,9 +188,10 @@ def load_cfg_for_variant(variant):
     elif variant == 'mlp_default':
         cfg = load_config()
         apply_plant_override(cfg, 'truck_trailer')
-    elif variant == 'mlp_0507':
+    elif variant == 'mlp_test':
         cfg = load_config('configs/train_with_0507.yaml')
         apply_plant_override(cfg, 'truck_trailer')
+        cfg['truck_trailer_vehicle']['checkpoint_path'] = _TEST_CKPT_PATH
     else:
         raise ValueError(variant)
     return cfg
@@ -250,25 +255,25 @@ def run_scenario(scenario_key, label, traj, init_v, output_dir):
     variants = [
         ('no_mlp', None),
         ('mlp_default', None),
-        ('mlp_0507_full', None),  # 0507 完整
-        ('mlp_0507_zero_vel_t',  # 牵引车速度残差 (idx 0,1,2) 置零
+        ('mlp_test_full', None),  # 被测 MLP 完整
+        ('mlp_test_zero_vel_t',  # 牵引车速度残差 (idx 0,1,2) 置零
             np.array([0, 0, 0, 1, 1, 1, 1, 1, 1])),
-        ('mlp_0507_zero_pose_s',  # 相对位姿残差 (idx 6,7,8) 置零
+        ('mlp_test_zero_pose_s',  # 相对位姿残差 (idx 6,7,8) 置零
             np.array([1, 1, 1, 1, 1, 1, 0, 0, 0])),
-        ('mlp_0507_only_yaw_t',  # 仅留牵引车 yaw rate 残差 (idx 2)
+        ('mlp_test_only_yaw_t',  # 仅留牵引车 yaw rate 残差 (idx 2)
             np.array([0, 0, 1, 0, 0, 0, 0, 0, 0])),
-        ('mlp_0507_only_vx_t',  # 仅留牵引车 vx 残差 (idx 0)
+        ('mlp_test_only_vx_t',  # 仅留牵引车 vx 残差 (idx 0)
             np.array([1, 0, 0, 0, 0, 0, 0, 0, 0])),
-        ('mlp_0507_only_vy_t',  # 仅留牵引车 vy 残差 (idx 1)
+        ('mlp_test_only_vy_t',  # 仅留牵引车 vy 残差 (idx 1)
             np.array([0, 1, 0, 0, 0, 0, 0, 0, 0])),
     ]
 
     all_results = {}
     for vname, mask in variants:
-        # 0507 系列变体都用 train_with_0507.yaml + 适当的 mask
-        if vname.startswith('mlp_0507'):
+        # mlp_test_* 系列都用同一个被测 ckpt + 适当的 mask
+        if vname.startswith('mlp_test'):
             arr = run_one(scenario_key, label, traj, init_v,
-                          'mlp_0507', mask=mask)
+                          'mlp_test', mask=mask)
         else:
             arr = run_one(scenario_key, label, traj, init_v, vname,
                           mask=mask)
@@ -284,15 +289,24 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--scenarios', nargs='+', default=None,
                         help='过滤场景：lane_change_5kph clothoid_left_5kph 等')
+    parser.add_argument('--subdir', default='0507',
+                        help='输出子目录名（在 results/diagnostic/mlp_instability/ 下）')
+    parser.add_argument('--test-ckpt',
+                        default='configs/checkpoints/best_truck_trailer_error_model_0507.pth',
+                        help='被测 MLP checkpoint 路径（相对 sim/）')
     parser.add_argument('--out', default=None,
-                        help='输出目录')
+                        help='完整输出目录（覆盖 --subdir）')
     args = parser.parse_args()
+
+    global _TEST_CKPT_PATH
+    _TEST_CKPT_PATH = args.test_ckpt
 
     output_dir = args.out or os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-        'results', 'diagnostic', 'mlp_instability')
+        'results', 'diagnostic', 'mlp_instability', args.subdir)
     os.makedirs(output_dir, exist_ok=True)
     print(f"产物目录：{output_dir}")
+    print(f"被测 MLP：{_TEST_CKPT_PATH}")
 
     scenarios = make_scenarios(filter_keys=args.scenarios)
     for key, label, traj, v0 in scenarios:
