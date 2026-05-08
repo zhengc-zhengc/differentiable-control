@@ -80,3 +80,77 @@ class TestResolveDitherConfig:
         assert out['enable'] is True
         assert out['sigma_torque_nm'] == 50.0
         assert out['sigma_delta_rad'] == 0.001
+
+
+class TestRunSimulationBatchNoise:
+    def test_disabled_path_unchanged(self):
+        """noise/dither 关闭 + 同 cfg 路径下，两次仿真输出逐元素相等。"""
+        cfg = _truck_cfg()
+        trajs = _short_trajs()
+        out1 = run_simulation_batch(trajs, cfg=cfg, hard_mode=True,
+                                    noise_params=None, dither_params=None)
+        out2 = run_simulation_batch(trajs, cfg=cfg, hard_mode=True,
+                                    noise_params=None, dither_params=None)
+        assert torch.equal(out1['x'], out2['x'])
+        assert torch.equal(out1['y'], out2['y'])
+        assert torch.equal(out1['steer'], out2['steer'])
+
+    def test_noise_changes_output(self):
+        """noise enable + 不同 seed → 输出应有差异。"""
+        cfg = _truck_cfg()
+        trajs = _short_trajs()
+        baseline = run_simulation_batch(trajs, cfg=cfg, hard_mode=False,
+                                        noise_params=None)
+        np = {'enable': True, 'sigma_x_m': 0.05, 'sigma_y_m': 0.05,
+              'sigma_yaw_deg': 0.5, 'sigma_speed_kph': 0.5,
+              'sigma_yawrate_radps': 0.01, 'clip_sigmas': 3.0,
+              'generator': torch.Generator().manual_seed(11)}
+        noisy = run_simulation_batch(trajs, cfg=cfg, hard_mode=False,
+                                     noise_params=np)
+        assert not torch.allclose(baseline['x'], noisy['x'], atol=1e-6)
+
+    def test_noise_seeded_reproducible(self):
+        """同 seed 噪声两次仿真完全一致。"""
+        cfg = _truck_cfg()
+        trajs = _short_trajs()
+        def _np(seed):
+            return {'enable': True, 'sigma_x_m': 0.05, 'sigma_y_m': 0.05,
+                    'sigma_yaw_deg': 0.5, 'sigma_speed_kph': 0.5,
+                    'sigma_yawrate_radps': 0.01, 'clip_sigmas': 3.0,
+                    'generator': torch.Generator().manual_seed(seed)}
+        a = run_simulation_batch(trajs, cfg=cfg, hard_mode=False,
+                                 noise_params=_np(42))
+        b = run_simulation_batch(trajs, cfg=cfg, hard_mode=False,
+                                 noise_params=_np(42))
+        assert torch.equal(a['x'], b['x'])
+        assert torch.equal(a['steer'], b['steer'])
+
+    def test_dither_changes_plant_state(self):
+        """dither 注入会让 plant 状态偏离基线（vehicle.x 不一样）。
+        history 的 steer/torque 是控制器原始输出——但因为 plant 反馈不同，
+        下一步控制器输入也变，故 steer 序列也会变。这里只断言 plant 状态偏离。"""
+        cfg = _truck_cfg()
+        trajs = _short_trajs()
+        baseline = run_simulation_batch(trajs, cfg=cfg, hard_mode=False,
+                                        noise_params=None, dither_params=None)
+        dp = {'enable': True, 'sigma_delta_rad': 0.005,
+              'sigma_torque_nm': 50.0, 'clip_sigmas': 3.0,
+              'generator': torch.Generator().manual_seed(7)}
+        out = run_simulation_batch(trajs, cfg=cfg, hard_mode=False,
+                                   noise_params=None, dither_params=dp)
+        assert not torch.allclose(baseline['x'], out['x'], atol=1e-6)
+
+    def test_hard_mode_mutes_noise(self):
+        """hard_mode=True 时即使传入 noise_params 也强制 mute，输出与无噪一致。"""
+        cfg = _truck_cfg()
+        trajs = _short_trajs()
+        clean = run_simulation_batch(trajs, cfg=cfg, hard_mode=True,
+                                     noise_params=None)
+        np_aggressive = {'enable': True, 'sigma_x_m': 0.5, 'sigma_y_m': 0.5,
+                         'sigma_yaw_deg': 5.0, 'sigma_speed_kph': 5.0,
+                         'sigma_yawrate_radps': 0.5, 'clip_sigmas': 3.0,
+                         'generator': torch.Generator().manual_seed(99)}
+        muted = run_simulation_batch(trajs, cfg=cfg, hard_mode=True,
+                                     noise_params=np_aggressive)
+        assert torch.equal(clean['x'], muted['x'])
+        assert torch.equal(clean['steer'], muted['steer'])

@@ -20,7 +20,7 @@ import torch.nn as nn
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from common import normalize_angle  # 支持 [B] tensor
+from common import normalize_angle, sample_clipped_normal  # 支持 [B] tensor
 from config import (apply_plant_override, apply_runtime_overrides, load_config,
                     runtime_info, save_tuned_config, table_from_config)
 from controller.lat_truck import LatControllerTruck  # 复用参数导出
@@ -1027,18 +1027,29 @@ def run_simulation_batch(trajectories: list, cfg: dict = None,
                          tbptt_k: int = 0,
                          hard_mode: bool = False,
                          trailer_mass_kg=None,
-                         domain_params: dict | None = None) -> dict:
+                         domain_params: dict | None = None,
+                         noise_params: dict | None = None,
+                         dither_params: dict | None = None) -> dict:
     """B 条轨迹同步推进 50Hz 闭环。支持 truck_trailer / hybrid_dynamic plant。
 
     Args:
         hard_mode: True 时控制器走硬限幅路径（与 V1 scalar run_simulation 等价），
                    整个主循环自动套 torch.no_grad() 省显存/跳过 autograd。
                    False 时走 smooth 近似（训练用，需要梯度回传）。
+                   **hard_mode=True 时即使传入 noise_params/dither_params 也强制
+                   mute**——验证路径只看真值。
         trailer_mass_kg: truck_trailer 专用，标量或 [B] tensor 覆盖默认挂车质量；
                          hybrid_dynamic 下此参数被忽略。
         domain_params: 可选 dict {'m_t': [B], 'Cf': [B], 'Cr': [B]}。
                        提供时在创建 vehicle 后调 vehicle.set_domain 注入域参数。
                        仅 truck_trailer plant 生效，其他 plant 必须为 None。
+        noise_params: 可选 dict，含 enable / sigma_{x_m,y_m,yaw_deg,speed_kph,
+                       yawrate_radps} / clip_sigmas / generator。enable=False 或
+                       None 时不注入；开启时在控制器读取 vehicle 状态之前往真值上加
+                       独立高斯。
+        dither_params: 可选 dict，含 enable / sigma_{delta_rad,torque_nm} /
+                        clip_sigmas / generator。开启时在 vehicle.step 收到指令之前
+                        加高斯抖动；history 仍记录控制器原始输出（不含 dither）。
 
     返回 dict：每项 [B, T_max]，另含 'valid_mask' [B, T_max] 和控制器句柄
     供上层做 loss / 导出用。
@@ -1059,7 +1070,8 @@ def run_simulation_batch(trajectories: list, cfg: dict = None,
     with grad_ctx:
         return _run_sim_batch_inner(
             trajectories, cfg, lat_ctrl, lon_ctrl, tbptt_k,
-            hard_mode, trailer_mass_kg, domain_params)
+            hard_mode, trailer_mass_kg, domain_params,
+            noise_params, dither_params)
 
 
 class _nullctx:
@@ -1068,7 +1080,8 @@ class _nullctx:
 
 
 def _run_sim_batch_inner(trajectories, cfg, lat_ctrl, lon_ctrl, tbptt_k,
-                         hard_mode, trailer_mass_override, domain_params=None):
+                         hard_mode, trailer_mass_override, domain_params=None,
+                         noise_params=None, dither_params=None):
     bt = BatchedTrajectoryTable(trajectories)
     B, T_max = bt.B, bt.T_max
     dt = cfg['simulation']['dt']
@@ -1127,6 +1140,25 @@ def _run_sim_batch_inner(trajectories, cfg, lat_ctrl, lon_ctrl, tbptt_k,
     prev_steer = torch.zeros(B)
     v_prev = bt.init_v.clone()
 
+    # hard_mode 强制 mute——验证路径只看真值
+    noise_active = (not hard_mode and noise_params is not None
+                    and noise_params.get('enable', False))
+    dither_active = (not hard_mode and dither_params is not None
+                     and dither_params.get('enable', False))
+    if noise_active:
+        n_gen = noise_params.get('generator')
+        n_sx = float(noise_params['sigma_x_m'])
+        n_sy = float(noise_params['sigma_y_m'])
+        n_syaw = float(noise_params['sigma_yaw_deg'])
+        n_sv = float(noise_params['sigma_speed_kph'])
+        n_syr = float(noise_params['sigma_yawrate_radps'])
+        n_clip = float(noise_params.get('clip_sigmas', 3.0))
+    if dither_active:
+        d_gen = dither_params.get('generator')
+        d_sd = float(dither_params['sigma_delta_rad'])
+        d_st = float(dither_params['sigma_torque_nm'])
+        d_clip = float(dither_params.get('clip_sigmas', 3.0))
+
     for step in range(T_max):
         t_now = torch.full((B,), step * dt)
 
@@ -1140,16 +1172,31 @@ def _run_sim_batch_inner(trajectories, cfg, lat_ctrl, lon_ctrl, tbptt_k,
         # 横摆角速度：plant 真实值（动力学积分结果，含 MLP 残差修正）
         yawrate = vehicle.yawrate
 
+        # 控制器读取的状态：默认真值；noise_active 时往真值上加独立高斯
+        if noise_active:
+            x_meas = vehicle.x + sample_clipped_normal(B, n_sx, n_gen, n_clip)
+            y_meas = vehicle.y + sample_clipped_normal(B, n_sy, n_gen, n_clip)
+            yaw_deg_meas = vehicle.yaw_deg + sample_clipped_normal(
+                B, n_syaw, n_gen, n_clip)
+            speed_kph_meas = vehicle.speed_kph + sample_clipped_normal(
+                B, n_sv, n_gen, n_clip)
+            yawrate_meas = yawrate + sample_clipped_normal(
+                B, n_syr, n_gen, n_clip)
+        else:
+            x_meas, y_meas = vehicle.x, vehicle.y
+            yaw_deg_meas, speed_kph_meas = vehicle.yaw_deg, vehicle.speed_kph
+            yawrate_meas = yawrate
+
         steer_out, _kappa_cur, _nk, curvature_far, steer_fb, steer_ff = \
             lat_ctrl.compute(
-                x=vehicle.x, y=vehicle.y,
-                yaw_deg=vehicle.yaw_deg, speed_kph=vehicle.speed_kph,
-                yawrate=yawrate, steer_feedback=prev_steer,
+                x=x_meas, y=y_meas,
+                yaw_deg=yaw_deg_meas, speed_kph=speed_kph_meas,
+                yawrate=yawrate_meas, steer_feedback=prev_steer,
                 btraj=bt, dt=dt, hard_mode=hard_mode)
 
         acc_cmd = lon_ctrl.compute(
-            x=vehicle.x, y=vehicle.y,
-            yaw_deg=vehicle.yaw_deg, speed_kph=vehicle.speed_kph,
+            x=x_meas, y=y_meas,
+            yaw_deg=yaw_deg_meas, speed_kph=speed_kph_meas,
             curvature_far=curvature_far,
             btraj=bt, t_now=t_now,
             ctrl_first_active=(step == 0), dt=dt, hard_mode=hard_mode)
@@ -1181,8 +1228,17 @@ def _run_sim_batch_inner(trajectories, cfg, lat_ctrl, lon_ctrl, tbptt_k,
         h_ref_x.append(ref['x'])
         h_ref_y.append(ref['y'])
 
+        # 指令送 plant 之前加 dither（history 仍记控制器原始输出）
+        if dither_active:
+            delta_to_plant = delta_front + sample_clipped_normal(
+                B, d_sd, d_gen, d_clip)
+            torque_to_plant = torque_wheel + sample_clipped_normal(
+                B, d_st, d_gen, d_clip)
+        else:
+            delta_to_plant, torque_to_plant = delta_front, torque_wheel
+
         v_prev = vehicle.v.detach()
-        vehicle.step(delta=delta_front, torque_wheel=torque_wheel)
+        vehicle.step(delta=delta_to_plant, torque_wheel=torque_to_plant)
         prev_steer = steer_out
 
     # [T_max, B] → [B, T_max]
