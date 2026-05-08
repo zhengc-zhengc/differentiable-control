@@ -235,6 +235,72 @@ DR 开启 3 epoch（手动跑，不进 pytest）：
 
 无新增可微参数。Plant 参数仍是 buffer，不参与梯度优化。控制器可微参数集（横向 T2/T3/T4/T6 + 纵向 7 PID + switch_speed）保持不变。
 
+## 训练结果（2026-05-08，commit c446712）
+
+### 训练配置
+
+- 命令：`python -u optim/train_batch.py --plant truck_trailer --dr-enable --epochs 6 --dr-seed 2026`
+- DR 开关：`enable=True`，K=4，m_t±10%，Cf/Cr±20%，dr_seed=2026（可复现）
+- DR 强制蕴含 `disable_mlp=True`，post_training V1 对比也关 MLP（baseline 走 default.yaml + 纯机理 base，tuned 走 tuned yaml + 纯机理 base）
+- 训练集：48 条标准轨迹（8 类 × 6 速度）× K=4 → batch=192
+- 总耗时：2866s（~48 min），其中训练 ~46 min + V1 对比 ~2 min
+
+### Loss 收敛
+
+| Epoch | Loss   | lat_rmse | head_rmse | spd_rmse | grad_norm |
+|------:|-------:|---------:|----------:|---------:|----------:|
+| 1 | 2.7083 | 0.7019m | 0.0252rad | 0.3290m/s | 1.59 |
+| 2 | 1.6789 | 0.5734m | 0.0190rad | 0.3287m/s | 0.65 |
+| 3 | 1.9756 | 0.6139m | 0.0230rad | 0.3257m/s | 1.07 |
+| 4 | 1.5953 | 0.5470m | 0.0201rad | 0.3220m/s | 0.30 |
+| 5 | 1.9181 | 0.6022m | 0.0220rad | 0.3199m/s | 1.04 |
+| 6 | **1.5639** | 0.5489m | 0.0176rad | 0.3201m/s | 0.40 |
+
+最终 loss 比初始下降 **42.3%**（2.7083 → 1.5639）。
+
+### 49 场景 V1 对比（baseline vs DR-tuned，均无 MLP）
+
+47/49 场景 lat_rmse 改善，集中在 25-48% 区间。两个轻微退化场景：
+
+| 场景 | baseline lat_rmse | tuned lat_rmse | 变化 |
+|------|------------------:|---------------:|-----:|
+| S 弯 5kph | 0.0179 m | 0.0200 m | +12.0% |
+| 组合弯 5kph | 0.0188 m | 0.0261 m | +38.8% |
+
+退化幅度都在毫米级（< 1 cm），且仅出现在 5kph 极低速段。
+
+显著改善示例：
+
+| 场景 | baseline lat_rmse | tuned lat_rmse | 变化 |
+|------|------------------:|---------------:|-----:|
+| clothoid_decel 25kph | 0.8608 m | 0.4436 m | -48.5% |
+| 组合弯 45kph | 1.3089 m | 0.6802 m | -48.0% |
+| clothoid_decel 18kph | 0.3661 m | 0.2021 m | -44.8% |
+| clothoid_decel 35kph | 1.8768 m | 1.0406 m | -44.6% |
+| clothoid_decel 45kph | 2.8312 m | 1.6611 m | -41.3% |
+
+heading_rmse 同步改善 15-40%，无显著退化。
+
+### 关键参数变化
+
+| 参数 | 初始 | 最终 | Δ |
+|------|-----:|-----:|---|
+| station_kp | 0.25 | 0.0623 | -75.1% |
+| high_speed_ki | 0.01 | 0.1562 | +1462% |
+| high_speed_kp | 0.34 | 0.5059 | +48.8% |
+| low_speed_ki | 0.01 | 0.0137 | +36.6% |
+| low_speed_kp | 0.35 | 0.3368 | -3.8% |
+| switch_speed | 3.0 | 2.9747 | -0.8% |
+| T2/T3/T4/T6_y | 见 tuned yaml | max\|Δ\|≈0.18 |  |
+
+high_speed_ki 涨幅最大（积分项主导高速段稳态误差消除）；station_kp 大幅下降（DR 训练时质量扰动让大 kp 易抖动）；T2/T3/T4/T6 各速度段都有量级 ~0.18 的非零调整。
+
+### 产物
+
+- 调参 yaml：`sim/configs/tuned/tuned_c446712_20260508_133108.yaml`
+- 训练曲线 + 49 场景对比图：`sim/results/training/truck_trailer/20260508_133208/`（gitignore 排除）
+- 实验日志：同目录 `experiment_log.yaml`
+
 ## 后续可扩展（不在本设计内）
 
 - 扩范围至 `±20%` m_t / `±30%` Cf-Cr（中等档）或更激进
