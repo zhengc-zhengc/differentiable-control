@@ -1901,6 +1901,36 @@ if __name__ == '__main__':
                         help='Cf/Cr 相对 nominal 的 ±range（默认 cfg=0.20）')
     parser.add_argument('--dr-seed', type=int, default=None,
                         help='DR 采样随机种子（None 不固定）')
+    # 状态反馈噪声（CLI 优先；默认走 cfg['feedback_noise']）
+    parser.add_argument('--noise-enable', dest='noise_enable',
+                        action='store_true', default=None,
+                        help='启用状态反馈噪声（覆盖 cfg）')
+    parser.add_argument('--no-noise', dest='noise_enable',
+                        action='store_false',
+                        help='强制关闭状态反馈噪声（覆盖 cfg）')
+    parser.add_argument('--sigma-x', type=float, default=None,
+                        help='位置 x 噪声 σ (m)')
+    parser.add_argument('--sigma-y', type=float, default=None,
+                        help='位置 y 噪声 σ (m)')
+    parser.add_argument('--sigma-yaw', type=float, default=None,
+                        help='朝向噪声 σ (deg)')
+    parser.add_argument('--sigma-speed', type=float, default=None,
+                        help='车速噪声 σ (km/h)')
+    parser.add_argument('--sigma-yawrate', type=float, default=None,
+                        help='横摆率噪声 σ (rad/s)')
+    # 指令抖动
+    parser.add_argument('--dither-enable', dest='dither_enable',
+                        action='store_true', default=None,
+                        help='启用指令高频抖动（覆盖 cfg）')
+    parser.add_argument('--no-dither', dest='dither_enable',
+                        action='store_false',
+                        help='强制关闭指令抖动（覆盖 cfg）')
+    parser.add_argument('--sigma-delta', type=float, default=None,
+                        help='delta 抖动 σ (rad)')
+    parser.add_argument('--sigma-torque', type=float, default=None,
+                        help='torque 抖动 σ (N·m)')
+    parser.add_argument('--noise-seed', type=int, default=None,
+                        help='噪声 + 抖动共用的随机种子（None 不固定）')
     parser.add_argument('--disable-mlp', action='store_true',
                         help='训练 + 验证全程关 MLP（cfg checkpoint_path 置空）')
     args = parser.parse_args()
@@ -1910,6 +1940,19 @@ if __name__ == '__main__':
         'K': args.dr_K,
         'mt_range': args.dr_mt_range,
         'cfcr_range': args.dr_cfcr_range,
+    }
+    noise_overrides = {
+        'enable': args.noise_enable,
+        'sigma_x_m': args.sigma_x,
+        'sigma_y_m': args.sigma_y,
+        'sigma_yaw_deg': args.sigma_yaw,
+        'sigma_speed_kph': args.sigma_speed,
+        'sigma_yawrate_radps': args.sigma_yawrate,
+    }
+    dither_overrides = {
+        'enable': args.dither_enable,
+        'sigma_delta_rad': args.sigma_delta,
+        'sigma_torque_nm': args.sigma_torque,
     }
 
     result = train_batch(
@@ -1922,7 +1965,10 @@ if __name__ == '__main__':
         param_snapshot_interval=args.snapshot_interval,
         dr_overrides=dr_overrides,
         disable_mlp=args.disable_mlp,
-        dr_seed=args.dr_seed)
+        dr_seed=args.dr_seed,
+        noise_overrides=noise_overrides,
+        dither_overrides=dither_overrides,
+        noise_seed=args.noise_seed)
 
     print(f"\n最终 loss: {result['losses'][-1]:.6f}")
     print(f"保存路径: {result['saved_path']}")
@@ -1955,6 +2001,9 @@ if __name__ == '__main__':
             'disable_mlp': validation_disable_mlp,
             'domain_randomization': result.get('dr_config'),
             'dr_seed': args.dr_seed,
+            'feedback_noise': result.get('noise_config'),
+            'command_dither': result.get('dither_config'),
+            'noise_seed': args.noise_seed,
             'runtime': runtime_info(include_argv=True),
         }
         run_post_training(result, hyperparams, plant='truck_trailer',
