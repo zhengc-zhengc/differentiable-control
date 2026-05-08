@@ -1335,6 +1335,51 @@ def _sample_dr_domains(K: int, mt_range: float, cfcr_range: float,
     return m_t.float(), Cf.float(), Cr.float()
 
 
+# ─────────────────────────────────────────────────────────────────────────
+# 噪声 / 抖动 helper（仅 train_batch.py + truck_trailer 使用）
+# ─────────────────────────────────────────────────────────────────────────
+
+_NOISE_KEYS = ('enable', 'sigma_x_m', 'sigma_y_m', 'sigma_yaw_deg',
+               'sigma_speed_kph', 'sigma_yawrate_radps', 'clip_sigmas')
+
+_DITHER_KEYS = ('enable', 'sigma_delta_rad', 'sigma_torque_nm', 'clip_sigmas')
+
+
+def _resolve_noise_config(cfg: dict, overrides: dict | None = None) -> dict:
+    """合并 cfg['feedback_noise'] 与 CLI overrides。CLI 非 None 时优先。"""
+    base = dict(cfg.get('feedback_noise') or {})
+    out = {k: base.get(k) for k in _NOISE_KEYS}
+    if overrides:
+        for k in _NOISE_KEYS:
+            v = overrides.get(k)
+            if v is not None:
+                out[k] = v
+    out.setdefault('enable', False)
+    out.setdefault('sigma_x_m', 0.02)
+    out.setdefault('sigma_y_m', 0.02)
+    out.setdefault('sigma_yaw_deg', 0.115)
+    out.setdefault('sigma_speed_kph', 0.18)
+    out.setdefault('sigma_yawrate_radps', 0.002)
+    out.setdefault('clip_sigmas', 3.0)
+    return out
+
+
+def _resolve_dither_config(cfg: dict, overrides: dict | None = None) -> dict:
+    """合并 cfg['command_dither'] 与 CLI overrides。CLI 非 None 时优先。"""
+    base = dict(cfg.get('command_dither') or {})
+    out = {k: base.get(k) for k in _DITHER_KEYS}
+    if overrides:
+        for k in _DITHER_KEYS:
+            v = overrides.get(k)
+            if v is not None:
+                out[k] = v
+    out.setdefault('enable', False)
+    out.setdefault('sigma_delta_rad', 0.001)
+    out.setdefault('sigma_torque_nm', 15.0)
+    out.setdefault('clip_sigmas', 3.0)
+    return out
+
+
 def train_batch(trajectories=None, n_epochs: int = 100, lr: float = 5e-2,
                 lr_tables: float = 5e-2, tbptt_k: int = 150,
                 grad_clip: float = 10.0, verbose: bool = True,
