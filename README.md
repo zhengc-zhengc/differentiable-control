@@ -151,7 +151,7 @@ python run_demo.py --plant truck_trailer --save --no-show
 
 ### 第 4 步：跑可微调参训练
 
-**truck_trailer 强烈推荐 `train_batch.py`**（49 场景每时间步同步推进的 batched 并行训练），比 scalar 版 `train.py` 快 8× 左右。
+**truck_trailer 强烈推荐 `train_batch.py`**（48 场景每时间步同步推进的 batched 并行训练），比 scalar 版 `train.py` 快 8× 左右。
 
 ```bash
 # 推荐路径：batched 并行（truck_trailer 专用）
@@ -345,7 +345,7 @@ MLP 的网络结构（层数、激活函数、输入特征、归一化参数）�
 `truck_trailer` 是牵引车+挂车双体动力学。底层模型（`TruckTrailerNominalDynamics` + `MLPErrorModel`）和 MLP checkpoint 都已**本地化**在本仓库，无需外部依赖：
 
 - 动力学代码：`sim/model/truck_trailer_dynamics.py`（来自 [`mutespeaker/truckdynamicmodel`](https://github.com/mutespeaker/truckdynamicmodel) 上游 `base_model.py + model_structure.py` 的拷贝）
-- MLP 权重：`sim/configs/checkpoints/truck_trailer_error_model.pth`
+- MLP 权重：放在 `sim/configs/checkpoints/` 下，由 yaml 的 `truck_trailer_vehicle.checkpoint_path` 字段指定具体文件（见下方配置示例；置空或删除该字段则不加 MLP，只用纯 base 动力学）
 
 ```yaml
 vehicle:
@@ -371,7 +371,7 @@ truck_trailer_vehicle:
   rolling_coeff: 0.013 # 滚阻系数（与 lon_torque.coef_rolling 一致）
   # ... 其他铰接点偏移等
   default_trailer_mass_kg: 0.0   # 默认无挂车（改为 15000 切到带挂模式）
-  checkpoint_path: configs/checkpoints/best_truck_trailer_error_model.pth  # MLP 残差权重
+  checkpoint_path: configs/checkpoints/<your_model>.pth  # MLP 残差权重；改成同目录下其它 .pth 即换权重，置空/删行则不加 MLP
 ```
 
 **关键事实：**
@@ -420,7 +420,9 @@ truck_trailer_vehicle:
 |--------|------|
 | `park_route` | 园区综合路线（仅验证时使用） |
 
-## 独立验证
+## 独立验证 / A/B 对比 / Demo CLI
+
+### post_training.py — tuned vs baseline 独立验证
 
 ```bash
 cd sim
@@ -428,11 +430,88 @@ cd sim
 # 全量验证（49 场景 = 8 类型 × 6 速度段 + park_route）
 python optim/post_training.py --config configs/tuned/xxx.yaml --plant truck_trailer
 
+# truck_trailer 走 batched 并行（~6 min vs scalar ~10 min）
+python optim/post_training.py --config configs/tuned/xxx.yaml --plant truck_trailer --batched
+
 # 指定类型验证
 python optim/post_training.py --config configs/tuned/xxx.yaml --trajectories lane_change clothoid_decel
 
-# 验证输出：5 种对比图 + 训练摘要仪表板 + 实验日志
+# 自定义对比基线（默认 default.yaml；用于 tuned A vs tuned B）
+python optim/post_training.py --config configs/tuned/v2.yaml --baseline-config configs/tuned/v1.yaml
+
+# baseline 和 tuned 都关 MLP（验证纯机理表现）
+python optim/post_training.py --config configs/tuned/xxx.yaml --disable-mlp --plant truck_trailer
 ```
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `--config` | （必填）| tuned 配置文件路径 |
+| `--baseline-config` | default.yaml | 对比基线 yaml 路径（换成 tuned 即可做 tuned A vs tuned B） |
+| `--plant` | yaml 中的值 | 被控对象（kinematic / dynamic / hybrid_dynamic / hybrid_v2 / truck_trailer） |
+| `--trajectories` | 全量 49 场景 | 轨迹子集，自动展开到 6 速度段 + park_route |
+| `--batched` | False | 走 batched 并行 V1 路径（仅 truck_trailer） |
+| `--disable-mlp` | False | baseline 和 tuned 同时置空 `checkpoint_path`，比纯 base 动力学 |
+| `--output-dir` | results/validation/{plant}/{ts}/ | 自定义输出目录 |
+
+输出：5 种 baseline vs tuned 对比图（轨迹/横向误差/航向误差/转向角/加速度）+ 训练摘要仪表板 + `experiment_log.yaml`。
+
+### validate_batch.py — 自定义 A/B 并行对比（仅 truck_trailer）
+
+```bash
+# 例 1：有 MLP vs 无 MLP（同一 yaml，A 关 MLP）
+python optim/validate_batch.py \
+  --config-a configs/default.yaml --label-a "仅机理" \
+  --config-b configs/default.yaml --label-b "机理+MLP" \
+  --disable-mlp-a --plant truck_trailer
+
+# 例 2：不同 tuned yaml 对比
+python optim/validate_batch.py \
+  --config-a configs/tuned/v1.yaml --label-a "v1" \
+  --config-b configs/tuned/v2.yaml --label-b "v2" \
+  --plant truck_trailer
+
+# 例 3：不同挂车质量（空载 vs 满载 15 t）
+python optim/validate_batch.py \
+  --config-a configs/default.yaml --label-a "空载" \
+  --config-b configs/default.yaml --label-b "满载15t" \
+  --trailer-mass-a 0 --trailer-mass-b 15000 --plant truck_trailer
+
+# 例 4：传统 baseline vs tuned 模式（仅传 --config，A=default.yaml）
+python optim/validate_batch.py --config configs/tuned/xxx.yaml --plant truck_trailer
+```
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `--config` | None | 传统模式：A=default.yaml、B=此参数指定的 tuned yaml |
+| `--config-a` / `--config-b` | None | A/B 模式：分别指定两份 yaml |
+| `--label-a` / `--label-b` | None | 图例标签 |
+| `--title-prefix` | "" | 图表标题前缀 |
+| `--plant` | yaml 中的值 | 仅支持 `truck_trailer` |
+| `--trailer-mass-a` / `--trailer-mass-b` | None | A/B 各自覆盖 yaml 的挂车质量 (kg) |
+| `--disable-mlp-a` / `--disable-mlp-b` | False | A/B 各自把 `checkpoint_path` 置空，关 MLP 残差 |
+| `--trajectories` | 全量 49 场景 | 轨迹子集 |
+| `--output-dir` | results/validation/truck_trailer/<ts>_batch | 自定义输出目录 |
+| `--output-suffix` | "" | 加在默认输出目录末尾的后缀 |
+
+### run_demo.py — 可视化 Demo
+
+```bash
+# 默认 plant（kinematic），弹窗显示
+python run_demo.py
+
+# truck_trailer 跑 8 个标准场景并保存 PNG（不弹窗）
+python run_demo.py --plant truck_trailer --save --no-show
+
+# 加载调参结果，看调完后的跟踪效果
+python run_demo.py --plant truck_trailer --config configs/tuned/xxx.yaml --save --no-show
+```
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `--plant` | yaml 中的值 | 被控对象（同 train.py 的 5 选项） |
+| `--config` | default.yaml | 加载指定 yaml（用 tuned yaml 看调参后的效果） |
+| `--save` | False | 保存 PNG 到 `sim/results/baseline/{plant}/` |
+| `--no-show` | False | 不弹窗（配合 `--save` 批跑用） |
 
 ## 文档
 
