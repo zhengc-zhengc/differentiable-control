@@ -235,3 +235,26 @@ class TrajectoryPoint:
     a: float
     s: float
     t: float
+
+
+def sample_clipped_normal(B: int, sigma: float,
+                          generator: torch.Generator | None = None,
+                          clip_sigmas: float = 3.0) -> torch.Tensor:
+    """单步独立高斯采样，clip_sigmas·σ 处截断；σ=0 时返回全零张量。
+
+    Args:
+        B: batch 维度，输出 shape = [B]。
+        sigma: 高斯标准差。<= 0 时直接返回 torch.zeros(B)。
+        generator: 可选 torch.Generator，传入则采样可复现。None 走全局随机。
+        clip_sigmas: 截断倍数（默认 3σ）。
+
+    Returns:
+        shape [B] / dtype float32 / requires_grad=False 的张量。
+    """
+    if sigma <= 0:
+        return torch.zeros(B, dtype=torch.float32)
+    noise = torch.randn(B, generator=generator, dtype=torch.float32) * float(sigma)
+    if clip_sigmas is not None and clip_sigmas > 0:
+        bound = float(sigma) * float(clip_sigmas)
+        noise = noise.clamp(-bound, bound)
+    return noise

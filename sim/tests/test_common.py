@@ -213,3 +213,44 @@ class TestTrajectoryPoint:
                              v=5.0, a=0.0, s=10.0, t=0.0)
         assert pt.x == 1.0
         assert pt.v == 5.0
+
+
+class TestSampleClippedNormal:
+    def test_shape_and_dtype(self):
+        from common import sample_clipped_normal
+        out = sample_clipped_normal(B=192, sigma=0.05, generator=None)
+        assert out.shape == (192,)
+        assert out.dtype == torch.float32
+
+    def test_sigma_scales(self):
+        from common import sample_clipped_normal
+        gen = torch.Generator().manual_seed(42)
+        out = sample_clipped_normal(B=10000, sigma=0.1, generator=gen,
+                                    clip_sigmas=3.0)
+        # 经验 σ 应接近 0.1（截断略压缩 σ，差距 < 5%）
+        assert abs(out.std().item() - 0.1) < 0.005
+
+    def test_clip_at_three_sigma(self):
+        from common import sample_clipped_normal
+        gen = torch.Generator().manual_seed(42)
+        out = sample_clipped_normal(B=100000, sigma=0.05, generator=gen,
+                                    clip_sigmas=3.0)
+        assert out.abs().max().item() <= 0.05 * 3.0 + 1e-7
+
+    def test_zero_sigma_returns_zeros(self):
+        from common import sample_clipped_normal
+        out = sample_clipped_normal(B=64, sigma=0.0)
+        assert torch.equal(out, torch.zeros(64))
+
+    def test_generator_reproducible(self):
+        from common import sample_clipped_normal
+        g1 = torch.Generator().manual_seed(7)
+        g2 = torch.Generator().manual_seed(7)
+        a = sample_clipped_normal(B=128, sigma=0.05, generator=g1)
+        b = sample_clipped_normal(B=128, sigma=0.05, generator=g2)
+        assert torch.equal(a, b)
+
+    def test_no_grad(self):
+        from common import sample_clipped_normal
+        out = sample_clipped_normal(B=8, sigma=0.05)
+        assert out.requires_grad is False
