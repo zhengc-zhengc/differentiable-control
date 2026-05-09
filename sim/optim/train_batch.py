@@ -609,6 +609,13 @@ class BatchedTruckTrailerVehicle:
         return self.v * 3.6
 
     @property
+    def speed_signed_kph(self):
+        """有符号车体前向速度 (km/h)；正=车头方向前进，负=倒退。
+        纵向控制器用这个量做反馈才能识别"被 MLP/扰动推到反向"，避免
+        |v| 反馈下"刹车扭矩反而加速倒退"的正反馈环。"""
+        return self._state[:, 3] * 3.6
+
+    @property
     def yaw_deg(self):
         return self.yaw * RAD2DEG
 
@@ -1173,18 +1180,23 @@ def _run_sim_batch_inner(trajectories, cfg, lat_ctrl, lon_ctrl, tbptt_k,
         yawrate = vehicle.yawrate
 
         # 控制器读取的状态：默认真值；noise_active 时往真值上加独立高斯
+        # 速度通道 lat / lon 取不同读数（同一传感器、同一噪声样本）：
+        #   - lat 用 |v| 磁量：preview 距离公式假设车在前进，进负值会算"看后视"
+        #   - lon 用 vx_body 有符号：识别倒退，避免"刹车扭矩反而推车后退"的正反馈环
         if noise_active:
             x_meas = vehicle.x + sample_clipped_normal(B, n_sx, n_gen, n_clip)
             y_meas = vehicle.y + sample_clipped_normal(B, n_sy, n_gen, n_clip)
             yaw_deg_meas = vehicle.yaw_deg + sample_clipped_normal(
                 B, n_syaw, n_gen, n_clip)
-            speed_kph_meas = vehicle.speed_kph + sample_clipped_normal(
-                B, n_sv, n_gen, n_clip)
+            speed_noise = sample_clipped_normal(B, n_sv, n_gen, n_clip)
+            speed_kph_meas = vehicle.speed_kph + speed_noise
+            speed_signed_kph_meas = vehicle.speed_signed_kph + speed_noise
             yawrate_meas = yawrate + sample_clipped_normal(
                 B, n_syr, n_gen, n_clip)
         else:
             x_meas, y_meas = vehicle.x, vehicle.y
             yaw_deg_meas, speed_kph_meas = vehicle.yaw_deg, vehicle.speed_kph
+            speed_signed_kph_meas = vehicle.speed_signed_kph
             yawrate_meas = yawrate
 
         steer_out, _kappa_cur, _nk, curvature_far, steer_fb, steer_ff = \
@@ -1196,7 +1208,7 @@ def _run_sim_batch_inner(trajectories, cfg, lat_ctrl, lon_ctrl, tbptt_k,
 
         acc_cmd = lon_ctrl.compute(
             x=x_meas, y=y_meas,
-            yaw_deg=yaw_deg_meas, speed_kph=speed_kph_meas,
+            yaw_deg=yaw_deg_meas, speed_kph=speed_signed_kph_meas,
             curvature_far=curvature_far,
             btraj=bt, t_now=t_now,
             ctrl_first_active=(step == 0), dt=dt, hard_mode=hard_mode)
