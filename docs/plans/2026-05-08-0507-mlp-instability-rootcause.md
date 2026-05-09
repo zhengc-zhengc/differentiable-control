@@ -4,6 +4,28 @@
 **分支：worktree-investigate-mlp-instability**
 **复现配置：默认控制器参数 + `train_with_0507.yaml` + truck_trailer plant + 无挂车模式（`default_trailer_mass_kg=0.0`）**
 
+## 给新人 / 新 agent：怎么用这套工具
+
+> 不只是这个 0507 ckpt，**任何 truck_trailer MLP checkpoint 出问题都能套用**。
+
+```bash
+# 一键跑全套诊断
+python sim/debug/run_for_ckpt.py \
+    --subdir <你给这个 ckpt 起的名> \
+    --test-ckpt configs/checkpoints/<你的 ckpt>.pth \
+    --test-label <图里的简短标签>
+```
+
+跑完去 `sim/results/diagnostic/mlp_instability/<subdir>/` 看图，按下面顺序读：
+
+1. **`ROOT_CAUSE_STORY.png`**——一图说清，看完基本能定位
+2. **`mlp_static_vx_scan.png`**——开环喂干净输入，9 维输出有没有凭空偏置
+3. **`cross_scenario_summary.png`**——8 变体（含组件消融）跨 4 场景 RMSE 总览，定位是哪几个输出维度在搞事
+4. **`danger_2d_vx_vy.png` / `danger_2d_vy_r.png`**——MLP 在输入空间什么区域会输出失控，闭环走的轨迹有没有踩进危险区
+5. **`panel_<场景>.png`**——单场景 9 宫格细节，必要时看
+
+要把多个 ckpt 摆在一起对比，跑完每个 ckpt 各自的 subdir 后调 `python sim/debug/plot_compare_ckpts.py`（脚本里 `ckpts` 列表手工改成你要对的那两个 subdir 名）。完整入口参数列表见 README 的「MLP 残差诊断套件」章节。
+
 ## 一句话结论
 
 **0507 MLP 在最干净的开环输入下就给牵引车 vy_t（侧向速度）输出一个与车速近线性增长的正向偏置**。这条偏置每 50Hz 步注入一次，在不到一秒内就把车体侧向速度拉离零，引发"控制器反向打方向 → 状态进一步偏离训练分布 → MLP 输出撞 clip 振荡 → 完全失控"的级联崩塌。**问题不是某一步突然爆出离谱值，而是一个微小但持续的偏置被高频积分放大。**

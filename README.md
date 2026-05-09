@@ -515,6 +515,51 @@ python run_demo.py --plant truck_trailer --config configs/tuned/xxx.yaml --save 
 | `--save` | False | 保存 PNG 到 `sim/results/baseline/{plant}/` |
 | `--no-show` | False | 不弹窗（配合 `--save` 批跑用） |
 
+## MLP 残差诊断套件
+
+**用途**：当某个 `truck_trailer` MLP checkpoint 上线后跟参考轨迹南辕北辙、或出现折返、或闭环 RMSE 比纯机理 base 还差时，用这套工具一键定位是哪个输出维度（vx_t / vy_t / r_t / 相对位姿残差）在闭环里把控制器拽爆，以及 MLP 在什么样的输入分布下会输出失控。
+
+**一键跑一个 ckpt**：
+
+```bash
+python sim/debug/run_for_ckpt.py \
+    --subdir 0508_train_loss \
+    --test-ckpt configs/checkpoints/best_truck_trailer_error_model_train_loss_0508.pth \
+    --test-label 0508TL
+```
+
+| 参数 | 说明 |
+|---|---|
+| `--subdir` | 输出子目录名（落到 `sim/results/diagnostic/mlp_instability/<subdir>/`） |
+| `--test-ckpt` | 被测 MLP 的 .pth 路径（相对 `sim/`） |
+| `--test-label` | 这个 MLP 在所有图里的标签（如 `0508TL`、`0509A` 等） |
+| `--scenarios` | 可选，过滤只跑指定场景（默认全跑 4 场景）|
+| `--skip-collect` | 仅重画图、不重新采集（npz 已存在时用） |
+
+跑完产物（约 5-10 分钟，4 场景 × 8 变体闭环 + 4 张主图）：
+
+| 文件 | 看什么 |
+|---|---|
+| `ROOT_CAUSE_STORY.png` | 一图说清根因（开环偏置 + 闭环演化 + 消融 + 偏离时序） |
+| `panel_*.png` | 单场景 9 宫格诊断（轨迹/误差/MLP 输出/OOD 距离/转向命令/消融柱状） |
+| `early_*.png` | 早期 4 秒失控时序（MLP 输出 vs 累积位置偏差，证明是积分而非单步爆炸） |
+| `cross_scenario_summary.png` | 8 变体 × 4 场景横向 RMSE 总览 + MLP 三分量输出量级 |
+| `mlp_static_vx_scan.png` | 9D 输出随车速静态扫描（最干净输入下 MLP 凭空输出多少） |
+| `danger_1d_sweeps.png` | 5 个核心输入维各自 1D 扫描，对比默认 / 0506 / 被测 MLP |
+| `danger_2d_vx_vy.png` | (vx, vy) 平面输出热图 + 闭环实际状态点 overlay |
+| `danger_2d_vy_r.png` | (vy, r) 平面输出热图（车速锁 5 kph） |
+| `danger_input_output_correlation.png` | 闭环里实际输入 vs MLP 输出散点（按时间着色） |
+
+**对比两个 ckpt**（在跑完两个的子目录后）：
+
+```bash
+python sim/debug/plot_compare_ckpts.py
+```
+
+产出 `sim/results/diagnostic/mlp_instability/0507_vs_0508TL_comparison.png`，5 行对比开环静态扫描 / 闭环 RMSE / vy_t 输出量级 / vy_t 状态时序 / 转向命令。要换对比对象时直接改脚本里 `ckpts` 列表。
+
+**复用脚本**：`run_for_ckpt.py` 通过 monkey-patch（`os.path.join` 重定向 + `Figure.savefig` 标签替换）复用 4 个绘图脚本，无需为每个 ckpt 改源码。完整证据链方法论与默认 4 场景设计见 [`docs/plans/2026-05-08-0507-mlp-instability-rootcause.md`](docs/plans/2026-05-08-0507-mlp-instability-rootcause.md)。
+
 ## 文档
 
 - [`docs/project_overview_and_ai_workflow.md`](docs/project_overview_and_ai_workflow.md) — 项目技术总览 + AI 协作开发实录
