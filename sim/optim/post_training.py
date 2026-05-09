@@ -2,6 +2,7 @@
 """训练后自动化：生成 loss 曲线、对比图、实验日志。"""
 import math
 import os
+import re
 import shutil
 import sys
 from datetime import datetime
@@ -28,6 +29,50 @@ plt.rcParams['axes.unicode_minus'] = False
 def _ensure_dir(path):
     os.makedirs(path, exist_ok=True)
     return path
+
+
+def _build_run_tags(hyperparams: dict) -> str:
+    """根据 hyperparams 里 *已解析* 的字段生成训练产物文件夹后缀。
+
+    规则：
+      - MLP 标签：从 mlp_checkpoint 文件名末尾的数字串提取（如 0509）；空 → nomlp
+      - 域随机化标签：dr/noise/dither 任一 enable=True 时按顺序 + 串联
+      - 整体格式 'mlp{id}[_dr+noise+dither]' 或 'nomlp[_...]'
+
+    所有判定基于 hyperparams 中已解析的字段（cfg+CLI 合并后），不查 raw CLI args。
+    """
+    parts = []
+    ckpt = (hyperparams.get('mlp_checkpoint') or '').strip()
+    if ckpt:
+        base = os.path.splitext(os.path.basename(ckpt))[0]
+        m = re.search(r'_(\d{3,})$', base)
+        if m:
+            parts.append(f'mlp{m.group(1)}')
+        else:
+            short = (base
+                     .replace('best_truck_trailer_error_model_', '')
+                     .replace('best_error_model_', '')
+                     .replace('best_truck_trailer_error_model', '')
+                     .replace('best_error_model', '')
+                     .strip('_'))
+            parts.append(f'mlp{short}' if short else 'mlp')
+    else:
+        parts.append('nomlp')
+
+    rand_tags = []
+    dr = hyperparams.get('domain_randomization') or {}
+    noise = hyperparams.get('feedback_noise') or {}
+    dither = hyperparams.get('command_dither') or {}
+    if dr.get('enable'):
+        rand_tags.append('dr')
+    if noise.get('enable'):
+        rand_tags.append('noise')
+    if dither.get('enable'):
+        rand_tags.append('dither')
+    if rand_tags:
+        parts.append('+'.join(rand_tags))
+
+    return '_'.join(parts)
 
 
 def plot_loss_curves(training_history, output_dir):
@@ -845,10 +890,12 @@ def run_post_training(train_result, hyperparams, verbose=True, plant=None,
         output_dir: 产物保存目录路径
     """
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    tags = _build_run_tags(hyperparams)
+    folder_name = f"{timestamp}_{tags}" if tags else timestamp
     sim_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
     plant_name = plant or 'kinematic'
     output_dir = _ensure_dir(os.path.join(sim_dir, 'results', 'training',
-                                          plant_name, timestamp))
+                                          plant_name, folder_name))
 
     if verbose:
         print(f"\n{'='*60}")

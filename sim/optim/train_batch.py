@@ -1401,38 +1401,55 @@ _NOISE_KEYS = ('enable', 'sigma_x_m', 'sigma_y_m', 'sigma_yaw_deg',
 _DITHER_KEYS = ('enable', 'sigma_delta_rad', 'sigma_torque_nm', 'clip_sigmas')
 
 
+_NOISE_DEFAULTS = {
+    'enable': False,
+    'sigma_x_m': 0.02,
+    'sigma_y_m': 0.02,
+    'sigma_yaw_deg': 0.115,
+    'sigma_speed_kph': 0.18,
+    'sigma_yawrate_radps': 0.002,
+    'clip_sigmas': 3.0,
+}
+
+_DITHER_DEFAULTS = {
+    'enable': False,
+    'sigma_delta_rad': 0.001,
+    'sigma_torque_nm': 15.0,
+    'clip_sigmas': 3.0,
+}
+
+
 def _resolve_noise_config(cfg: dict, overrides: dict | None = None) -> dict:
-    """合并 cfg['feedback_noise'] 与 CLI overrides。CLI 非 None 时优先。"""
-    base = dict(cfg.get('feedback_noise') or {})
-    out = {k: base.get(k) for k in _NOISE_KEYS}
+    """合并 cfg['feedback_noise'] 与 CLI overrides。CLI 非 None 时优先；
+    yaml 缺该 section 或某 key 留空（None）都回退到默认值。"""
+    out = dict(_NOISE_DEFAULTS)
+    base = cfg.get('feedback_noise') or {}
+    for k in _NOISE_KEYS:
+        v = base.get(k)
+        if v is not None:
+            out[k] = v
     if overrides:
         for k in _NOISE_KEYS:
             v = overrides.get(k)
             if v is not None:
                 out[k] = v
-    out.setdefault('enable', False)
-    out.setdefault('sigma_x_m', 0.02)
-    out.setdefault('sigma_y_m', 0.02)
-    out.setdefault('sigma_yaw_deg', 0.115)
-    out.setdefault('sigma_speed_kph', 0.18)
-    out.setdefault('sigma_yawrate_radps', 0.002)
-    out.setdefault('clip_sigmas', 3.0)
     return out
 
 
 def _resolve_dither_config(cfg: dict, overrides: dict | None = None) -> dict:
-    """合并 cfg['command_dither'] 与 CLI overrides。CLI 非 None 时优先。"""
-    base = dict(cfg.get('command_dither') or {})
-    out = {k: base.get(k) for k in _DITHER_KEYS}
+    """合并 cfg['command_dither'] 与 CLI overrides。CLI 非 None 时优先；
+    yaml 缺该 section 或某 key 留空（None）都回退到默认值。"""
+    out = dict(_DITHER_DEFAULTS)
+    base = cfg.get('command_dither') or {}
+    for k in _DITHER_KEYS:
+        v = base.get(k)
+        if v is not None:
+            out[k] = v
     if overrides:
         for k in _DITHER_KEYS:
             v = overrides.get(k)
             if v is not None:
                 out[k] = v
-    out.setdefault('enable', False)
-    out.setdefault('sigma_delta_rad', 0.001)
-    out.setdefault('sigma_torque_nm', 15.0)
-    out.setdefault('clip_sigmas', 3.0)
     return out
 
 
@@ -1482,6 +1499,9 @@ def train_batch(trajectories=None, n_epochs: int = 100, lr: float = 5e-2,
     # 参数推到 ±10/20% 区间时 MLP 输入分布偏移训练域，残差解释力下降。
     if disable_mlp:
         apply_runtime_overrides(cfg, disable_mlp=True)
+    # 训练实际加载的 MLP checkpoint（disable_mlp 后 overrides 已清空 → 空串=不带 MLP）
+    mlp_checkpoint_used = (cfg.get('truck_trailer_vehicle') or {}).get(
+        'checkpoint_path', '') or ''
 
     pairs = _materialize_trajectories(trajectories)
     keys_orig = [k for k, _t in pairs]
@@ -1852,6 +1872,7 @@ def train_batch(trajectories=None, n_epochs: int = 100, lr: float = 5e-2,
         'dither_config': dither_config,
         'noise_seed': noise_seed,
         'disable_mlp': disable_mlp,
+        'mlp_checkpoint': mlp_checkpoint_used,
     }
 
 
@@ -2004,6 +2025,7 @@ if __name__ == '__main__':
             'feedback_noise': result.get('noise_config'),
             'command_dither': result.get('dither_config'),
             'noise_seed': args.noise_seed,
+            'mlp_checkpoint': result.get('mlp_checkpoint', ''),
             'runtime': runtime_info(include_argv=True),
         }
         run_post_training(result, hyperparams, plant='truck_trailer',
