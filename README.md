@@ -101,8 +101,10 @@
 │   │   └── checkpoints/                #     MLP 权重文件 (.pth)
 │   │
 │   ├── results/
-│   │   └── baseline/                   #     基线结果图（按被控对象分目录）
+│   │   ├── baseline/                   #     基线结果图（按被控对象分目录）
+│   │   └── diagnostic/                 #     调研产物（如 mlp_instability/<ckpt>/ 下 MLP 失控诊断全套图）
 │   │
+│   ├── debug/                          #   常态化调研脚本（含 MLP 失控诊断套件 run_for_ckpt.py）+ 一次性排查
 │   ├── tests/                          #     pytest 测试（170 用例，含 12 项域随机化）
 │   └── learn/                          #     学习笔记
 │
@@ -525,4 +527,5 @@ python run_demo.py --plant truck_trailer --config configs/tuned/xxx.yaml --save 
 - [`docs/bptt_gradient_explosion_analysis.md`](docs/bptt_gradient_explosion_analysis.md) — BPTT 梯度爆炸分析
 - [`docs/plans/2026-04-15-torque-output-layer-design.md`](docs/plans/2026-04-15-torque-output-layer-design.md) — 纵向扭矩输出层设计
 - [`docs/plans/2026-05-08-domain-randomization-design.md`](docs/plans/2026-05-08-domain-randomization-design.md) — 域随机化设计 + 首跑结果
+- [`docs/plans/2026-05-08-0507-mlp-instability-rootcause.md`](docs/plans/2026-05-08-0507-mlp-instability-rootcause.md) — 0507 MLP 闭环失控根因调研 + 通用诊断工具链
 - [`docs/plans/`](docs/plans/) — 其他设计文档与实现计划

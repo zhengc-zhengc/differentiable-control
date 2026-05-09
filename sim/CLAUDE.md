@@ -47,14 +47,18 @@ sim/
 │   │   ├── kinematic/     # 运动学模型基线
 │   │   ├── dynamic/       # 动力学模型基线
 │   │   └── hybrid_dynamic/ # 混合模型基线
-│   └── training/          # 训练产物（.gitignore 排除，按被控对象+时间戳分目录）
-│       └── {plant}/{timestamp}/  # loss_curve.png, loss_breakdown.png, comparison_*.png, experiment_log.yaml
+│   ├── training/          # 训练产物（.gitignore 排除，按被控对象+时间戳分目录）
+│   │   └── {plant}/{timestamp}/  # loss_curve.png, loss_breakdown.png, comparison_*.png, experiment_log.yaml
+│   └── diagnostic/        # 调研产物（纳入 git，按主题分目录）
+│       └── mlp_instability/{ckpt}/  # MLP 失控诊断结果图（panel/early/danger/RCS/static/cross）
 ├── learn/                 # 学习笔记与调试日志（不影响运行）
-├── debug/                 # 一次性 debug / 数据修复脚本（untracked，不影响主流程）
+├── debug/                 # 调研与一次性脚本；MLP 失控诊断套件已纳入 git
 └── tests/                 # pytest 测试
 ```
 
-`sim/debug/` 用法：放问题排查时写的临时脚本（如某场景 5kph 退化分析、MLP OOD 检查），统一在子目录里方便清理。约定脚本头加 `sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))` 把 `sim/` 加进 path，再 `from config import ...`。这些文件默认 untracked，跟随 git status 显示提示，需要保留时再显式 `git add -f`。
+`sim/debug/` 约定：脚本头加 `sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))` 把 `sim/` 加进 path，再 `from config import ...`。临时排查脚本可保持 untracked（跟随 git status 提示）；常态化的诊断套件按主题归一并纳入 git，目前已固化的：
+
+- **MLP 失控诊断** (`run_for_ckpt.py` 入口)：给定任意 truck_trailer MLP checkpoint，自动跑 4 场景闭环 × 8 变体（含组件消融），生成轨迹偏离/输出量级时序/输入空间危险区热图等全套图，按 `<ckpt>` 名落到 `results/diagnostic/mlp_instability/<ckpt>/`。复用已有 4 个绘图脚本（`investigate_mlp_instability.py / plot_mlp_instability.py / plot_root_cause_story.py / plot_mlp_danger_zones.py`）+ 跨 ckpt 对比 (`plot_compare_ckpts.py`)。详见 [`docs/plans/2026-05-08-0507-mlp-instability-rootcause.md`](../docs/plans/2026-05-08-0507-mlp-instability-rootcause.md)。
 
 ## 数据流
 
