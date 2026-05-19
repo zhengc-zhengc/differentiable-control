@@ -579,6 +579,17 @@ python sim/debug/plot_compare_ckpts.py
 
 **复用脚本**：`run_for_ckpt.py` 通过 monkey-patch（`os.path.join` 重定向 + `Figure.savefig` 标签替换）复用 4 个绘图脚本，无需为每个 ckpt 改源码。完整证据链方法论与默认 4 场景设计见 [`docs/plans/2026-05-08-0507-mlp-instability-rootcause.md`](docs/plans/2026-05-08-0507-mlp-instability-rootcause.md)。
 
+**全场景 MLP 输出 panel**（49 条评估轨迹）：
+
+```bash
+python sim/debug/plot_mlp_outputs_all_scenarios.py \
+    --ckpt configs/checkpoints/best_truck_trailer_error_model_train_loss_0518.pth \
+    --config configs/train_with_0518.yaml \
+    --subdir 0518 --label 0518TL
+```
+
+复用 `run_simulation_batch(hard_mode=True, capture_mlp=True)`，把 49 条评估轨迹（8 类型 × 6 速度段 + park_route）同步推进 + 同步抓 MLP 输入/输出，单 ckpt 全套耗时约 3-4 min（仿真并行 ~200s + 串行画图 ~5s）。每场景一张 4×3 panel：行 1 跟踪+OOD、行 2-4 完整 9D MLP 输出（vx_t/vy_t/r_t / vx_s/vy_s/r_s / rel_x/rel_y/rel_yaw）。**只画目标 MLP，无变体对比**——适合做"上线 ckpt × 全场景"的鸟瞰，用来挑出 MLP 在哪些速度/曲率组合下输出失控。产物落到 `sim/results/diagnostic/mlp_output_panels/<subdir>/panel_<scenario_key>.png`。
+
 ## 文档
 
 - [`docs/project_overview_and_ai_workflow.md`](docs/project_overview_and_ai_workflow.md) — 项目技术总览 + AI 协作开发实录

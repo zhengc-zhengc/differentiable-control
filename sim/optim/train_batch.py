@@ -419,11 +419,18 @@ class BatchedTruckTrailerVehicle:
                  init_x: torch.Tensor, init_y: torch.Tensor,
                  init_yaw: torch.Tensor, init_v: torch.Tensor,
                  dt: float = 0.02, trailer_mass_kg=None,
-                 checkpoint_path=None):
+                 checkpoint_path=None, capture_mlp: bool = False):
         self.B = batch_size
         params = cfg['truck_trailer_vehicle']
         self.dt = dt
         self.dynamics = TruckTrailerNominalDynamics(params)
+        # MLP I/O 捕获：每步把 raw/norm 输入与 raw/clipped 输出 append 进 list，
+        # 训练默认关；可视化诊断时开。
+        self._capture_mlp = bool(capture_mlp)
+        self._mlp_input_raw_hist: list[torch.Tensor] = []
+        self._mlp_input_norm_hist: list[torch.Tensor] = []
+        self._mlp_output_raw_hist: list[torch.Tensor] = []
+        self._mlp_output_clipped_hist: list[torch.Tensor] = []
 
         self._steer_ratio = float(params['steering_ratio'])
         self._L_t = float(params['L_t'])
@@ -532,18 +539,27 @@ class BatchedTruckTrailerVehicle:
 
         if self._mlp is not None:
             if self._mlp_input_dim == 14:
-                features = build_mlp_input_feature_tensor_v2(
+                features_raw = build_mlp_input_feature_tensor_v2(
                     self._state, control, trailer_mass, dt_t, self._b_t)
             else:
-                features = build_mlp_input_feature_tensor(
+                features_raw = build_mlp_input_feature_tensor(
                     self._state, control, trailer_mass, dt_t, self._b_t)
             if self._feature_mean is not None:
-                features = (features - self._feature_mean) / self._feature_scale
-            motion_error = self._mlp(features)
+                features = (features_raw - self._feature_mean) / self._feature_scale
+            else:
+                features = features_raw
+            motion_error_raw = self._mlp(features)
             if self._motion_error_clip is not None:
                 motion_error = torch.clamp(
-                    motion_error,
+                    motion_error_raw,
                     -self._motion_error_clip, self._motion_error_clip)
+            else:
+                motion_error = motion_error_raw
+            if self._capture_mlp:
+                self._mlp_input_raw_hist.append(features_raw.detach().clone())
+                self._mlp_input_norm_hist.append(features.detach().clone())
+                self._mlp_output_raw_hist.append(motion_error_raw.detach().clone())
+                self._mlp_output_clipped_hist.append(motion_error.detach().clone())
             if self._mlp_output_dim == 9:
                 full_error = derive_full_error_from_motion_error_torch_v2(
                     motion_error, base_next, dt_t, self._b_t)
@@ -568,6 +584,37 @@ class BatchedTruckTrailerVehicle:
 
     def detach_state(self):
         self._state = self._state.detach()
+
+    def get_mlp_history(self) -> dict | None:
+        """返回 capture_mlp=True 时积累的 MLP I/O 历史。
+
+        返回 dict 含 4 个 [B, T, D] tensor（input_raw/input_norm 共享 [B,T,input_dim]，
+        output_raw/output_clipped 共享 [B,T,output_dim]）；MLP 未加载或 capture 关
+        时返回 None。
+        """
+        if not self._capture_mlp or self._mlp is None:
+            return None
+        if not self._mlp_input_raw_hist:
+            return None
+        # 每个 list 元素 [B, D]；stack 成 [T, B, D] 再转 [B, T, D]
+        return {
+            'input_raw': torch.stack(self._mlp_input_raw_hist, dim=0)
+                              .transpose(0, 1).contiguous(),
+            'input_norm': torch.stack(self._mlp_input_norm_hist, dim=0)
+                               .transpose(0, 1).contiguous(),
+            'output_raw': torch.stack(self._mlp_output_raw_hist, dim=0)
+                               .transpose(0, 1).contiguous(),
+            'output_clipped': torch.stack(self._mlp_output_clipped_hist, dim=0)
+                                   .transpose(0, 1).contiguous(),
+            'feature_mean': (self._feature_mean.detach().clone()
+                             if self._feature_mean is not None else None),
+            'feature_scale': (self._feature_scale.detach().clone()
+                              if self._feature_scale is not None else None),
+            'motion_error_clip': (self._motion_error_clip.detach().clone()
+                                  if self._motion_error_clip is not None else None),
+            'input_dim': self._mlp_input_dim,
+            'output_dim': self._mlp_output_dim,
+        }
 
     def set_domain(self, m_t: torch.Tensor, Cf: torch.Tensor, Cr: torch.Tensor):
         """注入域随机化参数（每 epoch 调一次）。透传到底层 nominal dynamics。
@@ -1036,7 +1083,8 @@ def run_simulation_batch(trajectories: list, cfg: dict = None,
                          trailer_mass_kg=None,
                          domain_params: dict | None = None,
                          noise_params: dict | None = None,
-                         dither_params: dict | None = None) -> dict:
+                         dither_params: dict | None = None,
+                         capture_mlp: bool = False) -> dict:
     """B 条轨迹同步推进 50Hz 闭环。支持 truck_trailer / hybrid_dynamic plant。
 
     Args:
@@ -1078,7 +1126,7 @@ def run_simulation_batch(trajectories: list, cfg: dict = None,
         return _run_sim_batch_inner(
             trajectories, cfg, lat_ctrl, lon_ctrl, tbptt_k,
             hard_mode, trailer_mass_kg, domain_params,
-            noise_params, dither_params)
+            noise_params, dither_params, capture_mlp)
 
 
 class _nullctx:
@@ -1088,7 +1136,8 @@ class _nullctx:
 
 def _run_sim_batch_inner(trajectories, cfg, lat_ctrl, lon_ctrl, tbptt_k,
                          hard_mode, trailer_mass_override, domain_params=None,
-                         noise_params=None, dither_params=None):
+                         noise_params=None, dither_params=None,
+                         capture_mlp=False):
     bt = BatchedTrajectoryTable(trajectories)
     B, T_max = bt.B, bt.T_max
     dt = cfg['simulation']['dt']
@@ -1104,6 +1153,9 @@ def _run_sim_batch_inner(trajectories, cfg, lat_ctrl, lon_ctrl, tbptt_k,
 
     # 按 plant 类型分发车辆模型
     model_type = cfg['vehicle'].get('model_type')
+    if capture_mlp and model_type != 'truck_trailer':
+        raise NotImplementedError(
+            f"capture_mlp 仅支持 truck_trailer plant，当前：{model_type}")
     if model_type == 'truck_trailer':
         tt_params = cfg['truck_trailer_vehicle']
         if trailer_mass_override is not None:
@@ -1120,7 +1172,8 @@ def _run_sim_batch_inner(trajectories, cfg, lat_ctrl, lon_ctrl, tbptt_k,
             cfg, batch_size=B,
             init_x=bt.init_x, init_y=bt.init_y,
             init_yaw=bt.init_yaw, init_v=bt.init_v,
-            dt=dt, trailer_mass_kg=trailer_mass)
+            dt=dt, trailer_mass_kg=trailer_mass,
+            capture_mlp=capture_mlp)
         if domain_params is not None:
             vehicle.set_domain(domain_params['m_t'],
                                domain_params['Cf'],
@@ -1257,7 +1310,7 @@ def _run_sim_batch_inner(trajectories, cfg, lat_ctrl, lon_ctrl, tbptt_k,
     def _stack(seq):
         return torch.stack(seq, dim=0).transpose(0, 1).contiguous()
 
-    return {
+    result = {
         'x': _stack(h_x), 'y': _stack(h_y),
         'yaw': _stack(h_yaw), 'v': _stack(h_v),
         'steer': _stack(h_steer), 'steer_fb': _stack(h_steer_fb),
@@ -1269,6 +1322,11 @@ def _run_sim_batch_inner(trajectories, cfg, lat_ctrl, lon_ctrl, tbptt_k,
         'valid_mask': bt.valid_mask,
         '_lat_ctrl': lat_ctrl, '_lon_ctrl': lon_ctrl, '_btraj': bt,
     }
+    if capture_mlp:
+        mlp_hist = vehicle.get_mlp_history()
+        if mlp_hist is not None:
+            result['mlp_history'] = mlp_hist
+    return result
 
 
 def batched_tracking_loss(history: dict, ref_speeds: torch.Tensor,

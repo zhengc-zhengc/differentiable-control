@@ -50,7 +50,8 @@ sim/
 │   ├── training/          # 训练产物（.gitignore 排除，按被控对象+时间戳分目录）
 │   │   └── {plant}/{timestamp}/  # loss_curve.png, loss_breakdown.png, comparison_*.png, experiment_log.yaml
 │   └── diagnostic/        # 调研产物（纳入 git，按主题分目录）
-│       └── mlp_instability/{ckpt}/  # MLP 失控诊断结果图（panel/early/danger/RCS/static/cross）
+│       ├── mlp_instability/{ckpt}/   # MLP 失控诊断结果图（panel/early/danger/RCS/static/cross，4 场景 × 8 变体）
+│       └── mlp_output_panels/{ckpt}/ # 49 场景全量 MLP 输出 panel（单 MLP，无变体对比）
 ├── learn/                 # 学习笔记与调试日志（不影响运行）
 ├── debug/                 # 调研与一次性脚本；MLP 失控诊断套件已纳入 git
 └── tests/                 # pytest 测试
@@ -59,6 +60,7 @@ sim/
 `sim/debug/` 约定：脚本头加 `sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))` 把 `sim/` 加进 path，再 `from config import ...`。临时排查脚本可保持 untracked（跟随 git status 提示）；常态化的诊断套件按主题归一并纳入 git，目前已固化的：
 
 - **MLP 失控诊断** (`run_for_ckpt.py` 入口)：给定任意 truck_trailer MLP checkpoint，自动跑 4 场景闭环 × 8 变体（含组件消融），生成轨迹偏离/输出量级时序/输入空间危险区热图等全套图，按 `<ckpt>` 名落到 `results/diagnostic/mlp_instability/<ckpt>/`。复用已有 4 个绘图脚本（`investigate_mlp_instability.py / plot_mlp_instability.py / plot_root_cause_story.py / plot_mlp_danger_zones.py`）+ 跨 ckpt 对比 (`plot_compare_ckpts.py`)。详见 [`docs/plans/2026-05-08-0507-mlp-instability-rootcause.md`](../docs/plans/2026-05-08-0507-mlp-instability-rootcause.md)。
+- **全场景 MLP 输出 panel** (`plot_mlp_outputs_all_scenarios.py`)：一次并行跑完 49 条评估轨迹（`run_simulation_batch(hard_mode=True, capture_mlp=True)`），按 batch index 拆开，串行画每场景一张 4×3 panel（行 1 轨迹+横向误差+OOD，行 2-4 完整 9D MLP 输出）。**只画目标 MLP，无变体对比**——适合做"上线 ckpt × 全场景"的鸟瞰，输出落到 `results/diagnostic/mlp_output_panels/<ckpt>/`，单 ckpt 全套 ~3-4 min。
 
 ## 数据流
 
