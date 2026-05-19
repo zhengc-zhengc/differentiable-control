@@ -171,7 +171,8 @@ class TestTruckTrailerVehicleV2Checkpoint:
         control = torch.tensor([[0.1, 0.0, 0.0, 300.0, 300.0]])
         mass = torch.tensor([[0.0]])
         dt = torch.tensor([[0.02]])
-        features = build_mlp_input_feature_tensor_v2(state, control, mass, dt)
+        b_t = TT_PARAMS['L_t'] - TT_PARAMS['a_t']
+        features = build_mlp_input_feature_tensor_v2(state, control, mass, dt, b_t)
         assert features.shape == (1, 14)
 
     def test_v2_mlp_correction_runs(self):

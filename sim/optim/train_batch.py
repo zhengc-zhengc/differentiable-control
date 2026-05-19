@@ -533,10 +533,10 @@ class BatchedTruckTrailerVehicle:
         if self._mlp is not None:
             if self._mlp_input_dim == 14:
                 features = build_mlp_input_feature_tensor_v2(
-                    self._state, control, trailer_mass, dt_t)
+                    self._state, control, trailer_mass, dt_t, self._b_t)
             else:
                 features = build_mlp_input_feature_tensor(
-                    self._state, control, trailer_mass, dt_t)
+                    self._state, control, trailer_mass, dt_t, self._b_t)
             if self._feature_mean is not None:
                 features = (features - self._feature_mean) / self._feature_scale
             motion_error = self._mlp(features)
@@ -546,10 +546,10 @@ class BatchedTruckTrailerVehicle:
                     -self._motion_error_clip, self._motion_error_clip)
             if self._mlp_output_dim == 9:
                 full_error = derive_full_error_from_motion_error_torch_v2(
-                    motion_error, base_next, dt_t)
+                    motion_error, base_next, dt_t, self._b_t)
             else:
                 full_error = derive_full_error_from_motion_error_torch(
-                    motion_error, base_next, dt_t)
+                    motion_error, base_next, dt_t, self._b_t)
             new_state = base_next + full_error
             new_state = new_state.clone()
             new_state[:, 2] = wrap_angle_error_torch(new_state[:, 2])

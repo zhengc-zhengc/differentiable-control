@@ -73,10 +73,10 @@ def _patched_step(self, delta, torque_wheel):
     if self._mlp is not None:
         if self._mlp_input_dim == 14:
             features = ttv.build_mlp_input_feature_tensor_v2(
-                state, control, trailer_mass, dt_t)
+                state, control, trailer_mass, dt_t, self._b_t)
         else:
             features = ttv.build_mlp_input_feature_tensor(
-                state, control, trailer_mass, dt_t)
+                state, control, trailer_mass, dt_t, self._b_t)
         feat_raw = features.detach().cpu().numpy()[0].copy()
         if self._feature_mean is not None:
             features_norm = (features - self._feature_mean) / self._feature_scale
@@ -105,10 +105,10 @@ def _patched_step(self, delta, torque_wheel):
 
         if self._mlp_output_dim == 9:
             full_error = ttv.derive_full_error_from_motion_error_torch_v2(
-                motion_error, base_next, dt_t)
+                motion_error, base_next, dt_t, self._b_t)
         else:
             full_error = ttv.derive_full_error_from_motion_error_torch(
-                motion_error, base_next, dt_t)
+                motion_error, base_next, dt_t, self._b_t)
         new_state_full = (base_next + full_error).squeeze(0).clone()
         new_state_full[2] = ttv.wrap_angle_error_torch(
             new_state_full[2:3])[0]

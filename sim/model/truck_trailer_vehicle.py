@@ -33,38 +33,50 @@ _SIM_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # 老 (v1) checkpoint：18D 输入，6D 运动残差输出
 # 新 (v2) checkpoint：14D 输入（has_trailer + 相对位姿 + 归并控制），9D 输出（6 速度残差 + 3 相对位姿残差）
 
-def build_mlp_input_feature_tensor(state, control, trailer_mass_kg, dt):
+def build_mlp_input_feature_tensor(state, control, trailer_mass_kg, dt, b_t):
     """v1：构建 18D MLP 输入特征。
 
     [trailer_mass, vx_t, vy_t, r_t, speed_t, vx_s, vy_s, r_s, speed_s,
-    articulation, sin/cos articulation, 5×control, dt]"""
+    articulation, sin/cos articulation, 5×control, dt]
+
+    `state[:, 4]` 内部是 body-cg 侧速；plant_out 训练时 MLP 输入的是后轴
+    系侧速 `vy_rear = vy_body - b_t·r`，必须先做坐标转换再喂给 MLP，否则
+    输入分布偏离训练域几 σ（弯道工况），MLP 失效。"""
     if trailer_mass_kg.ndim == 1:
         trailer_mass_kg = trailer_mass_kg.unsqueeze(1)
     if dt.ndim == 1:
         dt = dt.unsqueeze(1)
 
+    vy_t_rear = state[:, 4:5] - b_t * state[:, 5:6]
     articulation = wrap_angle_error_torch(state[:, 8:9] - state[:, 2:3])
     speed_t = torch.sqrt(
-        state[:, 3:4] * state[:, 3:4] + state[:, 4:5] * state[:, 4:5] + 1.0e-8)
+        state[:, 3:4] * state[:, 3:4] + vy_t_rear * vy_t_rear + 1.0e-8)
     speed_s = torch.sqrt(
         state[:, 9:10] * state[:, 9:10] + state[:, 10:11] * state[:, 10:11]
         + 1.0e-8)
     return torch.cat([
-        trailer_mass_kg, state[:, 3:4], state[:, 4:5], state[:, 5:6],
+        trailer_mass_kg, state[:, 3:4], vy_t_rear, state[:, 5:6],
         speed_t, state[:, 9:10], state[:, 10:11], state[:, 11:12], speed_s,
         articulation, torch.sin(articulation), torch.cos(articulation),
         control, dt,
     ], dim=1)
 
 
-def build_mlp_input_feature_tensor_v2(state, control, trailer_mass_kg, dt):
+def build_mlp_input_feature_tensor_v2(state, control, trailer_mass_kg, dt, b_t):
     """v2：构建 14D MLP 输入特征（与 best_truck_trailer_error_model.pth 对齐）。
 
     顺序：[trailer_mass_kg, has_trailer, vx_t, vy_t, r_t, vx_s, vy_s, r_s,
           rel_x_s_t, rel_y_s_t, sin_rel_yaw_s_t, cos_rel_yaw_s_t,
           steer_sw_rad, rear_drive_torque_sum]
 
-    rel_x/y 是挂车质心相对牵引车质心在牵引车 body frame 下的坐标；
+    坐标系转换：plant_out 训练侧约定外部状态参考点是"牵引车后轴"，sim 内
+    部用"牵引车质心"。差异沿牵引车纵轴方向 b_t = L_t - a_t。
+    - vy_t：`vy_rear = vy_body - b_t·r`
+    - rel_x：质心系 rel_x_body + b_t = 后轴系 rel_x_rear
+    - rel_y：纵向偏移在 body y 投影为 0，rel_y 不变
+    - rel_yaw：与参考点无关
+
+    rel_x/y 是挂车质心相对牵引车后轴在牵引车 body frame 下的坐标；
     rel_yaw 是 psi_s - psi_t。dt 不在输入中（v2 改从时序一致性上学习）。
     """
     if trailer_mass_kg.ndim == 1:
@@ -73,13 +85,16 @@ def build_mlp_input_feature_tensor_v2(state, control, trailer_mass_kg, dt):
     has_trailer = (trailer_mass_kg > NO_TRAILER_MASS_THRESHOLD_KG).to(
         dtype=state.dtype)
 
+    vy_t_rear = state[:, 4:5] - b_t * state[:, 5:6]
+
     dx_world = state[:, 6:7] - state[:, 0:1]
     dy_world = state[:, 7:8] - state[:, 1:2]
     psi_t = state[:, 2:3]
     cos_t = torch.cos(psi_t)
     sin_t = torch.sin(psi_t)
-    rel_x = dx_world * cos_t + dy_world * sin_t
+    rel_x_body = dx_world * cos_t + dy_world * sin_t
     rel_y = -dx_world * sin_t + dy_world * cos_t
+    rel_x_rear = rel_x_body + b_t  # 后轴系基准
     rel_yaw = wrap_angle_error_torch(state[:, 8:9] - state[:, 2:3])
 
     steer_sw = control[:, 0:1]
@@ -87,25 +102,33 @@ def build_mlp_input_feature_tensor_v2(state, control, trailer_mass_kg, dt):
 
     return torch.cat([
         trailer_mass_kg, has_trailer,
-        state[:, 3:4], state[:, 4:5], state[:, 5:6],
+        state[:, 3:4], vy_t_rear, state[:, 5:6],
         state[:, 9:10], state[:, 10:11], state[:, 11:12],
-        rel_x, rel_y, torch.sin(rel_yaw), torch.cos(rel_yaw),
+        rel_x_rear, rel_y, torch.sin(rel_yaw), torch.cos(rel_yaw),
         steer_sw, rear_torque_sum,
     ], dim=1)
 
 
-def derive_full_error_from_motion_error_torch(motion_error, base_next, dt):
-    """v1：6D 运动残差 → 12D 状态修正。"""
+def derive_full_error_from_motion_error_torch(motion_error, base_next, dt, b_t):
+    """v1：6D 运动残差 → 12D 状态修正。
+
+    MLP 输出的 evy_t 是后轴系侧速残差（训练侧约定）。sim 内部状态 vy_t
+    存的是质心系侧速，必须先把残差从后轴系转换到质心系再应用，否则状态
+    更新错位：vy_body 修正 = evy_rear + b_t·er_t。位置积分用转换后的
+    质心系速度残差，与 sim 内部状态参考点一致。
+    """
     if dt.ndim == 1:
         dt = dt.unsqueeze(1)
     safe_dt = torch.clamp(dt, min=1.0e-6)
     yaw_t = base_next[:, 2:3]
     yaw_s = base_next[:, 8:9]
-    evx_t, evy_t, er_t = motion_error[:, 0:1], motion_error[:, 1:2], motion_error[:, 2:3]
+    evx_t, evy_t_rear, er_t = motion_error[:, 0:1], motion_error[:, 1:2], motion_error[:, 2:3]
     evx_s, evy_s, er_s = motion_error[:, 3:4], motion_error[:, 4:5], motion_error[:, 5:6]
 
-    dx_t = (torch.cos(yaw_t) * evx_t - torch.sin(yaw_t) * evy_t) * safe_dt
-    dy_t = (torch.sin(yaw_t) * evx_t + torch.cos(yaw_t) * evy_t) * safe_dt
+    evy_t_body = evy_t_rear + b_t * er_t
+
+    dx_t = (torch.cos(yaw_t) * evx_t - torch.sin(yaw_t) * evy_t_body) * safe_dt
+    dy_t = (torch.sin(yaw_t) * evx_t + torch.cos(yaw_t) * evy_t_body) * safe_dt
     dpsi_t = wrap_angle_error_torch(er_t * safe_dt)
 
     dx_s = (torch.cos(yaw_s) * evx_s - torch.sin(yaw_s) * evy_s) * safe_dt
@@ -113,16 +136,20 @@ def derive_full_error_from_motion_error_torch(motion_error, base_next, dt):
     dpsi_s = wrap_angle_error_torch(er_s * safe_dt)
 
     return torch.cat(
-        [dx_t, dy_t, dpsi_t, evx_t, evy_t, er_t,
+        [dx_t, dy_t, dpsi_t, evx_t, evy_t_body, er_t,
          dx_s, dy_s, dpsi_s, evx_s, evy_s, er_s], dim=1)
 
 
-def derive_full_error_from_motion_error_torch_v2(motion_error, base_next, dt):
+def derive_full_error_from_motion_error_torch_v2(motion_error, base_next, dt, b_t):
     """v2：9D 残差 → 12D 状态修正。
 
     前 6 分量（速度残差）与 v1 完全一致：速度积分得位姿 delta + 速度 delta。
     后 3 分量（rel_x, rel_y, rel_yaw，均在牵引车 body frame）作为挂车位姿的
     附加修正，旋转到世界系后叠加到挂车位姿 delta 上。
+
+    坐标系：MLP 输出的 evy_t 是后轴系侧速残差，必须先转 body-cg
+    （evy_body = evy_rear + b_t·er_t）再叠加到 sim 内部状态。位置积分用
+    转换后的 body-cg 速度残差，与 sim 内部状态参考点一致。
     """
     if dt.ndim == 1:
         dt = dt.unsqueeze(1)
@@ -131,7 +158,7 @@ def derive_full_error_from_motion_error_torch_v2(motion_error, base_next, dt):
     yaw_s = base_next[:, 8:9]
 
     evx_t = motion_error[:, 0:1]
-    evy_t = motion_error[:, 1:2]
+    evy_t_rear = motion_error[:, 1:2]
     er_t = motion_error[:, 2:3]
     evx_s = motion_error[:, 3:4]
     evy_s = motion_error[:, 4:5]
@@ -140,11 +167,13 @@ def derive_full_error_from_motion_error_torch_v2(motion_error, base_next, dt):
     rel_y_res = motion_error[:, 7:8]
     rel_yaw_res = motion_error[:, 8:9]
 
+    evy_t_body = evy_t_rear + b_t * er_t
+
     cos_t = torch.cos(yaw_t)
     sin_t = torch.sin(yaw_t)
 
-    dx_t = (cos_t * evx_t - sin_t * evy_t) * safe_dt
-    dy_t = (sin_t * evx_t + cos_t * evy_t) * safe_dt
+    dx_t = (cos_t * evx_t - sin_t * evy_t_body) * safe_dt
+    dy_t = (sin_t * evx_t + cos_t * evy_t_body) * safe_dt
     dpsi_t = wrap_angle_error_torch(er_t * safe_dt)
 
     dx_s_vel = (torch.cos(yaw_s) * evx_s - torch.sin(yaw_s) * evy_s) * safe_dt
@@ -160,7 +189,7 @@ def derive_full_error_from_motion_error_torch_v2(motion_error, base_next, dt):
     dpsi_s = wrap_angle_error_torch(dpsi_s_vel + rel_yaw_res)
 
     return torch.cat(
-        [dx_t, dy_t, dpsi_t, evx_t, evy_t, er_t,
+        [dx_t, dy_t, dpsi_t, evx_t, evy_t_body, er_t,
          dx_s, dy_s, dpsi_s, evx_s, evy_s, er_s], dim=1)
 
 
@@ -332,10 +361,10 @@ class TruckTrailerVehicle:
         if self._mlp is not None:
             if self._mlp_input_dim == 14:
                 features = build_mlp_input_feature_tensor_v2(
-                    state, control, trailer_mass, dt_t)
+                    state, control, trailer_mass, dt_t, self._b_t)
             else:
                 features = build_mlp_input_feature_tensor(
-                    state, control, trailer_mass, dt_t)
+                    state, control, trailer_mass, dt_t, self._b_t)
             if self._feature_mean is not None:
                 features = (features - self._feature_mean) / self._feature_scale
 
@@ -348,10 +377,10 @@ class TruckTrailerVehicle:
 
             if self._mlp_output_dim == 9:
                 full_error = derive_full_error_from_motion_error_torch_v2(
-                    motion_error, base_next, dt_t)
+                    motion_error, base_next, dt_t, self._b_t)
             else:
                 full_error = derive_full_error_from_motion_error_torch(
-                    motion_error, base_next, dt_t)
+                    motion_error, base_next, dt_t, self._b_t)
             self._state = (base_next + full_error).squeeze(0)
             # 修正后再包一次角度
             self._state = self._state.clone()

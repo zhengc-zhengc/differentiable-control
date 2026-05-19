@@ -68,31 +68,33 @@ dynamic_v2_vehicle:
 # 牵引车-挂车双体动力学模型（外部仓库 truckdynamicmodel）
 # 参数与 truckdynamicmodel/truck_trailer_residual_modular/constants.py BASE_MODEL_PARAMS 对齐
 truck_trailer_vehicle:
-  m_t: 9300.0          # 牵引车空载质量 (kg, xlsx R74)
-  Iz_t: 48639.0        # 牵引车横摆惯量(上游 BASE_MODEL_PARAMS,xlsx 未给)
-  L_t: 4.483           # 名义轴距 (m, xlsx R71)
-  a_t: 2.21            # 空载 CG 距前轴距离 (m,由 xlsx R76 轴荷 4712/4588 反推)
-  m_s_base: 15004.0    # 挂车基础质量 (kg)，决定 Iz_s 缩放基准
-  Iz_s_base: 96659.0   # 挂车基础横摆惯量
-  L_s: 8.0             # 挂车长度 (m)
-  c_s: 4.0             # 挂车质心到铰接点距离 (m)
-  Cf: 264000.0         # 牵引车前轴(1 轴,2 胎)空载 F_z=46.2kN 推算,见 docs/truck_vehicle_parameters.md
-  Cr: 335000.0         # 牵引车后轴组(2+3 轴共 8 胎)空载 F_z=45kN 推算
-  Cs: 80000.0          # 挂车轴侧偏刚度(无挂车模式下 trailer_mask=0 不参与计算)
-  wheel_radius: 0.5    # 车轮半径 (m)
-  track_width: 1.8
-  steering_ratio: 24.0  # 实车真值（xlsx R43 为 24.51~32 非线性，C++ vehicle_param 取 24）
-  rho: 1.225           # 空气密度
-  CdA_t: 5.82          # 牵引车 Cd × A
-  CdA_s: 6.50          # 挂车 Cd × A
-  rolling_coeff: 0.013  # 与控制器 lon_torque.coef_rolling 一致（卡车 C++ 清稿）
-  hitch_x: -0.331      # 铰接点偏移 x（牵引车体坐标系）
-  hitch_y: 0.002
+  # 参数与 plant_out/constants.py BASE_MODEL_PARAMS 严格对齐
+  # （MLP checkpoint 训练时用的就是这些值，sim 推理必须保持一致，否则
+  #  base RK4 的输出和 MLP 训练目标的 base 不在同一物理模型上，残差错位）
+  m_t: 9300.0          # 牵引车空载质量
+  Iz_t: 48639.0        # 牵引车横摆惯量
+  L_t: 4.475           # 名义轴距
+  a_t: 2.267           # 空载 CG 距前轴距离（派生 b_t = L_t - a_t = 2.208）
+  m_s_base: 0.0        # 挂车基础质量（plant_out 训练值；空载工况）
+  Iz_s_base: 96659.0
+  L_s: 8.0
+  c_s: 4.0
+  Cf: 264000.0
+  Cr: 335000.0
+  Cs: 80000.0
+  wheel_radius: 0.5
+  track_width: 1.878
+  steering_ratio: 24.0
+  rho: 1.225
+  CdA_t: 5.82
+  CdA_s: 0.0           # plant_out 训练值
+  rolling_coeff: 0.013
+  hitch_x: -0.3319
+  hitch_y: 0.0022
   min_speed_mps: 0.5
-  # 运行时挂车质量（可改为 0 切到无挂车模式，阈值 1.0 kg）
   default_trailer_mass_kg: 0.0
   # MLP 残差 checkpoint（相对 sim/ 目录）
-  checkpoint_path: configs/checkpoints/best_truck_trailer_error_model.pth
+  checkpoint_path: configs/checkpoints/best_truck_trailer_error_model_train_loss_0509.pth
 
 simulation:
   dt: 0.02
