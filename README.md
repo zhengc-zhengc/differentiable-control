@@ -141,7 +141,7 @@ cd sim
 python -m pytest tests/ -q
 ```
 
-预期：`170 passed`。如有 FAILED 先解决环境问题再往后走。
+预期：约 `189 passed`。如有 FAILED 先解决环境问题再往后走。
 
 ### 第 3 步：跑可视化 Demo 看基线效果（约 1-2 分钟）
 
@@ -392,7 +392,7 @@ truck_trailer_vehicle:
   rolling_coeff: 0.013 # 滚阻系数（与 lon_torque.coef_rolling 一致）
   # ... 其他铰接点偏移等
   default_trailer_mass_kg: 0.0   # 默认无挂车（改为 15000 切到带挂模式）
-  checkpoint_path: configs/checkpoints/<your_model>.pth  # MLP 残差权重；改成同目录下其它 .pth 即换权重，置空/删行则不加 MLP
+  checkpoint_path: configs/checkpoints/best_truck_trailer_error_model_0525.pth  # 当前默认 MLP 残差权重；置空/删行则不加 MLP
 ```
 
 **关键事实：**
@@ -407,8 +407,8 @@ truck_trailer_vehicle:
 
 | 场景 | 操作 |
 |------|------|
-| 更换 MLP checkpoint（同 base 模型） | 替换 `.pth` 文件 + 改 yaml 中 `checkpoint_path`，**零代码改动** |
-| MLP 结构变化（层数/激活函数/输入特征） | 同上，**零代码改动**（结构从 checkpoint 自动重建） |
+| 更换 MLP checkpoint（同 base 模型、同网络结构） | 替换 `.pth` 文件 + 改 yaml 中 `checkpoint_path` |
+| MLP 结构变化（层数/激活函数/输入特征） | 同步更新 `truck_trailer_dynamics.py` 的网络实现；当前 0525 权重使用 `LeakyReLU(0.02)` |
 | 新 base 动力学模型 | 1. 在 `sim/model/` 下写新的 `nn.Module`（实现 `forward(state, control, dt) → next_state`） 2. 在 `vehicle_factory.py` 的 `_BASE_MODEL_REGISTRY` 注册 3. 在 `default.yaml` 添加物理参数段 |
 
 > **前后轴约定**：所有被控对象的 `x`、`y` 属性必须输出**后轴坐标**。内部动力学可使用任意参考点（前轴/质心），坐标转换在 vehicle 内部完成。
