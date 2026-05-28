@@ -256,7 +256,7 @@ class TruckTrailerNominalDynamics(nn.Module):
 
 
 # ===== MLP 残差网络（来自 model_structure.py）=====
-# 结构：input → [Linear → (LayerNorm) → Tanh → Dropout] × hidden_layers → Linear → output
+# 结构：input → [Linear → (LayerNorm) → LeakyReLU(0.02) → Dropout] × hidden_layers → Linear → output
 # 向后兼容默认 hidden_dim=128, hidden_layers=4（老 checkpoint）；
 # 新 checkpoint 带 mlp_hidden_dim / mlp_hidden_layers 时走配置值（如 64/3）。
 
@@ -275,7 +275,7 @@ class MLPErrorModel(nn.Module):
         for _ in range(self.hidden_layers):
             layers.append(nn.Linear(prev_dim, self.hidden_dim))
             layers.append(self._build_norm(self.hidden_dim))
-            layers.append(nn.Tanh())
+            layers.append(nn.LeakyReLU(negative_slope=0.02))
             layers.append(nn.Dropout(safe_dropout))
             prev_dim = self.hidden_dim
         layers.append(nn.Linear(prev_dim, output_dim))

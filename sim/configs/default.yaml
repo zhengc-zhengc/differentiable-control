@@ -94,7 +94,7 @@ truck_trailer_vehicle:
   min_speed_mps: 0.5
   default_trailer_mass_kg: 0.0
   # MLP 残差 checkpoint（相对 sim/ 目录）
-  checkpoint_path: configs/checkpoints/best_truck_trailer_error_model_train_loss_0509.pth
+  checkpoint_path: configs/checkpoints/best_truck_trailer_error_model_0525.pth
 
 simulation:
   dt: 0.02
