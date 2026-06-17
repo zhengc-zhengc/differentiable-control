@@ -64,6 +64,38 @@
 - **双模式验证**：训练用平滑近似，验证用原始硬限幅
 - **Per-trajectory loss 归一化**：防止高 loss 轨迹主导训练方向
 
+## 当前训练会调整哪些参数
+
+当前可微调参只更新**控制器设计参数**，不更新车辆模型、MLP 残差网络或安全包络。`train.py` 的串行路径和 `train_batch.py` 的 truck_trailer 并行路径优化同一组参数；区别只是仿真是否批量同步推进。
+
+### 实际进入优化器的参数
+
+默认 `default.yaml` 下共有 **35 个可学习数值**：横向 4 张查找表各 7 个节点值，共 28 个；纵向 7 个标量。查找表只调 y 值，速度/曲率等 x 轴断点保持不变。
+
+| 模块 | YAML 字段 / 参数 | 粒度 | 主要影响 |
+|---|---|---:|---|
+| 横向 `LatControllerTruck` | `lat_truck.T2_prev_time_dist` (`T2_y`) | 7 个表值 | 横向偏差换算成目标航向时向前看的距离；越大，反馈更稳但反应更慢 |
+| 横向 `LatControllerTruck` | `lat_truck.T3_reach_time_theta` (`T3_y`) | 7 个表值 | 横向误差收敛时间；越小，转向反馈更积极 |
+| 横向 `LatControllerTruck` | `lat_truck.T4_T_dt` (`T4_y`) | 7 个表值 | 航向角速度误差的预瞄时间；主要改变转向的提前量和阻尼 |
+| 横向 `LatControllerTruck` | `lat_truck.T6_far_point_time` (`T6_y`) | 7 个表值 | 远预瞄点时间；决定前馈曲率从参考路径多远处取值 |
+| 纵向 `LonController` | `lon.station_kp`, `lon.station_ki` | 2 个标量 | 路径弧长误差到期望速度补偿的强度 |
+| 纵向 `LonController` | `lon.low_speed_kp`, `lon.low_speed_ki` | 2 个标量 | 低速段速度误差到加速度指令的强度 |
+| 纵向 `LonController` | `lon.high_speed_kp`, `lon.high_speed_ki` | 2 个标量 | 高速段速度误差到加速度指令的强度 |
+| 纵向 `LonController` | `lon.switch_speed` | 1 个标量 | 低速 / 高速速度环参数的切换车速 |
+
+训练时这些参数经过 BPTT 从横向误差、航向误差、速度误差和指令平滑度 loss 里拿梯度；查找表参数使用 `--lr-tables`，其余标量使用 `--lr`。每个 epoch 更新后会做物理投影：T2/T3/T4/T6 和所有 PID 增益不允许小于 0，`switch_speed` 限制在 `[0.5, 10.0] m/s`。
+
+### 不会被梯度调的参数
+
+下面这些参数会随配置一起参与仿真，部分也会写进 tuned YAML，但当前不会被优化器更新：
+
+- 横向安全/物理项：`kLh`、`T1_max_theta_deg`、`T5_near_point_time`、`T7_max_steer_angle`、`T8_slip_param`、三段转向速率限制。
+- 纵向加速度包络：`L1_acc_up_lim`、`L2_acc_low_lim`、`L3_acc_up_rate`、`L4_acc_down_rate`、`L5_rate_gain`，以及站位误差保护、速度输入限幅、加速度低通等逻辑参数。
+- 扭矩输出层常数：`lon_torque` 里的车重、风阻、滚阻、车轮半径、加速度到扭矩 P 补偿等目前都是固定 buffer。
+- 被控对象参数：`dynamic_vehicle`、`hybrid_*`、`truck_trailer_vehicle` 里的质量、轴距、侧偏刚度、转向比、MLP checkpoint 路径等不会被反向传播更新。
+- MLP 残差网络：checkpoint 权重始终冻结；梯度只穿过 MLP 输出继续回到控制器参数。
+- 域随机化、状态噪声和指令抖动：`--dr-enable` 会在训练时采样 `m_t/Cf/Cr` 让控制器见到不同车辆，`--noise-enable` / `--dither-enable` 会加扰动，但这些都是训练环境设置，不是会落盘的学习参数。
+
 ## 项目结构
 
 ```
