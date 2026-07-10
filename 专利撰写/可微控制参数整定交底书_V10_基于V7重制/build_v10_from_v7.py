@@ -783,7 +783,17 @@ def prepare_shell(path: Path) -> None:
     document.save(path)
 
 
-def finalize_docx(path: Path) -> None:
+def extract_heading_levels(canonical: str) -> dict[str, int]:
+    """Return the real disclosure headings, excluding the cover title."""
+    heading_levels: dict[str, int] = {}
+    for line in canonical.splitlines():
+        match = re.match(r"^(#{2,4})\s+(.+?)\s*$", line)
+        if match:
+            heading_levels[match.group(2)] = len(match.group(1)) - 1
+    return heading_levels
+
+
+def finalize_docx(path: Path, heading_levels: dict[str, int]) -> None:
     document = Document(path)
     document.core_properties.title = TITLE
     document.core_properties.subject = "专利技术交底书代理人正式稿"
@@ -791,10 +801,40 @@ def finalize_docx(path: Path) -> None:
     document.core_properties.keywords = "可微控制；参数整定；车辆动力学；横纵向控制；硬逻辑复验"
     style_black_hyperlinks(document)
     for paragraph in document.paragraphs:
+        if paragraph.text.strip() in heading_levels:
+            # Word COM 的 FormattedText 装配会使标题继承母版正文约 21 pt
+            # 的首行缩进。最终定稿阶段按 Markdown 的真实标题清单逐项清零，
+            # 避免误伤第五章的编号保护点及普通正文段落。
+            paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+            paragraph.paragraph_format.left_indent = Pt(0)
+            paragraph.paragraph_format.right_indent = Pt(0)
+            paragraph.paragraph_format.first_line_indent = Pt(0)
         for run in paragraph.runs:
             if run.font.color.rgb is not None:
                 run.font.color.rgb = RGBColor(0, 0, 0)
     document.save(path)
+
+
+def validate_heading_indents(path: Path, heading_levels: dict[str, int]) -> None:
+    document = Document(path)
+    found: set[str] = set()
+    invalid: list[str] = []
+    for paragraph in document.paragraphs:
+        text = paragraph.text.strip()
+        if text not in heading_levels:
+            continue
+        found.add(text)
+        left = paragraph.paragraph_format.left_indent
+        first = paragraph.paragraph_format.first_line_indent
+        left_pt = 0.0 if left is None else left.pt
+        first_pt = 0.0 if first is None else first.pt
+        if abs(left_pt) > 0.01 or abs(first_pt) > 0.01:
+            invalid.append(f"{text}（左缩进 {left_pt:.2f} pt，首行缩进 {first_pt:.2f} pt）")
+    missing = sorted(set(heading_levels) - found)
+    if missing:
+        raise RuntimeError("Word 正文缺少标题：" + "；".join(missing))
+    if invalid:
+        raise RuntimeError("标题缩进未清零：" + "；".join(invalid))
 
 
 def validate_canonical(canonical: str) -> None:
@@ -917,7 +957,9 @@ def build(timestamp: str | None = None) -> tuple[Path, Path]:
         check=True,
         cwd=HERE,
     )
-    finalize_docx(docx_path)
+    heading_levels = extract_heading_levels(canonical)
+    finalize_docx(docx_path, heading_levels)
+    validate_heading_indents(docx_path, heading_levels)
     return md_path, docx_path
 
 
